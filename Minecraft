@@ -3875,7 +3875,8 @@
     function getChunkKey(cx, cz) { return `${cx},${cz}`; }
 
     function getBlock(wx, wy, wz) {
-        if (wy < 0 || wy >= CHUNK_HEIGHT) return BLOCK_EMPTY;
+        if (wy < 0) return BLOCK_STONE;
+        if (wy >= CHUNK_HEIGHT) return BLOCK_EMPTY;
         const cx = Math.floor(wx / CHUNK_SIZE);
         const cz = Math.floor(wz / CHUNK_SIZE);
         const chunk = chunks.get(getChunkKey(cx, cz));
@@ -4167,6 +4168,7 @@
     function checkSolidCollision(px, py, pz, r, h) {
         if (r === undefined) r = player.radius;
         if (h === undefined) h = player.height;
+        if (py < 0.02) return true;
         const minX = Math.floor(px - r), maxX = Math.floor(px + r);
         const minY = Math.floor(py), maxY = Math.floor(py + h);
         const minZ = Math.floor(pz - r), maxZ = Math.floor(pz + r);
@@ -4179,6 +4181,40 @@
             }
         }
         return false;
+    }
+
+    function movePlayerAxis(axis, delta) {
+        const limit = 0.2;
+        const n = Math.max(1, Math.ceil(Math.abs(delta) / limit));
+        const step = delta / n;
+        let hit = false;
+        for (let i = 0; i < n; i++) {
+            if (axis === 'x') player.pos.x += step;
+            else if (axis === 'z') player.pos.z += step;
+            else player.pos.y += step;
+            if (checkSolidCollision(player.pos.x, player.pos.y, player.pos.z)) {
+                if (axis === 'x') player.pos.x -= step;
+                else if (axis === 'z') player.pos.z -= step;
+                else player.pos.y -= step;
+                hit = true;
+                break;
+            }
+        }
+        return hit;
+    }
+
+    function rescueFallenPlayer() {
+        if (player.pos.y >= 1 && player.pos.y < CHUNK_HEIGHT + 6) return;
+        updateInfiniteChunks(player.pos.x, player.pos.z);
+        const sx = Math.floor(player.pos.x);
+        const sz = Math.floor(player.pos.z);
+        let y = getSurfaceY(sx, sz);
+        if (!(y >= 1 && y < CHUNK_HEIGHT - 2)) y = Math.max(WATER_LEVEL + 2, 8);
+        player.pos.y = y + 0.08;
+        player.vel.set(0, 0, 0);
+        player.onGround = true;
+        player.highestFallY = player.pos.y;
+        player.spawnProtect = Math.max(player.spawnProtect, 1.2);
     }
 
     const damageOverlay = document.getElementById('damage-flash');
@@ -4265,12 +4301,15 @@
         }
         updateHUD();
 
+        rescueFallenPlayer();
+
         if (player.isInWater) {
             player.vel.y -= 4.0 * dt;
             player.vel.y = Math.max(player.vel.y, -3.2);
             player.highestFallY = player.pos.y;
         } else {
             player.vel.y -= 24.0 * dt;
+            player.vel.y = Math.max(player.vel.y, -32.0);
             if (player.vel.y < 0 && player.pos.y > player.highestFallY) {
                 player.highestFallY = player.pos.y;
             }
@@ -4279,17 +4318,8 @@
         let collidedX = false;
         let collidedZ = false;
 
-        player.pos.x += player.vel.x * dt;
-        if (checkSolidCollision(player.pos.x, player.pos.y, player.pos.z)) {
-            player.pos.x -= player.vel.x * dt;
-            collidedX = true;
-        }
-
-        player.pos.z += player.vel.z * dt;
-        if (checkSolidCollision(player.pos.x, player.pos.y, player.pos.z)) {
-            player.pos.z -= player.vel.z * dt;
-            collidedZ = true;
-        }
+        collidedX = movePlayerAxis('x', player.vel.x * dt);
+        collidedZ = movePlayerAxis('z', player.vel.z * dt);
 
         const isMoving = (Math.abs(moveInput.x) > 0.1 || Math.abs(moveInput.y) > 0.1);
         if ((collidedX || collidedZ) && player.onGround && !player.isInWater && isMoving) {
@@ -4304,8 +4334,8 @@
             }
         }
 
-        player.pos.y += player.vel.y * dt;
-        if (checkSolidCollision(player.pos.x, player.pos.y, player.pos.z)) {
+        const yHit = movePlayerAxis('y', player.vel.y * dt);
+        if (yHit) {
             if (player.vel.y < 0) {
                 const fallDistance = player.highestFallY - player.pos.y;
                 if (fallDistance > 4.0 && !player.isInWater && player.spawnProtect <= 0) {
@@ -4315,11 +4345,11 @@
                 player.onGround = true;
                 player.highestFallY = player.pos.y;
             }
-            player.pos.y -= player.vel.y * dt;
             player.vel.y = 0;
         } else {
             player.onGround = false;
         }
+        rescueFallenPlayer();
 
         camera.position.set(player.pos.x, player.pos.y + player.eyeHeight, player.pos.z);
         const euler = new THREE.Euler(0, 0, 0, 'YXZ');
