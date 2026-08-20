@@ -368,9 +368,13 @@
             color: #404040;
             text-shadow: none;
         }
+        #inv-panel input, #inv-panel button, #inv-panel .inv-slot,
+        #inv-panel .craft-slot, #inv-panel .craft-out, #inv-panel .book-cell {
+            touch-action: manipulation;
+        }
         #inv-tabs {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: 1fr 1fr 1fr;
             gap: 4px;
             margin-bottom: 8px;
         }
@@ -440,11 +444,22 @@
             font-weight: bold;
         }
         .book-cats button.on { background: #5a8f3a; }
+        .book-cell .can-n {
+            position: absolute;
+            top: 1px;
+            right: 2px;
+            font-size: 9px;
+            color: #c8ffb0;
+            text-shadow: 1px 1px 0 #000;
+            z-index: 2;
+        }
         #book-grid {
             display: grid;
             grid-template-columns: repeat(5, 1fr);
             gap: 3px;
             min-height: 88px;
+            max-height: 168px;
+            overflow-y: auto;
         }
         .book-cell {
             position: relative;
@@ -478,17 +493,37 @@
             color: #333;
             min-height: 16px;
         }
+        .prev-line { margin-bottom: 4px; }
+        .prev-need { color: #333; }
         .prev-grid {
             display: inline-grid;
             gap: 2px;
             vertical-align: middle;
-            margin-left: 6px;
+            margin-left: 4px;
         }
-        .prev-grid span {
-            width: 14px; height: 14px;
+        .prev-grid span, .prev-grid img {
+            width: 18px; height: 18px;
             background: #8b8b8b;
             box-shadow: inset 1px 1px 0 #373737;
+            image-rendering: pixelated;
         }
+        .book-acts {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 4px;
+            margin-top: 6px;
+        }
+        .book-acts button {
+            padding: 8px 4px;
+            border: 2px solid #373737;
+            background: #5a8f3a;
+            color: #fff;
+            font-weight: bold;
+            font-size: 12px;
+            box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 #555;
+        }
+        .book-acts button.alt { background: #8b8b8b; }
+        .book-acts button:disabled { opacity: 0.35; }
         .craft-row {
             display: flex;
             align-items: center;
@@ -528,8 +563,41 @@
             width: 48px;
             height: 48px;
         }
+        .craft-result {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+        .craft-all-btn {
+            min-width: 48px;
+            padding: 5px 6px;
+            border: 2px solid #373737;
+            background: #5a8f3a;
+            color: #fff;
+            font-weight: bold;
+            font-size: 11px;
+            box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 #555;
+        }
         .craft-arrow { color: #404040; font-size: 22px; font-weight: bold; }
-        #btn-book {
+        .furnace-wrap {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        .furnace-col {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+        .furnace-fire {
+            font-size: 14px;
+            line-height: 1;
+            min-height: 16px;
+        }
+        #btn-book, #btn-book-3, #btn-book-f {
             width: 36px;
             height: 36px;
             border: 2px solid #373737;
@@ -539,7 +607,7 @@
             box-shadow: inset 1px 1px 0 #c48a4a;
             flex-shrink: 0;
         }
-        #btn-book.on { background: #3d6e28; }
+        #btn-book.on, #btn-book-3.on, #btn-book-f.on { background: #3d6e28; }
         #craft-book { display: none; }
         #inv-carry {
             text-align: left;
@@ -693,8 +761,9 @@
         <div id="inv-panel">
             <h2>Инвентарь</h2>
             <div id="inv-tabs">
-                <button type="button" id="tab-inv" class="on">Инвентарь</button>
+                <button type="button" id="tab-inv" class="on">Инв.</button>
                 <button type="button" id="tab-craft">Верстак</button>
+                <button type="button" id="tab-furnace">Печь</button>
             </div>
             <div id="inv-carry">Слоты 0/28 · Предметы 0/1792</div>
             <div id="inv-hand" class="empty">В руке: пусто</div>
@@ -706,7 +775,7 @@
                 <div class="book-cats">
                     <button type="button" class="on" data-cat="all">Все</button>
                     <button type="button" data-cat="building">Блоки</button>
-                    <button type="button" data-cat="equipment">Оружие</button>
+                    <button type="button" data-cat="equipment">Снаряж.</button>
                     <button type="button" data-cat="misc">Разное</button>
                 </div>
                 <div id="book-grid"></div>
@@ -717,27 +786,49 @@
                 <div class="craft-wrap">
                     <div class="craft-grid g2" id="craft-grid-2"></div>
                     <div class="craft-arrow">→</div>
-                    <div class="craft-out" id="craft-out-2" data-out="2"></div>
+                    <div class="craft-result">
+                        <div class="craft-out" id="craft-out-2" data-out="2"></div>
+                        <button type="button" id="btn-craft-all-2" class="craft-all-btn">Всё</button>
+                    </div>
                 </div>
                 <button type="button" id="btn-book" title="Книга рецептов">📖</button>
             </div>
-            <div class="inv-label">Инвентарь</div>
-            <div class="inv-grid" id="inv-hotbar-grid"></div>
-            <div class="inv-grid" id="inv-bag-grid" style="margin-top:2px;"></div>
             </div>
             <div id="inv-view-craft" style="display:none;">
             <div class="craft-row">
                 <div class="craft-wrap">
                     <div class="craft-grid g3" id="craft-grid-3"></div>
                     <div class="craft-arrow">→</div>
-                    <div class="craft-out" id="craft-out-3" data-out="3"></div>
+                    <div class="craft-result">
+                        <div class="craft-out" id="craft-out-3" data-out="3"></div>
+                        <button type="button" id="btn-craft-all-3" class="craft-all-btn">Всё</button>
+                    </div>
                 </div>
                 <button type="button" id="btn-book-3" title="Книга рецептов">📖</button>
             </div>
-            <div class="inv-label">Инвентарь</div>
-            <div class="inv-grid" id="inv-hotbar-grid-3"></div>
-            <div class="inv-grid" id="inv-bag-grid-3" style="margin-top:2px;"></div>
             </div>
+            <div id="inv-view-furnace" style="display:none;">
+            <div class="craft-row">
+                <div class="furnace-wrap">
+                    <div class="furnace-col">
+                        <div class="craft-slot" id="furnace-in" data-furnace="in"></div>
+                        <div class="furnace-fire" id="furnace-fire">🔥</div>
+                        <div class="craft-slot" id="furnace-fuel" data-furnace="fuel"></div>
+                    </div>
+                    <div class="craft-arrow">→</div>
+                    <div class="craft-result">
+                        <div class="craft-out" id="furnace-out" data-furnace="out"></div>
+                        <button type="button" id="btn-smelt-1" class="craft-all-btn">1</button>
+                        <button type="button" id="btn-smelt-all" class="craft-all-btn">Всё</button>
+                    </div>
+                </div>
+                <button type="button" id="btn-book-f" title="Книга рецептов">📖</button>
+            </div>
+            <div id="furnace-hint" class="inv-label">Верх: руда · Низ: топливо (дерево, доски, палки, уголь)</div>
+            </div>
+            <div class="inv-label">Инвентарь</div>
+            <div class="inv-grid" id="inv-hotbar-grid"></div>
+            <div class="inv-grid" id="inv-bag-grid" style="margin-top:2px;"></div>
             <div id="inv-hint">Нажми предмет, затем слот</div>
             <div id="inv-actions">
                 <button type="button" id="inv-btn-split">Разделить</button>
@@ -806,6 +897,51 @@
     const ITEM_STONE_SWORD = 19;
     const ITEM_WOOD_SHOVEL = 20;
     const ITEM_STONE_SHOVEL = 21;
+    const ITEM_WOOD_HOE = 22;
+    const ITEM_STONE_HOE = 23;
+    const ITEM_STRING = 24;
+    const ITEM_BOW = 25;
+    const ITEM_ARROW = 26;
+    const ITEM_CHARCOAL = 27;
+    const ITEM_COOKED_MEAT = 28;
+    const BLOCK_TORCH = 29;
+    const BLOCK_CHEST = 30;
+    const BLOCK_FURNACE = 31;
+    const BLOCK_SANDSTONE = 32;
+    const BLOCK_GLASS = 33;
+    const BLOCK_DOOR = 34;
+    const BLOCK_LADDER = 35;
+    const BLOCK_FENCE = 36;
+    const BLOCK_GATE = 37;
+    const BLOCK_BED = 38;
+    const BLOCK_CARPET = 39;
+    const BLOCK_TRAPDOOR = 40;
+    const BLOCK_SIGN = 41;
+    const BLOCK_PLATE = 42;
+    const BLOCK_BUTTON = 43;
+    const BLOCK_STONE_BRICK = 44;
+    const BLOCK_SMOOTH_STONE = 45;
+    const BLOCK_CAMPFIRE = 46;
+    const BLOCK_BARREL = 47;
+    const BLOCK_SMOKER = 48;
+    const BLOCK_LOOM = 49;
+    const BLOCK_SMITHING = 50;
+    const BLOCK_GRINDSTONE = 51;
+    const BLOCK_PAINTING = 52;
+    const BLOCK_WALL = 53;
+    const ITEM_BOWL = 54;
+    const ITEM_STEW = 55;
+    const ITEM_BOAT = 56;
+    const ITEM_FISHING_ROD = 57;
+    const ITEM_SHIELD = 58;
+    const ITEM_HELMET = 59;
+    const ITEM_CHESTPLATE = 60;
+    const ITEM_LEGGINGS = 61;
+    const ITEM_BOOTS = 62;
+    const BLOCK_STONE_PLATE = 63;
+    const BLOCK_STONE_BUTTON = 64;
+    const BLOCK_CUT_SANDSTONE = 65;
+    const ITEM_GLASS_BOTTLE = 66;
 
     const BLOCK_NAMES = {
         [BLOCK_GRASS]: 'Трава',
@@ -828,19 +964,81 @@
         [ITEM_WOOD_SWORD]: 'Дер. меч',
         [ITEM_STONE_SWORD]: 'Кам. меч',
         [ITEM_WOOD_SHOVEL]: 'Дер. лопата',
-        [ITEM_STONE_SHOVEL]: 'Кам. лопата'
+        [ITEM_STONE_SHOVEL]: 'Кам. лопата',
+        [ITEM_WOOD_HOE]: 'Дер. мотыга',
+        [ITEM_STONE_HOE]: 'Кам. мотыга',
+        [ITEM_STRING]: 'Нить',
+        [ITEM_BOW]: 'Лук',
+        [ITEM_ARROW]: 'Стрела',
+        [ITEM_CHARCOAL]: 'Уголь',
+        [ITEM_COOKED_MEAT]: 'Жаркое',
+        [BLOCK_TORCH]: 'Факел',
+        [BLOCK_CHEST]: 'Сундук',
+        [BLOCK_FURNACE]: 'Печь',
+        [BLOCK_SANDSTONE]: 'Песчаник',
+        [BLOCK_GLASS]: 'Стекло',
+        [BLOCK_DOOR]: 'Дверь',
+        [BLOCK_LADDER]: 'Лестница',
+        [BLOCK_FENCE]: 'Забор',
+        [BLOCK_GATE]: 'Калитка',
+        [BLOCK_BED]: 'Кровать',
+        [BLOCK_CARPET]: 'Ковёр',
+        [BLOCK_TRAPDOOR]: 'Люк',
+        [BLOCK_SIGN]: 'Табличка',
+        [BLOCK_PLATE]: 'Дер. плита',
+        [BLOCK_BUTTON]: 'Дер. кнопка',
+        [BLOCK_STONE_BRICK]: 'Кам. кирпич',
+        [BLOCK_SMOOTH_STONE]: 'Гладкий камень',
+        [BLOCK_CAMPFIRE]: 'Костёр',
+        [BLOCK_BARREL]: 'Бочка',
+        [BLOCK_SMOKER]: 'Коптильня',
+        [BLOCK_LOOM]: 'Ткацкий станок',
+        [BLOCK_SMITHING]: 'Кузница',
+        [BLOCK_GRINDSTONE]: 'Точило',
+        [BLOCK_PAINTING]: 'Картина',
+        [BLOCK_WALL]: 'Кам. стена',
+        [ITEM_BOWL]: 'Миска',
+        [ITEM_STEW]: 'Похлёбка',
+        [ITEM_BOAT]: 'Лодка',
+        [ITEM_FISHING_ROD]: 'Удочка',
+        [ITEM_SHIELD]: 'Щит',
+        [ITEM_HELMET]: 'Шлем',
+        [ITEM_CHESTPLATE]: 'Нагрудник',
+        [ITEM_LEGGINGS]: 'Поножи',
+        [ITEM_BOOTS]: 'Ботинки',
+        [BLOCK_STONE_PLATE]: 'Кам. плита',
+        [BLOCK_STONE_BUTTON]: 'Кам. кнопка',
+        [BLOCK_CUT_SANDSTONE]: 'Рез. песчаник',
+        [ITEM_GLASS_BOTTLE]: 'Бутылка'
     };
 
     function isToolItem(type) {
-        return type >= ITEM_WOOD_PICK && type <= ITEM_STONE_SHOVEL;
+        return (type >= ITEM_WOOD_PICK && type <= ITEM_STONE_SHOVEL) ||
+            type === ITEM_WOOD_HOE || type === ITEM_STONE_HOE ||
+            type === ITEM_BOW || type === ITEM_FISHING_ROD || type === ITEM_SHIELD;
+    }
+    function isArmorItem(type) {
+        return type >= ITEM_HELMET && type <= ITEM_BOOTS;
+    }
+    function foodHeal(type) {
+        if (type === ITEM_MEAT) return 4;
+        if (type === ITEM_COOKED_MEAT) return 8;
+        if (type === ITEM_STEW) return 10;
+        return 0;
+    }
+    function isNonBlockItem(type) {
+        return type === ITEM_MEAT || type === ITEM_FEATHER || type === ITEM_STICK ||
+            type === ITEM_STRING || type === ITEM_ARROW || type === ITEM_CHARCOAL ||
+            type === ITEM_COOKED_MEAT || type === ITEM_BOWL || type === ITEM_STEW ||
+            type === ITEM_BOAT || type === ITEM_GLASS_BOTTLE ||
+            isToolItem(type) || isArmorItem(type);
     }
     function canPlaceType(type) {
-        return type !== BLOCK_EMPTY && type !== BLOCK_WATER && type !== ITEM_MEAT &&
-            type !== ITEM_FEATHER && type !== ITEM_STICK && !isToolItem(type);
+        return type !== BLOCK_EMPTY && type !== BLOCK_WATER && !isNonBlockItem(type);
     }
     function isOpaque(type) {
-        return type !== BLOCK_EMPTY && type !== BLOCK_WATER && type !== ITEM_MEAT &&
-            type !== ITEM_WOOL && type !== ITEM_FEATHER && type !== ITEM_STICK && !isToolItem(type);
+        return type !== BLOCK_EMPTY && type !== BLOCK_WATER && type !== ITEM_WOOL &&
+            !isNonBlockItem(type);
     }
 
     const ITEM_ICON = {};
@@ -931,6 +1129,127 @@
         drawAxe(true); drawAxe(false);
         drawSword(true); drawSword(false);
         drawShovel(true); drawShovel(false);
+
+        function drawHoe(wood) {
+            clr();
+            const h = wood ? woodHead() : stoneHead();
+            p(8, 22, 4, 4, '#8a6230'); p(11, 17, 4, 6, '#c49a54'); p(14, 12, 4, 6, '#8a6230');
+            p(16, 6, 12, 4, h[0]); p(16, 6, 3, 8, h[0]); p(17, 7, 10, 2, h[1]);
+            save(wood ? 22 : 23);
+        }
+        drawHoe(true); drawHoe(false);
+
+        clr(); p(8, 8, 16, 16, '#e8e8e8'); p(10, 10, 4, 4, '#fff'); p(18, 14, 5, 3, '#ccc');
+        p(12, 18, 8, 2, '#d0d0d0'); p(14, 6, 4, 3, '#f5f5f5'); save(24);
+
+        clr(); p(8, 6, 3, 20, '#8a6230'); p(9, 8, 12, 2, '#c49a54'); p(18, 8, 2, 14, '#c49a54');
+        p(9, 20, 10, 2, '#8a6230'); p(20, 10, 2, 10, '#e8e8e8'); save(25);
+
+        clr(); p(15, 4, 2, 18, '#c49a54'); p(14, 20, 4, 4, '#8a8a8a'); p(13, 5, 3, 6, '#fff8ee');
+        p(17, 6, 3, 5, '#efe0c4'); p(14, 22, 4, 2, '#6a6a6a'); save(26);
+
+        clr(); p(8, 10, 16, 14, '#2a2a2a'); p(10, 12, 6, 5, '#4a4a4a'); p(16, 16, 5, 4, '#1a1a1a');
+        p(11, 18, 8, 3, '#3a3a3a'); save(27);
+
+        clr(); p(6, 10, 20, 14, '#c07840'); p(8, 8, 16, 4, '#d4a06a');
+        p(8, 22, 16, 4, '#8a5028'); p(10, 12, 5, 4, '#fff0e8'); p(16, 16, 6, 3, '#6a3018'); save(28);
+
+        clr(); p(14, 16, 4, 12, '#8a6230'); p(12, 6, 8, 12, '#ffcc33'); p(13, 7, 6, 8, '#ffe680');
+        p(15, 4, 2, 4, '#fff8c0'); save(29);
+
+        clr(); p(4, 8, 24, 20, '#8b6914'); p(6, 10, 20, 10, '#5a3c14'); p(8, 12, 16, 6, '#3a2810');
+        p(4, 8, 24, 3, '#c4a06a'); p(10, 11, 12, 2, '#2a1c08'); save(30);
+
+        clr(); blockFace('#7a7a7a', '#4a4a4a', '#9a9a9a'); p(10, 12, 12, 10, '#1a1a1a');
+        p(12, 14, 8, 6, '#ff7722'); p(4, 4, 24, 6, '#8a8a8a'); save(31);
+
+        clr(); blockFace('#d8cb8c', '#b8a868', '#efe4b0'); p(4, 14, 24, 2, '#c2b373');
+        p(14, 4, 2, 24, '#c2b373'); save(32);
+
+        clr(); p(4, 4, 24, 24, '#8ec8d8'); p(6, 6, 20, 20, '#b8e0ec'); p(8, 8, 8, 8, '#e8f8fc');
+        p(18, 16, 6, 6, '#6aa8b8'); p(4, 4, 24, 2, '#d0f0f8'); save(33);
+
+        clr(); p(8, 4, 16, 24, '#c4a06a'); p(8, 4, 16, 2, '#d4b888'); p(8, 16, 16, 2, '#6e542d');
+        p(20, 14, 3, 3, '#5a4224'); p(8, 26, 16, 2, '#6e542d'); save(34);
+
+        clr(); p(6, 4, 4, 24, '#8a6230'); p(22, 4, 4, 24, '#8a6230');
+        p(6, 8, 20, 3, '#c49a54'); p(6, 16, 20, 3, '#c49a54'); p(6, 24, 20, 3, '#a07838'); save(35);
+
+        clr(); p(6, 6, 6, 20, '#8a6230'); p(20, 6, 6, 20, '#8a6230');
+        p(6, 10, 20, 3, '#c49a54'); p(6, 18, 20, 3, '#c49a54'); save(36);
+
+        clr(); p(6, 8, 20, 16, '#c4a06a'); p(8, 10, 16, 12, '#8a6230'); p(14, 14, 4, 4, '#5a4224');
+        p(6, 8, 20, 3, '#d4b888'); save(37);
+
+        clr(); p(4, 14, 24, 10, '#c4a06a'); p(4, 8, 24, 8, '#e07070'); p(6, 10, 20, 5, '#f09890');
+        p(4, 22, 6, 6, '#8a6230'); p(22, 22, 6, 6, '#8a6230'); save(38);
+
+        clr(); p(4, 12, 24, 10, '#f4f4f4'); p(6, 14, 8, 4, '#fff'); p(16, 16, 8, 3, '#d0d0d0'); save(39);
+
+        clr(); p(4, 10, 24, 12, '#c4a06a'); p(4, 14, 24, 2, '#6e542d'); p(4, 10, 24, 2, '#d4b888'); save(40);
+
+        clr(); p(6, 4, 20, 16, '#c4a06a'); p(8, 6, 16, 12, '#efe4b0'); p(14, 20, 4, 8, '#8a6230'); save(41);
+
+        clr(); p(4, 14, 24, 6, '#c4a06a'); p(4, 14, 24, 2, '#d4b888'); p(4, 18, 24, 2, '#6e542d'); save(42);
+
+        clr(); p(10, 10, 12, 12, '#c4a06a'); p(12, 12, 8, 8, '#d4b888'); save(43);
+
+        clr(); blockFace('#8a8a8a', '#5a5a5a', '#b0b0b0'); p(4, 12, 24, 2, '#5a5a5a');
+        p(12, 4, 2, 24, '#5a5a5a'); p(20, 4, 2, 24, '#5a5a5a'); save(44);
+
+        clr(); blockFace('#a8a8a8', '#7a7a7a', '#c8c8c8'); save(45);
+
+        clr(); p(6, 18, 20, 6, '#6b4a28'); p(8, 16, 16, 4, '#8a6230');
+        p(12, 6, 8, 12, '#ff7722'); p(14, 4, 4, 8, '#ffcc33'); save(46);
+
+        clr(); p(6, 4, 20, 24, '#6b4a28'); p(8, 8, 16, 16, '#8a6230'); p(10, 10, 12, 4, '#c4a06a');
+        p(6, 4, 20, 3, '#c4a06a'); p(6, 25, 20, 3, '#4a3018'); save(47);
+
+        clr(); blockFace('#7a7a7a', '#4a4a4a', '#9a9a9a'); p(10, 12, 12, 10, '#1a1a1a');
+        p(4, 4, 24, 8, '#6b4a28'); p(12, 14, 8, 6, '#ff7722'); save(48);
+
+        clr(); p(4, 8, 24, 16, '#c4a06a'); p(6, 10, 20, 6, '#8a6230'); p(8, 18, 16, 4, '#e8e8e8'); save(49);
+
+        clr(); p(4, 16, 24, 8, '#8a8a8a'); p(6, 6, 20, 12, '#c4a06a'); p(8, 8, 16, 8, '#8a6230'); save(50);
+
+        clr(); p(6, 18, 20, 6, '#c4a06a'); p(8, 8, 16, 12, '#8a8a8a'); p(10, 10, 12, 8, '#b0b0b0'); save(51);
+
+        clr(); p(6, 6, 20, 20, '#8a6230'); p(8, 8, 16, 16, '#f4f4f4'); p(10, 10, 6, 6, '#5b8c32');
+        p(16, 14, 5, 5, '#3a7ee0'); save(52);
+
+        clr(); blockFace('#7d7d7d', '#555555', '#9a9a9a'); p(8, 4, 4, 24, '#5a5a5a');
+        p(20, 4, 4, 24, '#5a5a5a'); save(53);
+
+        clr(); p(6, 16, 20, 8, '#8a6230'); p(8, 12, 16, 6, '#c4a06a'); p(10, 10, 12, 4, '#a07838'); save(54);
+
+        clr(); p(6, 16, 20, 8, '#8a6230'); p(8, 10, 16, 10, '#c07840'); p(10, 12, 12, 6, '#8a5028');
+        p(12, 8, 8, 4, '#6dad3a'); save(55);
+
+        clr(); p(4, 16, 24, 8, '#c4a06a'); p(6, 12, 20, 6, '#8a6230'); p(8, 8, 16, 6, '#d4b888'); save(56);
+
+        clr(); p(8, 6, 3, 20, '#8a6230'); p(10, 8, 10, 2, '#c49a54'); p(18, 8, 2, 12, '#e8e8e8');
+        p(16, 18, 6, 2, '#e8e8e8'); save(57);
+
+        clr(); p(8, 6, 16, 20, '#c4a06a'); p(10, 8, 12, 16, '#8a6230'); p(12, 12, 8, 8, '#f4f4f4'); save(58);
+
+        clr(); p(8, 8, 16, 6, '#f4f4f4'); p(6, 12, 20, 10, '#e8e8e8'); p(10, 14, 4, 4, '#333');
+        p(18, 14, 4, 4, '#333'); save(59);
+
+        clr(); p(6, 6, 20, 20, '#f4f4f4'); p(10, 8, 12, 14, '#e0e0e0'); p(14, 12, 4, 8, '#ccc'); save(60);
+
+        clr(); p(8, 4, 16, 8, '#f4f4f4'); p(6, 12, 8, 16, '#e8e8e8'); p(18, 12, 8, 16, '#e8e8e8'); save(61);
+
+        clr(); p(6, 12, 8, 12, '#f4f4f4'); p(18, 12, 8, 12, '#f4f4f4'); p(8, 20, 4, 4, '#333');
+        p(20, 20, 4, 4, '#333'); save(62);
+
+        clr(); p(4, 14, 24, 6, '#8a8a8a'); p(4, 14, 24, 2, '#b0b0b0'); p(4, 18, 24, 2, '#5a5a5a'); save(63);
+
+        clr(); p(10, 10, 12, 12, '#8a8a8a'); p(12, 12, 8, 8, '#b0b0b0'); save(64);
+
+        clr(); blockFace('#d8cb8c', '#b8a868', '#efe4b0'); p(8, 8, 16, 16, '#c2b373');
+        p(10, 10, 12, 12, '#efe4b0'); save(65);
+
+        clr(); p(12, 6, 8, 20, '#8ec8d8'); p(13, 8, 6, 16, '#b8e0ec'); p(14, 10, 4, 8, '#e8f8fc'); save(66);
     })();
 
     // --- 2. ИНВЕНТАРЬ И СОХРАНЕНИЕ ---
@@ -945,10 +1264,17 @@
     let craft2 = null;
     let craft3 = null;
     let invTab = 'inv';
+    let furnaceIn = null;
+    let furnaceFuel = null;
+    let furnaceOut = null;
+    let furnaceFuelLeft = 0;
 
     function emptySlot() { return { type: BLOCK_EMPTY, count: 0 }; }
     if (!craft2) craft2 = [emptySlot(), emptySlot(), emptySlot(), emptySlot()];
     if (!craft3) craft3 = [emptySlot(), emptySlot(), emptySlot(), emptySlot(), emptySlot(), emptySlot(), emptySlot(), emptySlot(), emptySlot()];
+    if (!furnaceIn) furnaceIn = emptySlot();
+    if (!furnaceFuel) furnaceFuel = emptySlot();
+    if (!furnaceOut) furnaceOut = emptySlot();
 
     function isSlotEmpty(s) {
         return !s || s.type === BLOCK_EMPTY || s.count <= 0;
@@ -1099,7 +1425,6 @@
             }
         }
         fillInvGrid('inv-hotbar-grid', 'inv-bag-grid');
-        fillInvGrid('inv-hotbar-grid-3', 'inv-bag-grid-3');
         const hand = document.getElementById('inv-hand');
         if (hand) {
             if (isSlotEmpty(cursorStack)) {
@@ -1230,8 +1555,9 @@
 
     function eatFromInventory() {
         normalizeInventory();
-        if (isSlotEmpty(cursorStack) || cursorStack.type !== ITEM_MEAT) {
-            showInvToast('Возьми мясо в руку');
+        const heal = isSlotEmpty(cursorStack) ? 0 : foodHeal(cursorStack.type);
+        if (!heal) {
+            showInvToast('Возьми еду в руку');
             return;
         }
         if (typeof player === 'undefined') return;
@@ -1239,7 +1565,7 @@
             showInvToast('Здоровье полное');
             return;
         }
-        player.health = Math.min(player.maxHealth, player.health + 4);
+        player.health = Math.min(player.maxHealth, player.health + heal);
         cursorStack.count--;
         if (cursorStack.count <= 0) cursorStack = emptySlot();
         if (typeof updateHUD === 'function') updateHUD();
@@ -1291,7 +1617,7 @@
         setDis('inv-btn-split', !has || cursorStack.count < 2);
         setDis('inv-btn-drop1', !has);
         setDis('inv-btn-dropall', !has);
-        setDis('inv-btn-eat', !has || cursorStack.type !== ITEM_MEAT);
+        setDis('inv-btn-eat', !has || !foodHeal(cursorStack.type));
         setDis('inv-btn-equip', !has);
     }
 
@@ -1317,6 +1643,7 @@
         const o3 = document.getElementById('craft-out-3');
         if (o2) o2.innerHTML = r2 ? slotInnerHTML(r2) : '<span style="opacity:0.3;">-</span>';
         if (o3) o3.innerHTML = r3 ? slotInnerHTML(r3) : '<span style="opacity:0.3;">-</span>';
+        renderFurnaceSlots();
         renderCraftBook();
     }
 
@@ -1324,12 +1651,32 @@
         1:'#5b8c32',2:'#866043',3:'#8a8a8a',4:'#674f32',5:'#c4a06a',6:'#357824',
         7:'#d8cb8c',8:'#3a7ee0',9:'#d9534f',10:'#eaecee',11:'#fff8ee',12:'#c49a54',
         13:'#b8945f',14:'#c4a06a',15:'#9a9a9a',16:'#c4a06a',17:'#9a9a9a',
-        18:'#c4a06a',19:'#9a9a9a',20:'#c4a06a',21:'#9a9a9a'
+        18:'#c4a06a',19:'#9a9a9a',20:'#c4a06a',21:'#9a9a9a',22:'#c4a06a',23:'#9a9a9a',
+        24:'#e8e8e8',25:'#8a6230',26:'#c49a54',27:'#2a2a2a',28:'#c07840',29:'#ffcc33',
+        30:'#8b6914',31:'#7a7a7a',32:'#d8cb8c',33:'#8ec8d8',34:'#c4a06a',35:'#8a6230',
+        36:'#8a6230',37:'#c4a06a',38:'#e07070',39:'#f4f4f4',40:'#c4a06a',41:'#c4a06a',
+        42:'#c4a06a',43:'#c4a06a',44:'#8a8a8a',45:'#a8a8a8',46:'#ff7722',47:'#6b4a28',
+        48:'#6b4a28',49:'#c4a06a',50:'#8a8a8a',51:'#8a8a8a',52:'#f4f4f4',53:'#7d7d7d',
+        54:'#8a6230',55:'#c07840',56:'#c4a06a',57:'#8a6230',58:'#c4a06a',59:'#f4f4f4',
+        60:'#f4f4f4',61:'#f4f4f4',62:'#f4f4f4',63:'#8a8a8a',64:'#8a8a8a',65:'#d8cb8c',
+        66:'#8ec8d8'
     };
     const CRAFT_RECIPES = [
         { id: 'planks', name: 'Доски', cat: 'building', shapeless: [[4, 1]], result: { type: 5, count: 4 }, size: 2 },
         { id: 'sticks', name: 'Палки', cat: 'misc', shape: ['P', 'P'], keys: { P: 5 }, result: { type: 12, count: 4 }, size: 2 },
         { id: 'table', name: 'Верстак', cat: 'building', shape: ['PP', 'PP'], keys: { P: 5 }, result: { type: 13, count: 1 }, size: 2 },
+        { id: 'chest', name: 'Сундук', cat: 'building', shape: ['PPP', 'P.P', 'PPP'], keys: { P: 5 }, result: { type: 30, count: 1 }, size: 3 },
+        { id: 'barrel', name: 'Бочка', cat: 'building', shape: ['PSP', 'P.P', 'PSP'], keys: { P: 5, S: 12 }, result: { type: 47, count: 1 }, size: 3 },
+        { id: 'door', name: 'Дверь', cat: 'building', shape: ['PP', 'PP', 'PP'], keys: { P: 5 }, result: { type: 34, count: 3 }, size: 3 },
+        { id: 'trapdoor', name: 'Люк', cat: 'building', shape: ['PPP', 'PPP'], keys: { P: 5 }, result: { type: 40, count: 2 }, size: 3 },
+        { id: 'fence', name: 'Забор', cat: 'building', shape: ['PSP', 'PSP'], keys: { P: 5, S: 12 }, result: { type: 36, count: 3 }, size: 3 },
+        { id: 'gate', name: 'Калитка', cat: 'building', shape: ['SPS', 'SPS'], keys: { P: 5, S: 12 }, result: { type: 37, count: 1 }, size: 3 },
+        { id: 'ladder', name: 'Лестница', cat: 'building', shape: ['S.S', 'SSS', 'S.S'], keys: { S: 12 }, result: { type: 35, count: 3 }, size: 3 },
+        { id: 'sign', name: 'Табличка', cat: 'building', shape: ['PPP', 'PPP', '.S.'], keys: { P: 5, S: 12 }, result: { type: 41, count: 3 }, size: 3 },
+        { id: 'wplate', name: 'Дер. плита', cat: 'building', shape: ['PP'], keys: { P: 5 }, result: { type: 42, count: 1 }, size: 2 },
+        { id: 'wbtn', name: 'Дер. кнопка', cat: 'building', shapeless: [[5, 1]], result: { type: 43, count: 1 }, size: 2 },
+        { id: 'boat', name: 'Лодка', cat: 'misc', shape: ['P.P', 'PPP'], keys: { P: 5 }, result: { type: 56, count: 1 }, size: 3 },
+        { id: 'bowl', name: 'Миска', cat: 'misc', shape: ['P.P', '.P.'], keys: { P: 5 }, result: { type: 54, count: 4 }, size: 2 },
         { id: 'wpick', name: 'Дер. кирка', cat: 'equipment', shape: ['PPP', '.S.', '.S.'], keys: { P: 5, S: 12 }, result: { type: 14, count: 1 }, size: 3 },
         { id: 'spick', name: 'Кам. кирка', cat: 'equipment', shape: ['XXX', '.S.', '.S.'], keys: { X: 3, S: 12 }, result: { type: 15, count: 1 }, size: 3 },
         { id: 'waxe', name: 'Дер. топор', cat: 'equipment', shape: ['PP.', 'PS.', '.S.'], keys: { P: 5, S: 12 }, result: { type: 16, count: 1 }, size: 3 },
@@ -1337,7 +1684,43 @@
         { id: 'wsword', name: 'Дер. меч', cat: 'equipment', shape: ['.P.', '.P.', '.S.'], keys: { P: 5, S: 12 }, result: { type: 18, count: 1 }, size: 3 },
         { id: 'ssword', name: 'Кам. меч', cat: 'equipment', shape: ['.X.', '.X.', '.S.'], keys: { X: 3, S: 12 }, result: { type: 19, count: 1 }, size: 3 },
         { id: 'wshov', name: 'Дер. лопата', cat: 'equipment', shape: ['.P.', '.S.', '.S.'], keys: { P: 5, S: 12 }, result: { type: 20, count: 1 }, size: 3 },
-        { id: 'sshov', name: 'Кам. лопата', cat: 'equipment', shape: ['.X.', '.S.', '.S.'], keys: { X: 3, S: 12 }, result: { type: 21, count: 1 }, size: 3 }
+        { id: 'sshov', name: 'Кам. лопата', cat: 'equipment', shape: ['.X.', '.S.', '.S.'], keys: { X: 3, S: 12 }, result: { type: 21, count: 1 }, size: 3 },
+        { id: 'whoe', name: 'Дер. мотыга', cat: 'equipment', shape: ['PP.', '.S.', '.S.'], keys: { P: 5, S: 12 }, result: { type: 22, count: 1 }, size: 3 },
+        { id: 'shoe', name: 'Кам. мотыга', cat: 'equipment', shape: ['XX.', '.S.', '.S.'], keys: { X: 3, S: 12 }, result: { type: 23, count: 1 }, size: 3 },
+        { id: 'furnace', name: 'Печь', cat: 'building', shape: ['XXX', 'X.X', 'XXX'], keys: { X: 3 }, result: { type: 31, count: 1 }, size: 3 },
+        { id: 'sbrick', name: 'Кам. кирпич', cat: 'building', shape: ['XX', 'XX'], keys: { X: 3 }, result: { type: 44, count: 4 }, size: 2 },
+        { id: 'swall', name: 'Кам. стена', cat: 'building', shape: ['XXX', 'XXX'], keys: { X: 3 }, result: { type: 53, count: 6 }, size: 3 },
+        { id: 'splate', name: 'Кам. плита', cat: 'building', shape: ['XX'], keys: { X: 3 }, result: { type: 63, count: 1 }, size: 2 },
+        { id: 'sbtn', name: 'Кам. кнопка', cat: 'building', shapeless: [[3, 1]], result: { type: 64, count: 1 }, size: 2 },
+        { id: 'sandst', name: 'Песчаник', cat: 'building', shape: ['SS', 'SS'], keys: { S: 7 }, result: { type: 32, count: 1 }, size: 2 },
+        { id: 'csandst', name: 'Рез. песчаник', cat: 'building', shape: ['SS', 'SS'], keys: { S: 32 }, result: { type: 65, count: 4 }, size: 2 },
+        { id: 'string', name: 'Нить', cat: 'misc', shapeless: [[10, 1]], result: { type: 24, count: 4 }, size: 2 },
+        { id: 'wool', name: 'Шерсть', cat: 'building', shape: ['NN', 'NN'], keys: { N: 24 }, result: { type: 10, count: 1 }, size: 2 },
+        { id: 'carpet', name: 'Ковёр', cat: 'building', shape: ['WW'], keys: { W: 10 }, result: { type: 39, count: 3 }, size: 2 },
+        { id: 'bed', name: 'Кровать', cat: 'building', shape: ['WWW', 'PPP'], keys: { W: 10, P: 5 }, result: { type: 38, count: 1 }, size: 3 },
+        { id: 'painting', name: 'Картина', cat: 'building', shape: ['SSS', 'SWS', 'SSS'], keys: { S: 12, W: 10 }, result: { type: 52, count: 1 }, size: 3 },
+        { id: 'helm', name: 'Шлем', cat: 'equipment', shape: ['WWW', 'W.W'], keys: { W: 10 }, result: { type: 59, count: 1 }, size: 3 },
+        { id: 'chestp', name: 'Нагрудник', cat: 'equipment', shape: ['W.W', 'WWW', 'WWW'], keys: { W: 10 }, result: { type: 60, count: 1 }, size: 3 },
+        { id: 'legs', name: 'Поножи', cat: 'equipment', shape: ['WWW', 'W.W', 'W.W'], keys: { W: 10 }, result: { type: 61, count: 1 }, size: 3 },
+        { id: 'boots', name: 'Ботинки', cat: 'equipment', shape: ['W.W', 'W.W'], keys: { W: 10 }, result: { type: 62, count: 1 }, size: 3 },
+        { id: 'bow', name: 'Лук', cat: 'equipment', shape: ['.SN', 'S.N', '.SN'], keys: { S: 12, N: 24 }, result: { type: 25, count: 1 }, size: 3 },
+        { id: 'arrow', name: 'Стрела', cat: 'equipment', shape: ['.F.', '.S.'], keys: { F: 11, S: 12 }, result: { type: 26, count: 4 }, size: 2 },
+        { id: 'frod', name: 'Удочка', cat: 'equipment', shape: ['..S', '.SN', 'S.N'], keys: { S: 12, N: 24 }, result: { type: 57, count: 1 }, size: 3 },
+        { id: 'torch', name: 'Факел', cat: 'misc', shape: ['C', 'S'], keys: { C: 27, S: 12 }, result: { type: 29, count: 4 }, size: 2 },
+        { id: 'camp', name: 'Костёр', cat: 'building', shape: ['S.S', 'SCS', 'LLL'], keys: { S: 12, C: 27, L: 4 }, result: { type: 46, count: 1 }, size: 3 },
+        { id: 'smoker', name: 'Коптильня', cat: 'building', shape: ['.L.', 'LFL', '.L.'], keys: { L: 4, F: 31 }, result: { type: 48, count: 1 }, size: 3 },
+        { id: 'loom', name: 'Ткацкий станок', cat: 'building', shape: ['NN', 'PP'], keys: { N: 24, P: 5 }, result: { type: 49, count: 1 }, size: 2 },
+        { id: 'smith', name: 'Кузница', cat: 'building', shape: ['PP', 'PP', 'XX'], keys: { P: 5, X: 3 }, result: { type: 50, count: 1 }, size: 3 },
+        { id: 'grind', name: 'Точило', cat: 'building', shape: ['S.S', 'P.P', 'XXX'], keys: { S: 12, P: 5, X: 3 }, result: { type: 51, count: 1 }, size: 3 },
+        { id: 'shield', name: 'Щит', cat: 'equipment', shape: ['PWP', 'PPP', '.P.'], keys: { P: 5, W: 10 }, result: { type: 58, count: 1 }, size: 3 },
+        { id: 'stew', name: 'Похлёбка', cat: 'misc', shapeless: [[54, 1], [28, 1]], result: { type: 55, count: 1 }, size: 2 },
+        { id: 'gbottle', name: 'Бутылка', cat: 'misc', shape: ['G.G', '.G.'], keys: { G: 33 }, result: { type: 66, count: 3 }, size: 2 }
+    ];
+    const SMELT_RECIPES = [
+        { id: 'smelt-glass', name: 'Стекло', cat: 'building', in: 7, result: { type: 33, count: 1 } },
+        { id: 'smelt-meat', name: 'Жаркое', cat: 'misc', in: 9, result: { type: 28, count: 1 } },
+        { id: 'smelt-coal', name: 'Уголь', cat: 'misc', in: 4, result: { type: 27, count: 1 } },
+        { id: 'smelt-smooth', name: 'Гладкий камень', cat: 'building', in: 3, result: { type: 45, count: 1 } }
     ];
     let bookOpen = false;
     let bookCat = 'all';
@@ -1347,6 +1730,10 @@
 
     function recipeNeed(rec) {
         const need = {};
+        if (rec.in) {
+            need[rec.in] = 1;
+            return need;
+        }
         if (rec.shapeless) {
             rec.shapeless.forEach(function (p) { need[p[0]] = (need[p[0]] || 0) + p[1]; });
         } else if (rec.shape) {
@@ -1369,6 +1756,45 @@
         const need = recipeNeed(rec);
         for (const k in need) {
             if (countInvType(Number(k)) < need[k]) return false;
+        }
+        return Object.keys(need).length > 0;
+    }
+
+    function maxCraftable(rec) {
+        const need = recipeNeed(rec);
+        let m = Infinity;
+        for (const k in need) {
+            if (need[k] <= 0) continue;
+            m = Math.min(m, Math.floor(countInvType(Number(k)) / need[k]));
+        }
+        return m === Infinity ? 0 : m;
+    }
+
+    function dropExtras(type, count) {
+        if (count <= 0) return;
+        if (typeof spawnBlockDrop === 'function' && typeof player !== 'undefined') {
+            for (let i = 0; i < count; i++) {
+                spawnBlockDrop(player.pos.x - 0.5, player.pos.y + 0.9, player.pos.z - 0.5, type);
+            }
+        }
+    }
+
+    function giveCraftResult(type, count) {
+        let left = count;
+        if (isSlotEmpty(cursorStack)) {
+            const mv = Math.min(STACK_SIZE, left);
+            cursorStack = { type: type, count: mv };
+            left -= mv;
+        } else if (cursorStack.type === type) {
+            const mv = Math.min(STACK_SIZE - cursorStack.count, left);
+            cursorStack.count += mv;
+            left -= mv;
+        } else {
+            if (!addItemToInventory(type, left)) dropExtras(type, left);
+            return false;
+        }
+        if (left > 0) {
+            if (!addItemToInventory(type, left)) dropExtras(type, left);
         }
         return true;
     }
@@ -1400,14 +1826,19 @@
 
     function recipeToExtract(shape, keys) {
         const h = shape.length, w = shape[0].length;
+        const size = Math.max(h, w);
         const slots = [];
-        for (let r = 0; r < h; r++) {
-            for (let c = 0; c < w; c++) {
-                const ch = shape[r].charAt(c);
-                slots.push(ch === '.' ? emptySlot() : { type: keys[ch], count: 1 });
+        for (let r = 0; r < size; r++) {
+            for (let c = 0; c < size; c++) {
+                if (r < h && c < w) {
+                    const ch = shape[r].charAt(c);
+                    slots.push(ch === '.' ? emptySlot() : { type: keys[ch], count: 1 });
+                } else {
+                    slots.push(emptySlot());
+                }
             }
         }
-        return extractShape(slots, w);
+        return extractShape(slots, size);
     }
 
     function mirrorShape(shape) {
@@ -1480,23 +1911,28 @@
         refreshInventoryUI();
     }
 
-    function handleCraftOutput(size) {
+    function handleCraftOutput(size, maxTimes) {
         const slots = getCraftSlots(size);
-        const rec = matchCraft(slots, size);
-        if (!rec) return;
-        if (isSlotEmpty(cursorStack)) {
-            cursorStack = { type: rec.type, count: rec.count };
-        } else if (cursorStack.type === rec.type && cursorStack.count + rec.count <= STACK_SIZE) {
-            cursorStack.count += rec.count;
-        } else {
-            showInvToast('Освободи руку');
-            return;
+        const limit = maxTimes == null ? 1 : maxTimes;
+        let crafted = 0;
+        while (crafted < limit) {
+            const rec = matchCraft(slots, size);
+            if (!rec) break;
+            if (isSlotEmpty(cursorStack)) {
+                cursorStack = { type: rec.type, count: rec.count };
+            } else if (cursorStack.type === rec.type && cursorStack.count + rec.count <= STACK_SIZE) {
+                cursorStack.count += rec.count;
+            } else {
+                if (crafted === 0) showInvToast('Освободи руку');
+                break;
+            }
+            consumeCraft(slots);
+            crafted++;
         }
-        consumeCraft(slots);
-        refreshInventoryUI();
+        if (crafted) refreshInventoryUI();
     }
 
-    function dumpCraftToInventory() {
+    function dumpCraftToInventory(includeFurnace) {
         function dump(slots) {
             for (let i = 0; i < slots.length; i++) {
                 if (isSlotEmpty(slots[i])) continue;
@@ -1512,10 +1948,226 @@
         }
         dump(craft2);
         dump(craft3);
+        if (includeFurnace !== false) {
+            function dumpOne(obj, set) {
+                if (isSlotEmpty(obj)) return;
+                if (!addItemToInventory(obj.type, obj.count)) dropExtras(obj.type, obj.count);
+                set(emptySlot());
+            }
+            dumpOne(furnaceIn, function (s) { furnaceIn = s; });
+            dumpOne(furnaceFuel, function (s) { furnaceFuel = s; });
+            dumpOne(furnaceOut, function (s) { furnaceOut = s; });
+            furnaceFuelLeft = 0;
+        }
+    }
+
+    function getFuelValue(type) {
+        if (type === ITEM_CHARCOAL) return 8;
+        if (type === ITEM_STICK) return 1;
+        if (type === BLOCK_WOOD || type === BLOCK_PLANKS || type === BLOCK_CRAFT ||
+            type === BLOCK_CHEST || type === BLOCK_BARREL || type === BLOCK_DOOR ||
+            type === BLOCK_FENCE || type === BLOCK_GATE || type === BLOCK_TRAPDOOR ||
+            type === BLOCK_SIGN || type === BLOCK_LADDER || type === ITEM_BOAT ||
+            type === ITEM_BOWL || type === BLOCK_LOOM || type === BLOCK_SMITHING ||
+            type === BLOCK_BED) return 2;
+        if (type === BLOCK_LEAVES || type === ITEM_WOOD_PICK ||
+            type === ITEM_WOOD_AXE || type === ITEM_WOOD_SWORD || type === ITEM_WOOD_SHOVEL ||
+            type === ITEM_WOOD_HOE || type === BLOCK_CAMPFIRE) return 1;
+        return 0;
+    }
+
+    function findSmelt(type) {
+        for (let i = 0; i < SMELT_RECIPES.length; i++) {
+            if (SMELT_RECIPES[i].in === type) return SMELT_RECIPES[i];
+        }
+        return null;
+    }
+
+    function swapCursorSlot(getter, setter) {
+        const slot = getter();
+        if (isSlotEmpty(cursorStack)) {
+            if (isSlotEmpty(slot)) return;
+            setter(emptySlot());
+            cursorStack = { type: slot.type, count: slot.count };
+        } else if (isSlotEmpty(slot)) {
+            setter({ type: cursorStack.type, count: cursorStack.count });
+            cursorStack = emptySlot();
+        } else if (slot.type === cursorStack.type && slot.count < STACK_SIZE) {
+            const move = Math.min(cursorStack.count, STACK_SIZE - slot.count);
+            slot.count += move;
+            cursorStack.count -= move;
+            if (cursorStack.count <= 0) cursorStack = emptySlot();
+            setter(slot);
+        } else {
+            setter({ type: cursorStack.type, count: cursorStack.count });
+            cursorStack = { type: slot.type, count: slot.count };
+        }
+        refreshInventoryUI();
+    }
+
+    function handleFurnaceSlotTap(kind) {
+        if (kind === 'out') {
+            if (isSlotEmpty(furnaceOut)) return;
+            if (isSlotEmpty(cursorStack)) {
+                cursorStack = { type: furnaceOut.type, count: furnaceOut.count };
+                furnaceOut = emptySlot();
+            } else if (cursorStack.type === furnaceOut.type && cursorStack.count < STACK_SIZE) {
+                const mv = Math.min(furnaceOut.count, STACK_SIZE - cursorStack.count);
+                cursorStack.count += mv;
+                furnaceOut.count -= mv;
+                if (furnaceOut.count <= 0) furnaceOut = emptySlot();
+            } else {
+                showInvToast('Освободи руку');
+                return;
+            }
+            refreshInventoryUI();
+            return;
+        }
+        if (kind === 'in') swapCursorSlot(function () { return furnaceIn; }, function (s) { furnaceIn = s; });
+        else if (kind === 'fuel') swapCursorSlot(function () { return furnaceFuel; }, function (s) { furnaceFuel = s; });
+    }
+
+    function smeltOnce(silent) {
+        const rec = findSmelt(furnaceIn && furnaceIn.type);
+        if (!rec || isSlotEmpty(furnaceIn)) {
+            if (!silent) showInvToast('Нечего плавить');
+            return false;
+        }
+        if (!isSlotEmpty(furnaceOut) && (furnaceOut.type !== rec.result.type || furnaceOut.count + rec.result.count > STACK_SIZE)) {
+            if (!silent) showInvToast('Забери результат');
+            return false;
+        }
+        if (furnaceFuelLeft <= 0) {
+            const fv = getFuelValue(furnaceFuel && furnaceFuel.type);
+            if (fv <= 0 || isSlotEmpty(furnaceFuel)) {
+                if (!silent) showInvToast('Нет топлива');
+                return false;
+            }
+            furnaceFuel.count--;
+            if (furnaceFuel.count <= 0) furnaceFuel = emptySlot();
+            furnaceFuelLeft = fv;
+        }
+        furnaceIn.count--;
+        if (furnaceIn.count <= 0) furnaceIn = emptySlot();
+        if (isSlotEmpty(furnaceOut)) furnaceOut = { type: rec.result.type, count: rec.result.count };
+        else furnaceOut.count += rec.result.count;
+        furnaceFuelLeft--;
+        return true;
+    }
+
+    function handleSmelt(all) {
+        let n = 0;
+        while (smeltOnce(n > 0)) {
+            n++;
+            if (!all) break;
+        }
+        if (n) refreshInventoryUI();
+    }
+
+    function renderFurnaceSlots() {
+        const inn = document.getElementById('furnace-in');
+        const fuel = document.getElementById('furnace-fuel');
+        const out = document.getElementById('furnace-out');
+        if (inn) inn.innerHTML = slotInnerHTML(furnaceIn);
+        if (fuel) fuel.innerHTML = slotInnerHTML(furnaceFuel);
+        if (out) out.innerHTML = slotInnerHTML(furnaceOut);
+        const fire = document.getElementById('furnace-fire');
+        if (fire) fire.textContent = furnaceFuelLeft > 0 ? '🔥×' + furnaceFuelLeft : '🔥';
+        const hint = document.getElementById('furnace-hint');
+        if (hint) {
+            const rec = findSmelt(furnaceIn && furnaceIn.type);
+            hint.textContent = rec
+                ? ('Плавка: ' + (BLOCK_NAMES[furnaceIn.type] || '') + ' → ' + rec.name + (furnaceFuelLeft ? ' · топливо ' + furnaceFuelLeft : ' · положи топливо вниз'))
+                : 'Верх: песок/мясо/дерево/камень · Низ: топливо';
+        }
+    }
+
+    function takeNeedFromInv(need) {
+        for (const k in need) {
+            let left = need[k];
+            const tp = Number(k);
+            while (left > 0) {
+                if (!takeOneFromInv(tp)) return false;
+                left--;
+            }
+        }
+        return true;
+    }
+
+    function craftRecipeTimes(rec, times) {
+        if (rec.in) {
+            setInvTab('furnace');
+            let n = 0;
+            const limit = times == null ? 1 : times;
+            while (n < limit && countInvType(rec.in) > 0) {
+                if (furnaceFuelLeft <= 0) {
+                    const fv = getFuelValue(furnaceFuel && furnaceFuel.type);
+                    if (fv > 0 && !isSlotEmpty(furnaceFuel)) {
+                        furnaceFuel.count--;
+                        if (furnaceFuel.count <= 0) furnaceFuel = emptySlot();
+                        furnaceFuelLeft = fv;
+                    } else {
+                        const fuels = [ITEM_CHARCOAL, BLOCK_WOOD, BLOCK_PLANKS, ITEM_STICK, BLOCK_LEAVES];
+                        let burned = false;
+                        for (let f = 0; f < fuels.length; f++) {
+                            if (takeOneFromInv(fuels[f])) {
+                                furnaceFuelLeft = getFuelValue(fuels[f]);
+                                burned = true;
+                                break;
+                            }
+                        }
+                        if (!burned) {
+                            if (n === 0) showInvToast('Нет топлива');
+                            break;
+                        }
+                    }
+                }
+                takeOneFromInv(rec.in);
+                giveCraftResult(rec.result.type, rec.result.count);
+                furnaceFuelLeft--;
+                n++;
+            }
+            if (n === 0) showInvToast('Мало ресурсов');
+            else { saveInventory(); refreshInventoryUI(); }
+            return;
+        }
+        const can = maxCraftable(rec);
+        const n = Math.min(times == null ? 1 : times, can);
+        if (n <= 0) {
+            showInvToast('Мало ресурсов');
+            return;
+        }
+        const need = recipeNeed(rec);
+        for (let i = 0; i < n; i++) {
+            takeNeedFromInv(need);
+            if (!giveCraftResult(rec.result.type, rec.result.count)) break;
+        }
+        saveInventory();
+        refreshInventoryUI();
     }
 
     function tryFillRecipe(rec) {
-        dumpCraftToInventory();
+        if (rec.in) {
+            setInvTab('furnace');
+            if (countInvType(rec.in) <= 0) {
+                showInvToast('Мало ресурсов');
+                return;
+            }
+            if (!isSlotEmpty(furnaceIn) && furnaceIn.type !== rec.in) {
+                showInvToast('Освободи вход печи');
+                return;
+            }
+            const have = countInvType(rec.in);
+            const room = isSlotEmpty(furnaceIn) ? STACK_SIZE : STACK_SIZE - furnaceIn.count;
+            const mv = Math.min(have, room);
+            for (let i = 0; i < mv; i++) takeOneFromInv(rec.in);
+            if (isSlotEmpty(furnaceIn)) furnaceIn = { type: rec.in, count: mv };
+            else furnaceIn.count += mv;
+            saveInventory();
+            refreshInventoryUI();
+            return;
+        }
+        dumpCraftToInventory(false);
         if (!canAffordRecipe(rec)) {
             showInvToast('Мало ресурсов');
             refreshInventoryUI();
@@ -1546,6 +2198,7 @@
             });
         }
         if (rec.size === 3) setInvTab('craft');
+        else setInvTab('inv');
         refreshInventoryUI();
     }
 
@@ -1560,14 +2213,24 @@
         return false;
     }
 
+    function allBookRecipes() {
+        if (invTab === 'furnace') return SMELT_RECIPES;
+        return CRAFT_RECIPES;
+    }
+
+    function findBookRecipe(id) {
+        let rec = CRAFT_RECIPES.filter(function (r) { return r.id === id; })[0];
+        if (rec) return rec;
+        return SMELT_RECIPES.filter(function (r) { return r.id === id; })[0] || null;
+    }
+
     function renderCraftBook() {
         const grid = document.getElementById('book-grid');
         if (!grid) return;
         grid.innerHTML = '';
-        const maxSize = (invTab === 'craft') ? 3 : 2;
         const q = (bookQuery || '').toLowerCase();
-        CRAFT_RECIPES.forEach(function (rec) {
-            if (rec.size > maxSize) return;
+        const list = allBookRecipes();
+        list.forEach(function (rec) {
             if (bookCat !== 'all' && rec.cat !== bookCat) return;
             const name = rec.name + ' ×' + rec.result.count;
             if (q && name.toLowerCase().indexOf(q) < 0 && (BLOCK_NAMES[rec.result.type] || '').toLowerCase().indexOf(q) < 0) return;
@@ -1576,6 +2239,13 @@
             const b = document.createElement('button');
             b.type = 'button';
             b.className = 'book-cell ' + (ok ? 'ok' : 'no') + (bookSelected === rec.id ? ' sel' : '');
+            const canN = ok ? maxCraftable(rec) : 0;
+            if (canN > 0) {
+                const badge = document.createElement('span');
+                badge.className = 'can-n';
+                badge.textContent = String(canN);
+                b.appendChild(badge);
+            }
             if (ITEM_ICON[rec.result.type]) {
                 const ico = document.createElement('img');
                 ico.className = 'item-icon';
@@ -1593,8 +2263,6 @@
                 if (e) { e.preventDefault(); e.stopPropagation(); }
                 bookSelected = rec.id;
                 showRecipePreview(rec);
-                if (ok) tryFillRecipe(rec);
-                else showInvToast('Нет ресурсов');
                 renderCraftBook();
             };
             b.addEventListener('click', go);
@@ -1602,7 +2270,7 @@
             grid.appendChild(b);
         });
         if (bookSelected) {
-            const rec = CRAFT_RECIPES.filter(function (r) { return r.id === bookSelected; })[0];
+            const rec = findBookRecipe(bookSelected);
             if (rec) showRecipePreview(rec);
         }
     }
@@ -1614,29 +2282,59 @@
         const parts = [];
         for (const k in need) {
             const tp = Number(k);
-            parts.push((BLOCK_NAMES[tp] || '?') + ' ×' + need[k]);
+            const have = countInvType(tp);
+            const needN = need[k];
+            parts.push((BLOCK_NAMES[tp] || '?') + ' ' + have + '/' + needN);
         }
-        const size = rec.shape ? rec.shape[0].length : 1;
-        let html = rec.name + '  =  ' + parts.join(' + ');
+        const can = maxCraftable(rec);
+        let html = '<div class="prev-line"><b>' + rec.name + ' ×' + rec.result.count + '</b>' +
+            (rec.in ? ' <i>(печь)</i>' : '') + ' · можно ' + can + '</div>';
+        html += '<div class="prev-need">' + parts.join(' · ') + '</div>';
         if (rec.shape) {
-            html += ' <span class="prev-grid" style="grid-template-columns:repeat(' + size + ',14px)">';
+            const w = rec.shape[0].length;
+            html += '<div class="prev-grid" style="grid-template-columns:repeat(' + w + ',18px);margin:4px 0">';
             rec.shape.join('').split('').forEach(function (ch) {
-                const col = (ch === '.') ? '#8b8b8b' : (ITEM_COLOR[rec.keys[ch]] || '#666');
-                html += '<span style="background:' + col + '"></span>';
+                if (ch === '.') {
+                    html += '<span></span>';
+                } else {
+                    const tp = rec.keys[ch];
+                    const src = ITEM_ICON[tp];
+                    if (src) html += '<img src="' + src + '" alt="">';
+                    else html += '<span style="background:' + (ITEM_COLOR[tp] || '#666') + '"></span>';
+                }
             });
-            html += '</span>';
+            html += '</div>';
         }
+        html += '<div class="book-acts">';
+        html += '<button type="button" class="alt" data-book-act="fill">В сетку</button>';
+        html += '<button type="button" data-book-act="one"' + (can < 1 ? ' disabled' : '') + '>1</button>';
+        html += '<button type="button" data-book-act="all"' + (can < 1 ? ' disabled' : '') + '>Всё</button>';
+        html += '</div>';
         box.innerHTML = html;
+        box.querySelectorAll('[data-book-act]').forEach(function (btn) {
+            const act = btn.getAttribute('data-book-act');
+            const go = function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (act === 'fill') tryFillRecipe(rec);
+                else if (act === 'one') craftRecipeTimes(rec, 1);
+                else if (act === 'all') craftRecipeTimes(rec, Math.max(1, maxCraftable(rec)));
+                showRecipePreview(rec);
+                renderCraftBook();
+            };
+            btn.addEventListener('click', go);
+            btn.addEventListener('touchstart', go, { passive: false });
+        });
     }
 
     function setBookOpen(open) {
         bookOpen = open;
         const el = document.getElementById('recipe-book');
         if (el) el.className = open ? 'open' : '';
-        const b1 = document.getElementById('btn-book');
-        const b2 = document.getElementById('btn-book-3');
-        if (b1) b1.className = open ? 'on' : '';
-        if (b2) b2.className = open ? 'on' : '';
+        ['btn-book', 'btn-book-3', 'btn-book-f'].forEach(function (id) {
+            const b = document.getElementById(id);
+            if (b) b.className = open ? 'on' : '';
+        });
         if (open) renderCraftBook();
     }
 
@@ -1644,12 +2342,16 @@
         invTab = tab;
         const main = document.getElementById('inv-view-main');
         const craft = document.getElementById('inv-view-craft');
+        const furn = document.getElementById('inv-view-furnace');
         const ti = document.getElementById('tab-inv');
         const tc = document.getElementById('tab-craft');
+        const tf = document.getElementById('tab-furnace');
         if (main) main.style.display = tab === 'inv' ? 'block' : 'none';
         if (craft) craft.style.display = tab === 'craft' ? 'block' : 'none';
+        if (furn) furn.style.display = tab === 'furnace' ? 'block' : 'none';
         if (ti) ti.className = tab === 'inv' ? 'on' : '';
         if (tc) tc.className = tab === 'craft' ? 'on' : '';
+        if (tf) tf.className = tab === 'furnace' ? 'on' : '';
         if (bookOpen) renderCraftBook();
         refreshInventoryUI();
     }
@@ -1727,7 +2429,7 @@
     // --- 4. ТЕКСТУРНЫЙ АТЛАС (С классической текстурой воды) ---
     function createTextureAtlas() {
         const canvas = document.createElement('canvas');
-        canvas.width = 128; canvas.height = 128;
+        canvas.width = 128; canvas.height = 256;
         const ctx = canvas.getContext('2d');
         ctx.imageSmoothingEnabled = false;
 
@@ -1846,6 +2548,96 @@
         ctx.fillStyle = '#8a8a8a';
         ctx.fillRect(100, 100, 20, 2);
 
+        function tileXY(id) { return [(id % 4) * 32, Math.floor(id / 4) * 32]; }
+        function paintTile(id, fn) {
+            const xy = tileXY(id);
+            fn(xy[0], xy[1]);
+        }
+
+        paintTile(16, function (x, y) {
+            fillNoise(x, y, '#3a2a18', '#2a1c10', 20);
+            ctx.fillStyle = '#8a6230'; ctx.fillRect(x + 14, y + 16, 4, 14);
+            ctx.fillStyle = '#ffcc33'; ctx.fillRect(x + 12, y + 6, 8, 12);
+            ctx.fillStyle = '#ffe680'; ctx.fillRect(x + 14, y + 8, 4, 6);
+        });
+        paintTile(17, function (x, y) {
+            fillNoise(x, y, '#8b6914', '#5a4224', 30);
+            ctx.fillStyle = '#5a3c14'; ctx.fillRect(x + 6, y + 10, 20, 12);
+            ctx.fillStyle = '#c4a06a'; ctx.fillRect(x, y, 32, 6);
+            ctx.fillStyle = '#2a1c08'; ctx.fillRect(x + 13, y + 14, 6, 4);
+        });
+        paintTile(18, function (x, y) {
+            fillNoise(x, y, '#7a7a7a', '#4a4a4a', 40);
+            ctx.fillStyle = '#1a1a1a'; ctx.fillRect(x + 8, y + 12, 16, 14);
+            ctx.fillStyle = '#ff7722'; ctx.fillRect(x + 11, y + 16, 10, 8);
+            ctx.fillStyle = '#9a9a9a'; ctx.fillRect(x, y, 32, 8);
+        });
+        paintTile(19, function (x, y) {
+            fillNoise(x, y, '#6a6a6a', '#4a4a4a', 50);
+        });
+        paintTile(20, function (x, y) {
+            fillNoise(x, y, '#d8cb8c', '#c2b373', 40);
+            ctx.fillStyle = '#c2b373'; ctx.fillRect(x, y + 14, 32, 2); ctx.fillRect(x + 14, y, 2, 32);
+        });
+        paintTile(21, function (x, y) {
+            ctx.fillStyle = '#8ec8d8'; ctx.fillRect(x, y, 32, 32);
+            ctx.fillStyle = '#b8e0ec'; ctx.fillRect(x + 2, y + 2, 28, 28);
+            ctx.fillStyle = '#e8f8fc'; ctx.fillRect(x + 4, y + 4, 10, 10);
+            ctx.fillStyle = '#6aa8b8'; ctx.fillRect(x + 18, y + 16, 8, 8);
+        });
+        paintTile(22, function (x, y) {
+            fillNoise(x, y, '#c4a06a', '#8f6f3e', 20);
+            ctx.fillStyle = '#6e542d'; ctx.fillRect(x, y + 16, 32, 2);
+            ctx.fillStyle = '#5a4224'; ctx.fillRect(x + 22, y + 14, 4, 4);
+        });
+        paintTile(23, function (x, y) {
+            fillNoise(x, y, '#5a3c1c', '#3a2810', 10);
+            ctx.fillStyle = '#8a6230'; ctx.fillRect(x + 4, y, 4, 32); ctx.fillRect(x + 24, y, 4, 32);
+            ctx.fillStyle = '#c49a54';
+            ctx.fillRect(x + 4, y + 6, 24, 3); ctx.fillRect(x + 4, y + 14, 24, 3); ctx.fillRect(x + 4, y + 22, 24, 3);
+        });
+        paintTile(24, function (x, y) {
+            fillNoise(x, y, '#6b4a28', '#4a3018', 15);
+            ctx.fillStyle = '#8a6230'; ctx.fillRect(x + 6, y, 6, 32); ctx.fillRect(x + 20, y, 6, 32);
+            ctx.fillStyle = '#c49a54'; ctx.fillRect(x + 6, y + 10, 20, 4); ctx.fillRect(x + 6, y + 20, 20, 4);
+        });
+        paintTile(25, function (x, y) {
+            ctx.fillStyle = '#c4a06a'; ctx.fillRect(x, y + 16, 32, 16);
+            ctx.fillStyle = '#e07070'; ctx.fillRect(x, y + 6, 32, 12);
+            ctx.fillStyle = '#f09890'; ctx.fillRect(x + 4, y + 8, 24, 6);
+            ctx.fillStyle = '#8a6230'; ctx.fillRect(x, y + 24, 6, 8); ctx.fillRect(x + 26, y + 24, 6, 8);
+        });
+        paintTile(26, function (x, y) {
+            fillNoise(x, y, '#c4a06a', '#8f6f3e', 20);
+            ctx.fillStyle = '#6e542d'; ctx.fillRect(x, y + 14, 32, 3);
+        });
+        paintTile(27, function (x, y) {
+            fillNoise(x, y, '#8a8a8a', '#5a5a5a', 30);
+            ctx.fillStyle = '#5a5a5a';
+            ctx.fillRect(x, y + 10, 32, 2); ctx.fillRect(x, y + 22, 32, 2);
+            ctx.fillRect(x + 10, y, 2, 10); ctx.fillRect(x + 22, y + 10, 2, 12);
+        });
+        paintTile(28, function (x, y) {
+            fillNoise(x, y, '#a8a8a8', '#7a7a7a', 25);
+        });
+        paintTile(29, function (x, y) {
+            fillNoise(x, y, '#3a2a18', '#2a1c10', 15);
+            ctx.fillStyle = '#6b4a28'; ctx.fillRect(x + 4, y + 20, 24, 8);
+            ctx.fillStyle = '#ff7722'; ctx.fillRect(x + 10, y + 6, 12, 16);
+            ctx.fillStyle = '#ffcc33'; ctx.fillRect(x + 13, y + 4, 6, 10);
+        });
+        paintTile(30, function (x, y) {
+            fillNoise(x, y, '#6b4a28', '#4a3018', 20);
+            ctx.fillStyle = '#c4a06a'; ctx.fillRect(x, y, 32, 4); ctx.fillRect(x, y + 28, 32, 4);
+            ctx.fillStyle = '#8a6230'; ctx.fillRect(x + 8, y + 8, 16, 16);
+        });
+        paintTile(31, function (x, y) {
+            fillNoise(x, y, '#7a7a7a', '#4a4a4a', 30);
+            ctx.fillStyle = '#6b4a28'; ctx.fillRect(x, y, 32, 10);
+            ctx.fillStyle = '#1a1a1a'; ctx.fillRect(x + 8, y + 14, 16, 12);
+            ctx.fillStyle = '#ff7722'; ctx.fillRect(x + 11, y + 18, 10, 6);
+        });
+
         const texture = new THREE.CanvasTexture(canvas);
         texture.magFilter = THREE.NearestFilter;
         texture.minFilter = THREE.NearestFilter;
@@ -1854,7 +2646,8 @@
 
     function getTileUV(tileId) {
         const col = tileId % 4, row = Math.floor(tileId / 4);
-        return { u0: col * 0.25, v0: 1.0 - (row + 1) * 0.25, u1: col * 0.25 + 0.25, v1: 1.0 - row * 0.25 };
+        const uSize = 0.25, vSize = 0.125;
+        return { u0: col * uSize, v0: 1.0 - (row + 1) * vSize, u1: col * uSize + uSize, v1: 1.0 - row * vSize };
     }
 
     function getBlockFaceTile(blockType, faceIndex) {
@@ -1865,13 +2658,34 @@
         if (blockType === BLOCK_PLANKS) return 6;
         if (blockType === BLOCK_LEAVES) return 7;
         if (blockType === BLOCK_SAND) return 8;
-        if (blockType === ITEM_MEAT) return 9;
-        if (blockType === ITEM_WOOL) return 10;
+        if (blockType === ITEM_MEAT || blockType === ITEM_COOKED_MEAT || blockType === ITEM_STEW) return 9;
+        if (blockType === ITEM_WOOL || blockType === BLOCK_CARPET || isArmorItem(blockType)) return 10;
         if (blockType === BLOCK_WATER) return 11;
         if (blockType === ITEM_FEATHER) return 12;
-        if (blockType === ITEM_STICK) return 13;
+        if (blockType === ITEM_STICK || blockType === ITEM_STRING) return 13;
         if (blockType === BLOCK_CRAFT) return 14;
-        if (isToolItem(blockType)) return 15;
+        if (blockType === BLOCK_TORCH) return 16;
+        if (blockType === BLOCK_CHEST) return 17;
+        if (blockType === BLOCK_FURNACE) return (faceIndex === 4 || faceIndex === 5) ? 18 : 19;
+        if (blockType === BLOCK_SANDSTONE || blockType === BLOCK_CUT_SANDSTONE) return 20;
+        if (blockType === BLOCK_GLASS || blockType === ITEM_GLASS_BOTTLE) return 21;
+        if (blockType === BLOCK_DOOR) return 22;
+        if (blockType === BLOCK_LADDER) return 23;
+        if (blockType === BLOCK_FENCE || blockType === BLOCK_GATE) return 24;
+        if (blockType === BLOCK_BED) return 25;
+        if (blockType === BLOCK_TRAPDOOR) return 26;
+        if (blockType === BLOCK_SIGN || blockType === BLOCK_PLATE || blockType === BLOCK_BUTTON) return 6;
+        if (blockType === BLOCK_STONE_BRICK || blockType === BLOCK_WALL) return 27;
+        if (blockType === BLOCK_SMOOTH_STONE) return 28;
+        if (blockType === BLOCK_CAMPFIRE) return 29;
+        if (blockType === BLOCK_BARREL) return 30;
+        if (blockType === BLOCK_SMOKER) return 31;
+        if (blockType === BLOCK_LOOM || blockType === BLOCK_SMITHING) return 6;
+        if (blockType === BLOCK_GRINDSTONE || blockType === BLOCK_STONE_PLATE || blockType === BLOCK_STONE_BUTTON) return 3;
+        if (blockType === BLOCK_PAINTING) return 10;
+        if (blockType === ITEM_CHARCOAL) return 3;
+        if (blockType === ITEM_BOWL || blockType === ITEM_BOAT || blockType === ITEM_SHIELD) return 6;
+        if (isToolItem(blockType) || blockType === ITEM_ARROW) return 15;
         return 1;
     }
 
@@ -3420,11 +4234,12 @@
         const currentSlot = inventory[selectedSlotIndex];
         if (!currentSlot || currentSlot.type === BLOCK_EMPTY || currentSlot.count <= 0) return;
 
-        if (!canPlaceType(currentSlot.type) && currentSlot.type !== ITEM_MEAT) return;
+        const heal = foodHeal(currentSlot.type);
+        if (!canPlaceType(currentSlot.type) && !heal) return;
 
-        if (currentSlot.type === ITEM_MEAT) {
+        if (heal) {
             if (player.health < player.maxHealth) {
-                player.health = Math.min(player.maxHealth, player.health + 4);
+                player.health = Math.min(player.maxHealth, player.health + heal);
                 currentSlot.count--;
                 if (currentSlot.count <= 0) currentSlot.type = BLOCK_EMPTY;
                 saveInventory();
@@ -3524,6 +4339,8 @@
     document.getElementById('tab-inv').addEventListener('touchstart', function (e) { e.preventDefault(); e.stopPropagation(); setInvTab('inv'); }, { passive: false });
     document.getElementById('tab-craft').addEventListener('click', function (e) { e.preventDefault(); setInvTab('craft'); });
     document.getElementById('tab-craft').addEventListener('touchstart', function (e) { e.preventDefault(); e.stopPropagation(); setInvTab('craft'); }, { passive: false });
+    document.getElementById('tab-furnace').addEventListener('click', function (e) { e.preventDefault(); setInvTab('furnace'); });
+    document.getElementById('tab-furnace').addEventListener('touchstart', function (e) { e.preventDefault(); e.stopPropagation(); setInvTab('furnace'); }, { passive: false });
 
     function bindTap(id, fn) {
         const el = document.getElementById(id);
@@ -3533,6 +4350,11 @@
     }
     bindTap('btn-book', function () { setBookOpen(!bookOpen); });
     bindTap('btn-book-3', function () { setBookOpen(!bookOpen); });
+    bindTap('btn-book-f', function () { setBookOpen(!bookOpen); });
+    bindTap('btn-craft-all-2', function () { handleCraftOutput(2, 64); });
+    bindTap('btn-craft-all-3', function () { handleCraftOutput(3, 64); });
+    bindTap('btn-smelt-1', function () { handleSmelt(false); });
+    bindTap('btn-smelt-all', function () { handleSmelt(true); });
     bindTap('book-filter', function () {
         bookCraftableOnly = !bookCraftableOnly;
         const bf = document.getElementById('book-filter');
@@ -3584,6 +4406,13 @@
             setInventoryOpen(false);
             return;
         }
+        const furn = e.target.closest('[data-furnace]');
+        if (furn) {
+            e.preventDefault();
+            handleFurnaceSlotTap(furn.getAttribute('data-furnace'));
+            if (e.changedTouches && e.changedTouches[0]) moveInvCursorFloat(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
+            return;
+        }
         const out = e.target.closest('.craft-out');
         if (out) {
             e.preventDefault();
@@ -3592,7 +4421,7 @@
             return;
         }
         const cs = e.target.closest('.craft-slot');
-        if (cs) {
+        if (cs && cs.dataset.craft) {
             e.preventDefault();
             const parts = cs.dataset.craft.split(':');
             handleCraftSlotTap(parseInt(parts[0], 10), parseInt(parts[1], 10));
@@ -3618,10 +4447,12 @@
             setInventoryOpen(false);
             return;
         }
+        const furn = e.target.closest('[data-furnace]');
+        if (furn) { handleFurnaceSlotTap(furn.getAttribute('data-furnace')); moveInvCursorFloat(e.clientX, e.clientY); return; }
         const out = e.target.closest('.craft-out');
         if (out) { handleCraftOutput(parseInt(out.dataset.out, 10)); moveInvCursorFloat(e.clientX, e.clientY); return; }
         const cs = e.target.closest('.craft-slot');
-        if (cs) {
+        if (cs && cs.dataset.craft) {
             const parts = cs.dataset.craft.split(':');
             handleCraftSlotTap(parseInt(parts[0], 10), parseInt(parts[1], 10));
             moveInvCursorFloat(e.clientX, e.clientY);
