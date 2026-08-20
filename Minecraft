@@ -3268,6 +3268,87 @@
         return mesh;
     }
 
+    let fpArm = null;
+    let fpWalkCycle = 0;
+    let fpWalkAmt = 0;
+    let fpPunch = 0;
+
+    function triggerHandPunch() {
+        fpPunch = 1.0;
+    }
+
+    function buildFirstPersonArm() {
+        const skin = 0xc68642, skinD = 0xa56b38, sleeve = 0x3b6ea5, cuff = 0x2a5280;
+        const root = new THREE.Group();
+        const arm = new THREE.Group();
+
+        const sleeveBox = createVoxelBox(0.24, 0.42, 0.24, sleeve, -0.21);
+        const cuffBox = createVoxelBox(0.26, 0.07, 0.26, cuff);
+        cuffBox.position.y = -0.42;
+        sleeveBox.add(cuffBox);
+
+        const forearm = createVoxelBox(0.21, 0.34, 0.21, skin, -0.17);
+        forearm.position.y = -0.44;
+        const hand = createVoxelBox(0.23, 0.15, 0.28, skin);
+        hand.position.set(0.03, -0.36, 0.05);
+        const palm = createVoxelBox(0.20, 0.06, 0.22, skinD);
+        palm.position.set(0.01, -0.06, 0.01);
+        hand.add(palm);
+        const thumb = createVoxelBox(0.08, 0.16, 0.09, skinD);
+        thumb.position.set(-0.15, -0.02, 0.08);
+        thumb.rotation.z = 0.55;
+        thumb.rotation.y = 0.25;
+        const f1 = createVoxelBox(0.055, 0.13, 0.055, skin); f1.position.set(0.07, -0.13, 0.09);
+        const f2 = createVoxelBox(0.055, 0.145, 0.055, skin); f2.position.set(0.07, -0.14, 0.02);
+        const f3 = createVoxelBox(0.05, 0.13, 0.05, skin); f3.position.set(0.065, -0.13, -0.05);
+        const f4 = createVoxelBox(0.045, 0.11, 0.045, skinD); f4.position.set(0.05, -0.11, -0.11);
+        hand.add(thumb); hand.add(f1); hand.add(f2); hand.add(f3); hand.add(f4);
+        forearm.add(hand);
+        sleeveBox.add(forearm);
+        arm.add(sleeveBox);
+        root.add(arm);
+
+        root.position.set(0.48, -0.42, -0.58);
+        root.rotation.set(-0.62, 0.52, 0.28);
+        root.scale.set(0.92, 0.92, 0.92);
+        root.traverse(function (o) {
+            if (o.isMesh) {
+                o.frustumCulled = false;
+                o.material.fog = false;
+                o.renderOrder = 20;
+            }
+        });
+        root.frustumCulled = false;
+        root.arm = arm;
+        root.forearm = forearm;
+        root.hand = hand;
+        return root;
+    }
+
+    function updateFirstPersonArm(dt) {
+        if (!fpArm) return;
+        if (player.isDead) {
+            fpArm.visible = false;
+            return;
+        }
+        fpArm.visible = true;
+        const moving = !invOpen && (Math.hypot(moveInput.x, moveInput.y) > 0.12);
+        fpWalkAmt += ((moving ? 1 : 0) - fpWalkAmt) * Math.min(1, dt * 7);
+        fpWalkCycle += dt * (5.5 + fpWalkAmt * 7.5);
+        const swing = Math.sin(fpWalkCycle) * 0.32 * fpWalkAmt;
+        const bob = Math.sin(fpWalkCycle * 2.0) * 0.045 * fpWalkAmt;
+        const sway = Math.cos(fpWalkCycle) * 0.06 * fpWalkAmt;
+        if (fpPunch > 0) fpPunch = Math.max(0, fpPunch - dt * 5.2);
+        const punch = Math.sin(fpPunch * Math.PI) * 1.25;
+        const air = player.onGround ? 0 : -0.05;
+        fpArm.arm.rotation.x = swing - punch;
+        fpArm.arm.rotation.z = sway;
+        fpArm.arm.position.set(sway * 0.15, bob + air, punch * -0.12);
+        fpArm.forearm.rotation.x = -0.12 - punch * 0.4;
+        fpArm.hand.rotation.x = punch * 0.25;
+        fpArm.hand.rotation.z = sway * 0.4;
+    }
+
     function addEyes(head, x, y, z, w, h) {
         const eyeL = createVoxelBox(w, h, 0.03, 0xfffdf8);
         eyeL.position.set(x, y, z);
@@ -4115,6 +4196,10 @@
         spawnProtect: 0
     };
 
+    fpArm = buildFirstPersonArm();
+    camera.add(fpArm);
+    scene.add(camera);
+
     function getSurfaceY(wx, wz) {
         for (let y = CHUNK_HEIGHT - 2; y >= 1; y--) {
             const below = getBlock(wx, y, wz);
@@ -4602,6 +4687,7 @@
 
     document.getElementById('btn-break').addEventListener('touchstart', (e) => {
         e.preventDefault();
+        triggerHandPunch();
         const hit = raycastVoxel();
         if (hit.hit) {
             if (hit.isMob) {
@@ -4615,6 +4701,7 @@
 
     document.getElementById('btn-place').addEventListener('touchstart', (e) => {
         e.preventDefault();
+        triggerHandPunch();
         const currentSlot = inventory[selectedSlotIndex];
         if (!currentSlot || currentSlot.type === BLOCK_EMPTY || currentSlot.count <= 0) return;
 
@@ -5023,6 +5110,7 @@
         player.vel.z = (forwardZ * moveInput.y + rightZ * moveInput.x) * currentSpeed;
 
         updatePhysics(dt);
+        updateFirstPersonArm(dt);
         updateInfiniteChunks(player.pos.x, player.pos.z);
 
         const hit = raycastVoxel();
