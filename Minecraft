@@ -3268,274 +3268,226 @@
         return mesh;
     }
 
+    function addEyes(head, x, y, z, w, h) {
+        const eyeL = createVoxelBox(w, h, 0.03, 0xfffdf8);
+        eyeL.position.set(x, y, z);
+        const pupilL = createVoxelBox(w * 0.48, h * 0.62, 0.03, 0x1a140c);
+        pupilL.position.set(x + 0.01, y - 0.01, z + 0.012);
+        const eyeR = createVoxelBox(w, h, 0.03, 0xfffdf8);
+        eyeR.position.set(-x, y, z);
+        const pupilR = createVoxelBox(w * 0.48, h * 0.62, 0.03, 0x1a140c);
+        pupilR.position.set(-x - 0.01, y - 0.01, z + 0.012);
+        head.add(eyeL); head.add(pupilL); head.add(eyeR); head.add(pupilR);
+    }
+
     function buildChickenMesh() {
         const group = new THREE.Group();
+        const down = 0xfff6e4, cream = 0xf0e2c4, wingCol = 0xe8d7b5, wingTip = 0xcbb892;
+        const tailCol = 0xefe0c2, tailDark = 0xd2c09a;
+        const comb = 0xe53935, combDeep = 0xb71c1c, wattle = 0xc62828;
+        const beak = 0xffa000, beakTip = 0xef6c00, shank = 0xf6c445, claw = 0xe0a020;
 
-        const down = 0xfff6e4;
-        const cream = 0xf0e2c4;
-        const wingCol = 0xe8d7b5;
-        const wingTip = 0xcbb892;
-        const tailCol = 0xefe0c2;
-        const tailDark = 0xd2c09a;
-        const comb = 0xe53935;
-        const combDeep = 0xb71c1c;
-        const wattle = 0xc62828;
-        const beak = 0xffa000;
-        const beakTip = 0xef6c00;
-        const shank = 0xf6c445;
-        const claw = 0xe0a020;
-
-        const body = createVoxelBox(0.42, 0.34, 0.48, down);
-        body.position.set(0, 0.42, 0.02);
+        const body = createVoxelBox(0.44, 0.36, 0.52, down);
+        body.position.set(0, 0.44, 0.02);
         group.add(body);
-
-        const belly = createVoxelBox(0.34, 0.16, 0.28, cream);
+        const belly = createVoxelBox(0.34, 0.16, 0.30, cream);
         belly.position.set(0, 0.30, 0.06);
         group.add(belly);
+        const chest = createVoxelBox(0.30, 0.14, 0.18, 0xffe9c8);
+        chest.position.set(0, 0.48, 0.22);
+        group.add(chest);
 
-        const head = createVoxelBox(0.28, 0.28, 0.28, down);
-        head.position.set(0, 0.66, 0.30);
-
-        const combC = createVoxelBox(0.055, 0.13, 0.09, comb);
-        combC.position.set(0, 0.195, 0.00);
-        const combF = createVoxelBox(0.05, 0.10, 0.07, comb);
-        combF.position.set(0, 0.165, 0.09);
-        const combB = createVoxelBox(0.05, 0.09, 0.06, combDeep);
-        combB.position.set(0, 0.155, -0.085);
-        head.add(combC);
-        head.add(combF);
-        head.add(combB);
-
-        const eyeL = createVoxelBox(0.06, 0.07, 0.06, 0xfffdf6);
-        eyeL.position.set(0.145, 0.04, 0.05);
-        const pupilL = createVoxelBox(0.03, 0.04, 0.035, 0x1b140c);
-        pupilL.position.set(0.162, 0.035, 0.055);
-        const eyeR = createVoxelBox(0.06, 0.07, 0.06, 0xfffdf6);
-        eyeR.position.set(-0.145, 0.04, 0.05);
-        const pupilR = createVoxelBox(0.03, 0.04, 0.035, 0x1b140c);
-        pupilR.position.set(-0.162, 0.035, 0.055);
-        head.add(eyeL);
-        head.add(pupilL);
-        head.add(eyeR);
-        head.add(pupilR);
-
-        const blushL = createVoxelBox(0.03, 0.03, 0.04, 0xf5b7b1);
-        blushL.position.set(0.145, -0.04, 0.06);
-        const blushR = createVoxelBox(0.03, 0.03, 0.04, 0xf5b7b1);
-        blushR.position.set(-0.145, -0.04, 0.06);
-        head.add(blushL);
-        head.add(blushR);
-
-        const beakU = createVoxelBox(0.10, 0.055, 0.13, beak);
-        beakU.position.set(0, -0.01, 0.195);
-        const beakLow = createVoxelBox(0.08, 0.035, 0.09, beakTip);
-        beakLow.position.set(0, -0.055, 0.175);
-        head.add(beakU);
-        head.add(beakLow);
-
-        const watt = createVoxelBox(0.055, 0.10, 0.05, wattle);
-        watt.position.set(0, -0.12, 0.13);
+        const head = createVoxelBox(0.30, 0.30, 0.30, down);
+        head.position.set(0, 0.70, 0.32);
+        const combC = createVoxelBox(0.055, 0.14, 0.09, comb); combC.position.set(0, 0.21, 0.00);
+        const combF = createVoxelBox(0.05, 0.11, 0.07, comb); combF.position.set(0, 0.175, 0.10);
+        const combB = createVoxelBox(0.05, 0.10, 0.06, combDeep); combB.position.set(0, 0.16, -0.09);
+        head.add(combC); head.add(combF); head.add(combB);
+        addEyes(head, 0.155, 0.04, 0.155, 0.06, 0.07);
+        const blushL = createVoxelBox(0.03, 0.03, 0.04, 0xf5b7b1); blushL.position.set(0.155, -0.05, 0.07);
+        const blushR = createVoxelBox(0.03, 0.03, 0.04, 0xf5b7b1); blushR.position.set(-0.155, -0.05, 0.07);
+        head.add(blushL); head.add(blushR);
+        const beakU = createVoxelBox(0.10, 0.055, 0.14, beak); beakU.position.set(0, -0.01, 0.21);
+        const beakLow = createVoxelBox(0.08, 0.035, 0.10, beakTip); beakLow.position.set(0, -0.055, 0.185);
+        head.add(beakU); head.add(beakLow);
+        const watt = createVoxelBox(0.055, 0.11, 0.05, wattle); watt.position.set(0, -0.13, 0.14);
         head.add(watt);
         group.add(head);
 
-        const wingL = createVoxelBox(0.08, 0.22, 0.32, wingCol, -0.08);
-        wingL.position.set(-0.24, 0.48, 0.02);
-        const wingLtip = createVoxelBox(0.05, 0.10, 0.20, wingTip);
-        wingLtip.position.set(-0.02, -0.14, -0.02);
+        const wingL = createVoxelBox(0.08, 0.22, 0.34, wingCol, -0.08); wingL.position.set(-0.25, 0.50, 0.02);
+        const wingLtip = createVoxelBox(0.05, 0.10, 0.20, wingTip); wingLtip.position.set(-0.02, -0.14, -0.02);
         wingL.add(wingLtip);
-
-        const wingR = createVoxelBox(0.08, 0.22, 0.32, wingCol, -0.08);
-        wingR.position.set(0.24, 0.48, 0.02);
-        const wingRtip = createVoxelBox(0.05, 0.10, 0.20, wingTip);
-        wingRtip.position.set(0.02, -0.14, -0.02);
+        const wingR = createVoxelBox(0.08, 0.22, 0.34, wingCol, -0.08); wingR.position.set(0.25, 0.50, 0.02);
+        const wingRtip = createVoxelBox(0.05, 0.10, 0.20, wingTip); wingRtip.position.set(0.02, -0.14, -0.02);
         wingR.add(wingRtip);
-        group.add(wingL);
-        group.add(wingR);
+        group.add(wingL); group.add(wingR);
 
-        const tailC = createVoxelBox(0.10, 0.20, 0.07, tailCol);
-        tailC.position.set(0, 0.54, -0.26);
-        tailC.rotation.x = 0.45;
-        const tailLf = createVoxelBox(0.08, 0.17, 0.06, tailDark);
-        tailLf.position.set(0.08, 0.52, -0.24);
-        tailLf.rotation.x = 0.4;
-        tailLf.rotation.y = 0.35;
-        const tailRf = createVoxelBox(0.08, 0.17, 0.06, tailDark);
-        tailRf.position.set(-0.08, 0.52, -0.24);
-        tailRf.rotation.x = 0.4;
-        tailRf.rotation.y = -0.35;
-        group.add(tailC);
-        group.add(tailLf);
-        group.add(tailRf);
+        const tailC = createVoxelBox(0.10, 0.22, 0.07, tailCol); tailC.position.set(0, 0.56, -0.28); tailC.rotation.x = 0.5;
+        const tailLf = createVoxelBox(0.08, 0.18, 0.06, tailDark); tailLf.position.set(0.09, 0.54, -0.26); tailLf.rotation.x = 0.42; tailLf.rotation.y = 0.38;
+        const tailRf = createVoxelBox(0.08, 0.18, 0.06, tailDark); tailRf.position.set(-0.09, 0.54, -0.26); tailRf.rotation.x = 0.42; tailRf.rotation.y = -0.38;
+        group.add(tailC); group.add(tailLf); group.add(tailRf);
 
-        const legL = createVoxelBox(0.055, 0.26, 0.055, shank, -0.13);
-        legL.position.set(0.09, 0.28, 0.04);
-        const footL = createVoxelBox(0.12, 0.035, 0.16, claw);
-        footL.position.set(0, -0.26, 0.04);
-        const toeLL = createVoxelBox(0.035, 0.03, 0.08, claw);
-        toeLL.position.set(0.055, -0.26, 0.02);
-        const toeLR = createVoxelBox(0.035, 0.03, 0.08, claw);
-        toeLR.position.set(-0.055, -0.26, 0.02);
-        legL.add(footL);
-        legL.add(toeLL);
-        legL.add(toeLR);
-
-        const legR = createVoxelBox(0.055, 0.26, 0.055, shank, -0.13);
-        legR.position.set(-0.09, 0.28, 0.04);
-        const footR = createVoxelBox(0.12, 0.035, 0.16, claw);
-        footR.position.set(0, -0.26, 0.04);
-        const toeRL = createVoxelBox(0.035, 0.03, 0.08, claw);
-        toeRL.position.set(0.055, -0.26, 0.02);
-        const toeRR = createVoxelBox(0.035, 0.03, 0.08, claw);
-        toeRR.position.set(-0.055, -0.26, 0.02);
-        legR.add(footR);
-        legR.add(toeRL);
-        legR.add(toeRR);
-        group.add(legL);
-        group.add(legR);
-
+        function chickenLeg(side) {
+            const leg = createVoxelBox(0.055, 0.28, 0.055, shank, -0.14);
+            leg.position.set(side * 0.10, 0.28, 0.04);
+            const foot = createVoxelBox(0.13, 0.035, 0.17, claw); foot.position.set(0, -0.28, 0.05);
+            const toeL = createVoxelBox(0.035, 0.03, 0.09, claw); toeL.position.set(0.055, -0.28, 0.03);
+            const toeR = createVoxelBox(0.035, 0.03, 0.09, claw); toeR.position.set(-0.055, -0.28, 0.03);
+            const back = createVoxelBox(0.03, 0.025, 0.07, claw); back.position.set(0, -0.28, -0.06);
+            leg.add(foot); leg.add(toeL); leg.add(toeR); leg.add(back);
+            group.add(leg);
+            return leg;
+        }
+        const legL = chickenLeg(1), legR = chickenLeg(-1);
         group.legs = [legL, legR];
         group.wings = [wingL, wingR];
         group.head = head;
-        group.scale.set(1.35, 1.35, 1.35);
+        group.scale.set(1.38, 1.38, 1.38);
+        return group;
+    }
+
+    function buildPigMesh() {
+        const group = new THREE.Group();
+        const pink = 0xf3a8b6, darkPink = 0xe07a90, snoutPink = 0xffc4d0, hoof = 0x5a3a32, belly = 0xffc0cb;
+        const body = createVoxelBox(0.86, 0.60, 1.16, pink); body.position.set(0, 0.58, 0);
+        const under = createVoxelBox(0.70, 0.18, 0.90, belly); under.position.set(0, 0.34, 0.04);
+        group.add(body); group.add(under);
+        const head = createVoxelBox(0.56, 0.50, 0.50, pink); head.position.set(0, 0.86, 0.66);
+        const earL = createVoxelBox(0.16, 0.18, 0.07, darkPink); earL.position.set(0.24, 0.30, 0.00); earL.rotation.z = -0.35;
+        const earR = createVoxelBox(0.16, 0.18, 0.07, darkPink); earR.position.set(-0.24, 0.30, 0.00); earR.rotation.z = 0.35;
+        const innerL = createVoxelBox(0.08, 0.08, 0.03, 0xffd0da); innerL.position.set(0.24, 0.28, 0.04);
+        const innerR = createVoxelBox(0.08, 0.08, 0.03, 0xffd0da); innerR.position.set(-0.24, 0.28, 0.04);
+        head.add(earL); head.add(earR); head.add(innerL); head.add(innerR);
+        addEyes(head, 0.16, 0.08, 0.26, 0.13, 0.12);
+        const snout = createVoxelBox(0.32, 0.22, 0.18, snoutPink); snout.position.set(0, -0.08, 0.34);
+        const nostrilL = createVoxelBox(0.055, 0.055, 0.03, 0xc46b7a); nostrilL.position.set(0.08, 0.02, 0.10);
+        const nostrilR = createVoxelBox(0.055, 0.055, 0.03, 0xc46b7a); nostrilR.position.set(-0.08, 0.02, 0.10);
+        const mouth = createVoxelBox(0.16, 0.03, 0.03, 0xc46b7a); mouth.position.set(0, -0.09, 0.10);
+        snout.add(nostrilL); snout.add(nostrilR); snout.add(mouth);
+        head.add(snout);
+        group.add(head);
+        function pigLeg(x, z) {
+            const leg = createVoxelBox(0.22, 0.42, 0.22, pink, -0.21); leg.position.set(x, 0.42, z);
+            const hv = createVoxelBox(0.24, 0.10, 0.24, hoof); hv.position.set(0, -0.42, 0);
+            leg.add(hv); group.add(leg); return leg;
+        }
+        const legs = [pigLeg(0.28, 0.38), pigLeg(-0.28, 0.38), pigLeg(0.28, -0.38), pigLeg(-0.28, -0.38)];
+        const tail = createVoxelBox(0.07, 0.07, 0.22, darkPink); tail.position.set(0, 0.62, -0.62); tail.rotation.x = 0.4;
+        const curl = createVoxelBox(0.10, 0.10, 0.10, pink); curl.position.set(0, 0.08, -0.12);
+        tail.add(curl); group.add(tail);
+        group.legs = legs; group.head = head; group.ears = [earL, earR]; group.tail = tail;
+        return group;
+    }
+
+    function buildSheepMesh() {
+        const group = new THREE.Group();
+        const wool = 0xf4f4f4, wool2 = 0xe6e6e6, face = 0xe8d4b0, darkFace = 0xc4a882;
+        const body = createVoxelBox(0.96, 0.78, 1.28, wool); body.position.set(0, 0.72, 0);
+        const fluffT = createVoxelBox(0.84, 0.22, 1.10, wool2); fluffT.position.set(0, 1.10, 0);
+        const fluffR = createVoxelBox(0.22, 0.50, 1.00, wool2); fluffR.position.set(0.50, 0.72, 0);
+        const fluffL = createVoxelBox(0.22, 0.50, 1.00, wool2); fluffL.position.set(-0.50, 0.72, 0);
+        group.add(body); group.add(fluffT); group.add(fluffR); group.add(fluffL);
+        const head = createVoxelBox(0.46, 0.46, 0.50, face); head.position.set(0, 0.98, 0.74);
+        const woolCap = createVoxelBox(0.58, 0.24, 0.58, wool); woolCap.position.set(0, 0.30, -0.04);
+        const cheekL = createVoxelBox(0.10, 0.16, 0.16, wool); cheekL.position.set(0.26, -0.02, 0.04);
+        const cheekR = createVoxelBox(0.10, 0.16, 0.16, wool); cheekR.position.set(-0.26, -0.02, 0.04);
+        head.add(woolCap); head.add(cheekL); head.add(cheekR);
+        const earL = createVoxelBox(0.10, 0.16, 0.08, darkFace); earL.position.set(0.26, 0.06, 0.02); earL.rotation.z = -0.22;
+        const earR = createVoxelBox(0.10, 0.16, 0.08, darkFace); earR.position.set(-0.26, 0.06, 0.02); earR.rotation.z = 0.22;
+        head.add(earL); head.add(earR);
+        addEyes(head, 0.13, 0.06, 0.26, 0.12, 0.12);
+        const nose = createVoxelBox(0.12, 0.09, 0.08, darkFace); nose.position.set(0, -0.04, 0.28);
+        const mouth = createVoxelBox(0.14, 0.03, 0.03, 0x8a7355); mouth.position.set(0, -0.16, 0.255);
+        head.add(nose); head.add(mouth);
+        group.add(head);
+        function sheepLeg(x, z) {
+            const leg = createVoxelBox(0.20, 0.52, 0.20, face, -0.26); leg.position.set(x, 0.52, z);
+            const tuft = createVoxelBox(0.24, 0.12, 0.24, wool); tuft.position.set(0, 0.08, 0);
+            leg.add(tuft); group.add(leg); return leg;
+        }
+        const legs = [sheepLeg(0.30, 0.42), sheepLeg(-0.30, 0.42), sheepLeg(0.30, -0.42), sheepLeg(-0.30, -0.42)];
+        const tail = createVoxelBox(0.16, 0.18, 0.12, wool); tail.position.set(0, 0.78, -0.70);
+        group.add(tail);
+        group.legs = legs; group.head = head; group.ears = [earL, earR]; group.tail = tail;
+        return group;
+    }
+
+    function buildCowMesh() {
+        const group = new THREE.Group();
+        const hide = 0x8b5a2b, hideD = 0x6b3f1a, cream = 0xf0e6d0, hoof = 0x2a1a10, pink = 0xf5a9b8, horn = 0xf5f0dc;
+        const body = createVoxelBox(1.05, 0.78, 1.55, hide); body.position.set(0, 0.82, 0);
+        const belly = createVoxelBox(0.82, 0.22, 1.20, 0xa56b3c); belly.position.set(0, 0.48, 0.04);
+        const spotA = createVoxelBox(0.34, 0.28, 0.40, cream); spotA.position.set(0.38, 0.92, 0.20);
+        const spotB = createVoxelBox(0.30, 0.22, 0.36, cream); spotB.position.set(-0.36, 0.78, -0.35);
+        const spotC = createVoxelBox(0.26, 0.20, 0.28, cream); spotC.position.set(0.20, 1.08, -0.40);
+        group.add(body); group.add(belly); group.add(spotA); group.add(spotB); group.add(spotC);
+
+        const head = createVoxelBox(0.52, 0.50, 0.48, cream); head.position.set(0, 1.12, 0.88);
+        const poll = createVoxelBox(0.56, 0.16, 0.36, hide); poll.position.set(0, 0.28, -0.04);
+        head.add(poll);
+        const earL = createVoxelBox(0.14, 0.12, 0.08, hideD); earL.position.set(0.32, 0.10, 0.00); earL.rotation.z = -0.4;
+        const earR = createVoxelBox(0.14, 0.12, 0.08, hideD); earR.position.set(-0.32, 0.10, 0.00); earR.rotation.z = 0.4;
+        head.add(earL); head.add(earR);
+        const hornL = createVoxelBox(0.07, 0.16, 0.07, horn); hornL.position.set(0.22, 0.32, -0.02); hornL.rotation.z = -0.35;
+        const hornR = createVoxelBox(0.07, 0.16, 0.07, horn); hornR.position.set(-0.22, 0.32, -0.02); hornR.rotation.z = 0.35;
+        head.add(hornL); head.add(hornR);
+        addEyes(head, 0.16, 0.06, 0.25, 0.12, 0.11);
+        const snout = createVoxelBox(0.36, 0.22, 0.20, pink); snout.position.set(0, -0.12, 0.30);
+        const nL = createVoxelBox(0.06, 0.05, 0.03, 0xc46b7a); nL.position.set(0.09, 0.03, 0.11);
+        const nR = createVoxelBox(0.06, 0.05, 0.03, 0xc46b7a); nR.position.set(-0.09, 0.03, 0.11);
+        snout.add(nL); snout.add(nR);
+        head.add(snout);
+        group.add(head);
+
+        function cowLeg(x, z) {
+            const leg = createVoxelBox(0.22, 0.58, 0.22, hideD, -0.29); leg.position.set(x, 0.58, z);
+            const hv = createVoxelBox(0.24, 0.10, 0.24, hoof); hv.position.set(0, -0.58, 0);
+            leg.add(hv); group.add(leg); return leg;
+        }
+        const legs = [cowLeg(0.32, 0.48), cowLeg(-0.32, 0.48), cowLeg(0.32, -0.50), cowLeg(-0.32, -0.50)];
+        const udder = createVoxelBox(0.28, 0.16, 0.28, pink); udder.position.set(0, 0.38, -0.28);
+        group.add(udder);
+        const tail = createVoxelBox(0.07, 0.07, 0.55, hideD); tail.position.set(0, 0.95, -0.90); tail.rotation.x = 0.55;
+        const tuft = createVoxelBox(0.12, 0.14, 0.12, 0x3a2410); tuft.position.set(0, 0, -0.30);
+        tail.add(tuft); group.add(tail);
+        group.legs = legs; group.head = head; group.ears = [earL, earR]; group.tail = tail;
         return group;
     }
 
     function buildMobMesh(type) {
-        const group = new THREE.Group();
-
-        if (type === 'pig') {
-            const pink = 0xf5a9b8;
-            const darkPink = 0xe07a90;
-            const snoutPink = 0xffc0cb;
-
-            const body = createVoxelBox(0.82, 0.58, 1.12, pink);
-            body.position.y = 0.56;
-            group.add(body);
-
-            const head = createVoxelBox(0.54, 0.52, 0.50, pink);
-            head.position.set(0, 0.88, 0.64);
-
-            const earL = createVoxelBox(0.14, 0.16, 0.08, darkPink);
-            earL.position.set(0.22, 0.30, 0.02);
-            earL.rotation.z = -0.25;
-            const earR = createVoxelBox(0.14, 0.16, 0.08, darkPink);
-            earR.position.set(-0.22, 0.30, 0.02);
-            earR.rotation.z = 0.25;
-            head.add(earL);
-            head.add(earR);
-
-            const eyeWhiteL = createVoxelBox(0.13, 0.12, 0.03, 0xffffff);
-            eyeWhiteL.position.set(0.14, 0.08, 0.255);
-            const pupilL = createVoxelBox(0.06, 0.07, 0.03, 0x1a1a1a);
-            pupilL.position.set(0.145, 0.07, 0.268);
-            const eyeWhiteR = createVoxelBox(0.13, 0.12, 0.03, 0xffffff);
-            eyeWhiteR.position.set(-0.14, 0.08, 0.255);
-            const pupilR = createVoxelBox(0.06, 0.07, 0.03, 0x1a1a1a);
-            pupilR.position.set(-0.145, 0.07, 0.268);
-            head.add(eyeWhiteL);
-            head.add(pupilL);
-            head.add(eyeWhiteR);
-            head.add(pupilR);
-
-            const snout = createVoxelBox(0.30, 0.20, 0.16, snoutPink);
-            snout.position.set(0, -0.08, 0.32);
-            const nostrilL = createVoxelBox(0.05, 0.05, 0.03, 0xc46b7a);
-            nostrilL.position.set(0.07, 0.02, 0.085);
-            const nostrilR = createVoxelBox(0.05, 0.05, 0.03, 0xc46b7a);
-            nostrilR.position.set(-0.07, 0.02, 0.085);
-            const mouth = createVoxelBox(0.16, 0.03, 0.03, 0xc46b7a);
-            mouth.position.set(0, -0.08, 0.085);
-            snout.add(nostrilL);
-            snout.add(nostrilR);
-            snout.add(mouth);
-            head.add(snout);
-            group.add(head);
-
-            const legFL = createVoxelBox(0.22, 0.45, 0.22, pink, -0.225); legFL.position.set(0.26, 0.45, 0.35);
-            const legFR = createVoxelBox(0.22, 0.45, 0.22, pink, -0.225); legFR.position.set(-0.26, 0.45, 0.35);
-            const legBL = createVoxelBox(0.22, 0.45, 0.22, pink, -0.225); legBL.position.set(0.26, 0.45, -0.35);
-            const legBR = createVoxelBox(0.22, 0.45, 0.22, pink, -0.225); legBR.position.set(-0.26, 0.45, -0.35);
-
-            group.add(legFL); group.add(legFR); group.add(legBL); group.add(legBR);
-            group.legs = [legFL, legFR, legBL, legBR];
-            group.head = head;
-        } else if (type === 'chicken') {
-            return buildChickenMesh();
-        } else {
-            const wool = 0xf4f4f4;
-            const face = 0xe8d4b0;
-            const darkFace = 0xc4a882;
-
-            const body = createVoxelBox(0.92, 0.74, 1.24, wool);
-            body.position.y = 0.68;
-            group.add(body);
-
-            const head = createVoxelBox(0.46, 0.46, 0.48, face);
-            head.position.set(0, 0.98, 0.70);
-
-            const woolCap = createVoxelBox(0.56, 0.22, 0.56, wool);
-            woolCap.position.set(0, 0.28, -0.04);
-            head.add(woolCap);
-
-            const earL = createVoxelBox(0.10, 0.16, 0.08, darkFace);
-            earL.position.set(0.24, 0.06, 0.04);
-            earL.rotation.z = -0.2;
-            const earR = createVoxelBox(0.10, 0.16, 0.08, darkFace);
-            earR.position.set(-0.24, 0.06, 0.04);
-            earR.rotation.z = 0.2;
-            head.add(earL);
-            head.add(earR);
-
-            const eyeWhiteL = createVoxelBox(0.12, 0.12, 0.03, 0xffffff);
-            eyeWhiteL.position.set(0.12, 0.06, 0.245);
-            const pupilL = createVoxelBox(0.055, 0.07, 0.03, 0x1a1a1a);
-            pupilL.position.set(0.125, 0.05, 0.258);
-            const eyeWhiteR = createVoxelBox(0.12, 0.12, 0.03, 0xffffff);
-            eyeWhiteR.position.set(-0.12, 0.06, 0.245);
-            const pupilR = createVoxelBox(0.055, 0.07, 0.03, 0x1a1a1a);
-            pupilR.position.set(-0.125, 0.05, 0.258);
-            head.add(eyeWhiteL);
-            head.add(pupilL);
-            head.add(eyeWhiteR);
-            head.add(pupilR);
-
-            const nose = createVoxelBox(0.10, 0.08, 0.07, darkFace);
-            nose.position.set(0, -0.04, 0.26);
-            const mouth = createVoxelBox(0.14, 0.03, 0.03, 0x8a7355);
-            mouth.position.set(0, -0.15, 0.245);
-            head.add(nose);
-            head.add(mouth);
-            group.add(head);
-
-            const legFL = createVoxelBox(0.20, 0.50, 0.20, face, -0.25); legFL.position.set(0.28, 0.50, 0.40);
-            const legFR = createVoxelBox(0.20, 0.50, 0.20, face, -0.25); legFR.position.set(-0.28, 0.50, 0.40);
-            const legBL = createVoxelBox(0.20, 0.50, 0.20, face, -0.25); legBL.position.set(0.28, 0.50, -0.40);
-            const legBR = createVoxelBox(0.20, 0.50, 0.20, face, -0.25); legBR.position.set(-0.28, 0.50, -0.40);
-
-            group.add(legFL); group.add(legFR); group.add(legBL); group.add(legBR);
-            group.legs = [legFL, legFR, legBL, legBR];
-            group.head = head;
-        }
-
-        return group;
+        if (type === 'chicken') return buildChickenMesh();
+        if (type === 'pig') return buildPigMesh();
+        if (type === 'cow') return buildCowMesh();
+        return buildSheepMesh();
     }
+
+    const MOB_STATS = {
+        chicken: { health: 4, radius: 0.22, height: 0.58, walk: 1.35, panic: 4.4, jump: 4.2 },
+        pig: { health: 6, radius: 0.40, height: 0.88, walk: 1.55, panic: 3.8, jump: 7.2 },
+        sheep: { health: 8, radius: 0.44, height: 0.98, walk: 1.40, panic: 3.4, jump: 6.8 },
+        cow: { health: 10, radius: 0.50, height: 1.18, walk: 1.20, panic: 3.1, jump: 6.4 }
+    };
 
     class Mob {
         constructor(type, x, y, z) {
             this.type = type;
+            const st = MOB_STATS[type] || MOB_STATS.sheep;
             this.pos = new THREE.Vector3(x, y, z);
             this.vel = new THREE.Vector3();
             this.yaw = Math.random() * Math.PI * 2;
-            this.health = (type === 'pig' ? 6 : type === 'chicken' ? 4 : 8);
-            this.maxHealth = this.health;
+            this.health = st.health;
+            this.maxHealth = st.health;
             this.onGround = false;
             this.state = 'idle';
             this.stateTimer = Math.random() * 3 + 2;
             this.walkTimer = 0;
             this.idleAnim = Math.random() * 10;
             this.damageFlashTimer = 0;
-            this.radius = (type === 'chicken' ? 0.22 : 0.4);
-            this.height = (type === 'chicken' ? 0.55 : 0.9);
+            this.radius = st.radius;
+            this.height = st.height;
+            this.walkSpeed = st.walk;
+            this.panicSpeed = st.panic;
+            this.jumpVel = st.jump;
             this.mesh = buildMobMesh(type);
             this.mesh.position.copy(this.pos);
             scene.add(this.mesh);
@@ -3575,8 +3527,8 @@
             }
 
             let speed = 0;
-            if (this.state === 'walk') speed = (this.type === 'chicken' ? 1.35 : 1.6);
-            else if (this.state === 'panic') speed = (this.type === 'chicken' ? 4.4 : 3.8);
+            if (this.state === 'walk') speed = this.walkSpeed;
+            else if (this.state === 'panic') speed = this.panicSpeed;
 
             this.idleAnim += dt;
             if (speed > 0) {
@@ -3593,10 +3545,13 @@
                     if (this.state === 'idle') {
                         const peck = Math.max(0, Math.sin(this.idleAnim * 2.1) - 0.72) * 2.4;
                         this.mesh.head.rotation.x = peck * 0.85;
+                        this.mesh.head.rotation.y = Math.sin(this.idleAnim * 0.6) * 0.35;
                     } else if (this.state === 'walk') {
                         this.mesh.head.rotation.x = Math.sin(this.walkTimer * 2.0) * 0.18;
+                        this.mesh.head.rotation.y = 0;
                     } else {
                         this.mesh.head.rotation.x = -0.18;
+                        this.mesh.head.rotation.y = 0;
                     }
                 }
                 if (this.mesh.wings) {
@@ -3617,20 +3572,41 @@
                         this.mesh.legs[1].rotation.x = -a;
                     }
                 }
-            } else if (this.mesh.legs && this.mesh.legs.length >= 4) {
-                const legAngle = Math.sin(this.walkTimer) * 0.6;
-                this.mesh.legs[0].rotation.x = legAngle;
-                this.mesh.legs[1].rotation.x = -legAngle;
-                this.mesh.legs[2].rotation.x = -legAngle;
-                this.mesh.legs[3].rotation.x = legAngle;
+            } else {
+                if (this.mesh.head) {
+                    if (this.state === 'idle') {
+                        this.mesh.head.rotation.y = Math.sin(this.idleAnim * 0.65) * 0.28;
+                        this.mesh.head.rotation.x = Math.sin(this.idleAnim * 0.4) * 0.08;
+                    } else if (this.state === 'walk') {
+                        this.mesh.head.rotation.y = 0;
+                        this.mesh.head.rotation.x = Math.sin(this.walkTimer * 2.0) * 0.10;
+                    } else {
+                        this.mesh.head.rotation.y = 0;
+                        this.mesh.head.rotation.x = 0.12;
+                    }
+                }
+                if (this.mesh.legs && this.mesh.legs.length >= 4) {
+                    const amp = this.state === 'panic' ? 0.75 : (speed > 0 ? 0.55 : 0);
+                    const legAngle = Math.sin(this.walkTimer) * amp;
+                    this.mesh.legs[0].rotation.x = legAngle;
+                    this.mesh.legs[1].rotation.x = -legAngle;
+                    this.mesh.legs[2].rotation.x = -legAngle;
+                    this.mesh.legs[3].rotation.x = legAngle;
+                }
+                if (this.mesh.tail) {
+                    this.mesh.tail.rotation.y = Math.sin(this.idleAnim * (this.state === 'panic' ? 10 : 3.5)) * 0.45;
+                }
+                if (this.mesh.ears && this.mesh.ears.length >= 2) {
+                    const e = Math.sin(this.idleAnim * 2.8) * 0.10;
+                    this.mesh.ears[0].rotation.z = (this.mesh.ears[0].rotation.z * 0.8) + (-0.28 + e) * 0.2;
+                    this.mesh.ears[1].rotation.z = (this.mesh.ears[1].rotation.z * 0.8) + (0.28 - e) * 0.2;
+                }
             }
 
             const b = getBlock(Math.floor(this.pos.x), Math.floor(this.pos.y), Math.floor(this.pos.z));
-            if (b === BLOCK_WATER) {
-                this.vel.y = 2.5; // Плавание
-            } else {
-                this.vel.y -= 22.0 * dt;
-            }
+            if (b === BLOCK_WATER) this.vel.y = 2.5;
+            else this.vel.y -= 22.0 * dt;
+            this.vel.y = Math.max(this.vel.y, -28);
 
             let colX = false, colZ = false;
             this.pos.x += this.vel.x * dt;
@@ -3638,17 +3614,15 @@
                 this.pos.x -= this.vel.x * dt;
                 colX = true;
             }
-
             this.pos.z += this.vel.z * dt;
             if (checkSolidCollision(this.pos.x, this.pos.y, this.pos.z, this.radius, this.height)) {
                 this.pos.z -= this.vel.z * dt;
                 colZ = true;
             }
 
-            // Авто-прыжок моба
             if ((colX || colZ) && this.onGround) {
                 if (!checkSolidCollision(this.pos.x, this.pos.y + 1.15, this.pos.z, this.radius, this.height)) {
-                    this.vel.y = (this.type === 'chicken' ? 4.2 : 7.5);
+                    this.vel.y = this.jumpVel;
                     this.onGround = false;
                 } else {
                     this.yaw += Math.PI * 0.5;
@@ -3657,21 +3631,34 @@
 
             if (this.type === 'chicken' && this.onGround && b !== BLOCK_WATER) {
                 if (this.state === 'walk' && Math.sin(this.walkTimer) > 0.97) {
-                    this.vel.y = 1.8;
-                    this.onGround = false;
+                    this.vel.y = 1.8; this.onGround = false;
                 } else if (this.state === 'panic' && Math.sin(this.walkTimer * 0.7) > 0.85) {
-                    this.vel.y = 3.0;
-                    this.onGround = false;
+                    this.vel.y = 3.0; this.onGround = false;
                 }
             }
 
-            this.pos.y += this.vel.y * dt;
-            if (checkSolidCollision(this.pos.x, this.pos.y, this.pos.z, this.radius, this.height)) {
+            const yDelta = this.vel.y * dt;
+            const ySteps = Math.max(1, Math.ceil(Math.abs(yDelta) / 0.2));
+            const yStep = yDelta / ySteps;
+            let yHit = false;
+            for (let s = 0; s < ySteps; s++) {
+                this.pos.y += yStep;
+                if (checkSolidCollision(this.pos.x, this.pos.y, this.pos.z, this.radius, this.height) || this.pos.y < 0.02) {
+                    this.pos.y -= yStep;
+                    yHit = true;
+                    break;
+                }
+            }
+            if (yHit) {
                 if (this.vel.y < 0) this.onGround = true;
-                this.pos.y -= this.vel.y * dt;
                 this.vel.y = 0;
             } else {
                 this.onGround = false;
+            }
+            if (this.pos.y < 0.4) {
+                this.pos.y = getSurfaceY(Math.floor(this.pos.x), Math.floor(this.pos.z)) + 0.05;
+                this.vel.y = 0;
+                this.onGround = true;
             }
 
             this.mesh.position.copy(this.pos);
@@ -3690,11 +3677,22 @@
     }
 
     let mobSpawnTimer = 0;
+    function pickMobType() {
+        const counts = { chicken: 0, pig: 0, sheep: 0, cow: 0 };
+        for (let i = 0; i < mobs.length; i++) counts[mobs[i].type] = (counts[mobs[i].type] || 0) + 1;
+        if (counts.chicken < 2) return 'chicken';
+        if (counts.cow < 1) return 'cow';
+        const roll = Math.random();
+        if (roll < 0.28) return 'pig';
+        if (roll < 0.52) return 'sheep';
+        if (roll < 0.74) return 'cow';
+        return 'chicken';
+    }
+
     function updateMobsManager(dt) {
         mobSpawnTimer += dt;
-        if (mobSpawnTimer > 2.0 && mobs.length < 10) {
+        if (mobSpawnTimer > 2.0 && mobs.length < 12) {
             mobSpawnTimer = 0;
-            const chickenCount = mobs.filter(m => m.type === 'chicken').length;
             const spawnDist = 8 + Math.random() * 14;
             const spawnAngle = Math.random() * Math.PI * 2;
             const sx = Math.floor(player.pos.x + Math.sin(spawnAngle) * spawnDist);
@@ -3702,13 +3700,7 @@
             const sy = getSurfaceY(sx, sz);
             const ground = getBlock(sx, sy - 1, sz);
             if (ground === BLOCK_GRASS || ground === BLOCK_SAND || ground === BLOCK_DIRT) {
-                let mobType;
-                if (chickenCount < 3) mobType = 'chicken';
-                else {
-                    const roll = Math.random();
-                    mobType = roll < 0.33 ? 'pig' : (roll < 0.66 ? 'sheep' : 'chicken');
-                }
-                mobs.push(new Mob(mobType, sx + 0.5, sy, sz + 0.5));
+                mobs.push(new Mob(pickMobType(), sx + 0.5, sy, sz + 0.5));
             }
         }
 
@@ -3717,12 +3709,20 @@
             mob.update(dt);
 
             if (mob.health <= 0) {
+                const x = mob.pos.x - 0.5, y = mob.pos.y, z = mob.pos.z - 0.5;
                 if (mob.type === 'chicken') {
-                    spawnBlockDrop(mob.pos.x - 0.5, mob.pos.y, mob.pos.z - 0.5, ITEM_FEATHER);
-                    spawnBlockDrop(mob.pos.x - 0.5, mob.pos.y, mob.pos.z - 0.5, ITEM_MEAT);
+                    spawnBlockDrop(x, y, z, ITEM_FEATHER);
+                    spawnBlockDrop(x, y, z, ITEM_MEAT);
+                } else if (mob.type === 'pig') {
+                    spawnBlockDrop(x, y, z, ITEM_MEAT);
+                    spawnBlockDrop(x, y, z, ITEM_MEAT);
+                } else if (mob.type === 'cow') {
+                    spawnBlockDrop(x, y, z, ITEM_MEAT);
+                    spawnBlockDrop(x, y, z, ITEM_MEAT);
+                    spawnBlockDrop(x, y, z, ITEM_MEAT);
                 } else {
-                    const dropType = (mob.type === 'pig') ? ITEM_MEAT : ITEM_WOOL;
-                    spawnBlockDrop(mob.pos.x - 0.5, mob.pos.y, mob.pos.z - 0.5, dropType);
+                    spawnBlockDrop(x, y, z, ITEM_WOOL);
+                    spawnBlockDrop(x, y, z, ITEM_WOOL);
                 }
                 mob.dispose();
                 mobs.splice(i, 1);
@@ -4983,6 +4983,7 @@
     trySpawnMobNear('chicken', player.pos.x, player.pos.z, 4, 12);
     trySpawnMobNear('pig', player.pos.x, player.pos.z, 4, 12);
     trySpawnMobNear('sheep', player.pos.x, player.pos.z, 4, 12);
+    trySpawnMobNear('cow', player.pos.x, player.pos.z, 5, 14);
 
     function animate(currentTime) {
         requestAnimationFrame(animate);
