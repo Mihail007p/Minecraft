@@ -996,6 +996,12 @@
     const BLOCK_STONE_BUTTON = 64;
     const BLOCK_CUT_SANDSTONE = 65;
     const ITEM_GLASS_BOTTLE = 66;
+    const ITEM_LEATHER = 67;
+    const ITEM_EGG = 68;
+    const ITEM_SPAWN_CHICKEN = 69;
+    const ITEM_SPAWN_PIG = 70;
+    const ITEM_SPAWN_SHEEP = 71;
+    const ITEM_SPAWN_COW = 72;
 
     const BLOCK_NAMES = {
         [BLOCK_GRASS]: 'Трава',
@@ -1007,14 +1013,6 @@
         [BLOCK_SAND]: 'Песок',
         [BLOCK_WATER]: 'Вода',
         [ITEM_MEAT]: 'Мясо',
-        [ITEM_WOOL]: 'Шерсть',
-        [ITEM_FEATHER]: 'Перо',
-        [ITEM_STICK]: 'Палки',
-        [BLOCK_CRAFT]: 'Верстак',
-        [ITEM_WOOD_PICK]: 'Дер. кирка',
-        [ITEM_STONE_PICK]: 'Кам. кирка',
-        [ITEM_WOOD_AXE]: 'Дер. топор',
-        [ITEM_STONE_AXE]: 'Мясо',
         [ITEM_WOOL]: 'Шерсть',
         [ITEM_FEATHER]: 'Перо',
         [ITEM_STICK]: 'Палки',
@@ -1071,7 +1069,13 @@
         [BLOCK_STONE_PLATE]: 'Кам. плита',
         [BLOCK_STONE_BUTTON]: 'Кам. кнопка',
         [BLOCK_CUT_SANDSTONE]: 'Рез. песчаник',
-        [ITEM_GLASS_BOTTLE]: 'Бутылка'
+        [ITEM_GLASS_BOTTLE]: 'Бутылка',
+        [ITEM_LEATHER]: 'Кожа',
+        [ITEM_EGG]: 'Яйцо',
+        [ITEM_SPAWN_CHICKEN]: 'Курица',
+        [ITEM_SPAWN_PIG]: 'Свинья',
+        [ITEM_SPAWN_SHEEP]: 'Овца',
+        [ITEM_SPAWN_COW]: 'Корова'
     };
 
     function isToolItem(type) {
@@ -1088,11 +1092,22 @@
         if (type === ITEM_STEW) return 10;
         return 0;
     }
+    function isSpawnEgg(type) {
+        return type >= ITEM_SPAWN_CHICKEN && type <= ITEM_SPAWN_COW;
+    }
+    function spawnEggMobType(type) {
+        if (type === ITEM_SPAWN_CHICKEN) return 'chicken';
+        if (type === ITEM_SPAWN_PIG) return 'pig';
+        if (type === ITEM_SPAWN_SHEEP) return 'sheep';
+        if (type === ITEM_SPAWN_COW) return 'cow';
+        return null;
+    }
     function isNonBlockItem(type) {
         return type === ITEM_MEAT || type === ITEM_FEATHER || type === ITEM_STICK ||
             type === ITEM_STRING || type === ITEM_ARROW || type === ITEM_CHARCOAL ||
             type === ITEM_COOKED_MEAT || type === ITEM_BOWL || type === ITEM_STEW ||
             type === ITEM_BOAT || type === ITEM_GLASS_BOTTLE ||
+            type === ITEM_LEATHER || type === ITEM_EGG || isSpawnEgg(type) ||
             isToolItem(type) || isArmorItem(type);
     }
     function canPlaceType(type) {
@@ -1818,6 +1833,39 @@
             }
             s(6, 13, '#7eb8c8'); s(9, 13, '#7eb8c8');
         }); save(66);
+
+        sprite(function (s) {
+            for (let y = 3; y < 14; y++) for (let x = 2; x < 14; x++) {
+                const dx = x - 8, dy = y - 8;
+                if (dx * dx + dy * dy * 0.7 < 28) s(x, y, (y < 6) ? '#c4a06a' : (y > 11) ? '#5a3c18' : '#8a5a30');
+            }
+            s(4, 7, '#d4b888'); s(5, 8, '#6b4423'); s(10, 10, '#4a3018');
+        }); save(67);
+
+        sprite(function (s) {
+            for (let y = 2; y < 14; y++) for (let x = 4; x < 12; x++) {
+                const dx = (x - 7.5) / 3.4, dy = (y - 8) / 5.4;
+                if (dx * dx + dy * dy < 1) s(x, y, (y < 5) ? '#fff8ee' : (y > 11) ? '#e0d0b0' : '#f5ead4');
+            }
+            s(7, 4, '#ffffff'); s(8, 5, '#fff8ee'); s(6, 9, '#efe0c4');
+        }); save(68);
+
+        function drawSpawnEgg(shell, speckle, yolk) {
+            sprite(function (s) {
+                for (let y = 1; y < 15; y++) for (let x = 3; x < 13; x++) {
+                    const dx = (x - 7.5) / 4.2, dy = (y - 8) / 6.2;
+                    if (dx * dx + dy * dy < 1) {
+                        s(x, y, (y < 4) ? yolk : shell);
+                    }
+                }
+                s(5, 6, speckle); s(9, 8, speckle); s(6, 11, speckle); s(10, 5, speckle);
+                s(7, 3, '#ffffff');
+            });
+        }
+        drawSpawnEgg('#fff6e4', '#e8d7b5', '#ffe680'); save(69);
+        drawSpawnEgg('#f3a8b6', '#e07a90', '#ffc4d0'); save(70);
+        drawSpawnEgg('#f4f4f4', '#c4a882', '#ffffff'); save(71);
+        drawSpawnEgg('#8b5a2b', '#f0e6d0', '#c4a06a'); save(72);
     })();
 
     // --- 2. ИНВЕНТАРЬ И СОХРАНЕНИЕ ---
@@ -2227,7 +2275,8 @@
         48:'#6b4a28',49:'#c4a06a',50:'#8a8a8a',51:'#8a8a8a',52:'#f4f4f4',53:'#7d7d7d',
         54:'#8a6230',55:'#c07840',56:'#c4a06a',57:'#8a6230',58:'#c4a06a',59:'#f4f4f4',
         60:'#f4f4f4',61:'#f4f4f4',62:'#f4f4f4',63:'#8a8a8a',64:'#8a8a8a',65:'#d8cb8c',
-        66:'#8ec8d8'
+        66:'#8ec8d8',67:'#8a5a30',68:'#f5ead4',69:'#fff6e4',70:'#f3a8b6',71:'#f4f4f4',
+        72:'#8b5a2b'
     };
     const CRAFT_RECIPES = [
         { id: 'planks', name: 'Доски', cat: 'building', shapeless: [[4, 1]], result: { type: 5, count: 4 }, size: 2 },
@@ -2282,7 +2331,11 @@
         { id: 'grind', name: 'Точило', cat: 'building', shape: ['S.S', 'P.P', 'XXX'], keys: { S: 12, P: 5, X: 3 }, result: { type: 51, count: 1 }, size: 3 },
         { id: 'shield', name: 'Щит', cat: 'equipment', shape: ['PWP', 'PPP', '.P.'], keys: { P: 5, W: 10 }, result: { type: 58, count: 1 }, size: 3 },
         { id: 'stew', name: 'Похлёбка', cat: 'misc', shapeless: [[54, 1], [28, 1]], result: { type: 55, count: 1 }, size: 2 },
-        { id: 'gbottle', name: 'Бутылка', cat: 'misc', shape: ['G.G', '.G.'], keys: { G: 33 }, result: { type: 66, count: 3 }, size: 2 }
+        { id: 'gbottle', name: 'Бутылка', cat: 'misc', shape: ['G.G', '.G.'], keys: { G: 33 }, result: { type: 66, count: 3 }, size: 2 },
+        { id: 'spawn-chick', name: 'Курица', cat: 'misc', shapeless: [[68, 1], [11, 1]], result: { type: 69, count: 1 }, size: 2 },
+        { id: 'spawn-pig', name: 'Свинья', cat: 'misc', shapeless: [[9, 2]], result: { type: 70, count: 1 }, size: 2 },
+        { id: 'spawn-sheep', name: 'Овца', cat: 'misc', shapeless: [[9, 1], [10, 1]], result: { type: 71, count: 1 }, size: 2 },
+        { id: 'spawn-cow', name: 'Корова', cat: 'misc', shapeless: [[9, 1], [67, 1]], result: { type: 72, count: 1 }, size: 2 }
     ];
     const SMELT_RECIPES = [
         { id: 'smelt-glass', name: 'Стекло', cat: 'building', in: 7, result: { type: 33, count: 1 } },
@@ -3060,6 +3113,8 @@
         if (blockType === ITEM_CHARCOAL) return 3;
         if (blockType === ITEM_BOWL || blockType === ITEM_BOAT || blockType === ITEM_SHIELD) return 6;
         if (isToolItem(blockType) || blockType === ITEM_ARROW) return 15;
+        if (blockType === ITEM_LEATHER) return 1;
+        if (blockType === ITEM_EGG || isSpawnEgg(blockType)) return 12;
         return 1;
     }
 
@@ -3591,6 +3646,7 @@
             this.jumpVel = st.jump;
             this.mesh = buildMobMesh(type);
             this.mesh.position.copy(this.pos);
+            this.eggTimer = type === 'chicken' ? (12 + Math.random() * 18) : 0;
             scene.add(this.mesh);
         }
 
@@ -3764,6 +3820,14 @@
 
             this.mesh.position.copy(this.pos);
             this.mesh.rotation.y = this.yaw;
+
+            if (this.type === 'chicken' && this.health > 0) {
+                this.eggTimer -= dt;
+                if (this.eggTimer <= 0) {
+                    this.eggTimer = 18 + Math.random() * 22;
+                    spawnBlockDrop(this.pos.x - 0.5, this.pos.y + 0.2, this.pos.z - 0.5, ITEM_EGG);
+                }
+            }
         }
 
         dispose() {
@@ -3792,15 +3856,16 @@
 
     function updateMobsManager(dt) {
         mobSpawnTimer += dt;
-        if (mobSpawnTimer > 2.0 && mobs.length < 12) {
+        if (mobSpawnTimer > 1.4 && mobs.length < 16) {
             mobSpawnTimer = 0;
-            const spawnDist = 8 + Math.random() * 14;
+            const spawnDist = 3 + Math.random() * 9;
             const spawnAngle = Math.random() * Math.PI * 2;
             const sx = Math.floor(player.pos.x + Math.sin(spawnAngle) * spawnDist);
             const sz = Math.floor(player.pos.z + Math.cos(spawnAngle) * spawnDist);
             const sy = getSurfaceY(sx, sz);
             const ground = getBlock(sx, sy - 1, sz);
-            if (ground === BLOCK_GRASS || ground === BLOCK_SAND || ground === BLOCK_DIRT) {
+            const here = getBlock(sx, sy, sz);
+            if ((ground === BLOCK_GRASS || ground === BLOCK_SAND || ground === BLOCK_DIRT || ground === BLOCK_STONE) && !isOpaque(here)) {
                 mobs.push(new Mob(pickMobType(), sx + 0.5, sy, sz + 0.5));
             }
         }
@@ -3814,23 +3879,30 @@
                 if (mob.type === 'chicken') {
                     spawnBlockDrop(x, y, z, ITEM_FEATHER);
                     spawnBlockDrop(x, y, z, ITEM_MEAT);
+                    if (Math.random() < 0.55) spawnBlockDrop(x, y, z, ITEM_EGG);
+                    if (Math.random() < 0.28) spawnBlockDrop(x, y, z, ITEM_SPAWN_CHICKEN);
                 } else if (mob.type === 'pig') {
                     spawnBlockDrop(x, y, z, ITEM_MEAT);
                     spawnBlockDrop(x, y, z, ITEM_MEAT);
+                    if (Math.random() < 0.28) spawnBlockDrop(x, y, z, ITEM_SPAWN_PIG);
                 } else if (mob.type === 'cow') {
                     spawnBlockDrop(x, y, z, ITEM_MEAT);
                     spawnBlockDrop(x, y, z, ITEM_MEAT);
-                    spawnBlockDrop(x, y, z, ITEM_MEAT);
+                    spawnBlockDrop(x, y, z, ITEM_LEATHER);
+                    if (Math.random() < 0.55) spawnBlockDrop(x, y, z, ITEM_LEATHER);
+                    if (Math.random() < 0.28) spawnBlockDrop(x, y, z, ITEM_SPAWN_COW);
                 } else {
                     spawnBlockDrop(x, y, z, ITEM_WOOL);
                     spawnBlockDrop(x, y, z, ITEM_WOOL);
+                    spawnBlockDrop(x, y, z, ITEM_MEAT);
+                    if (Math.random() < 0.28) spawnBlockDrop(x, y, z, ITEM_SPAWN_SHEEP);
                 }
                 mob.dispose();
                 mobs.splice(i, 1);
                 continue;
             }
 
-            if (mob.pos.distanceTo(player.pos) > 65) {
+            if (mob.pos.distanceTo(player.pos) > 80) {
                 mob.dispose();
                 mobs.splice(i, 1);
             }
@@ -4719,11 +4791,65 @@
         }
     });
 
+    function consumeSelectedOne() {
+        const currentSlot = inventory[selectedSlotIndex];
+        if (!currentSlot || currentSlot.count <= 0) return;
+        currentSlot.count--;
+        if (currentSlot.count <= 0) {
+            currentSlot.type = BLOCK_EMPTY;
+            currentSlot.count = 0;
+        }
+        saveInventory();
+        refreshInventoryUI();
+    }
+
+    function spawnMobInFront(type) {
+        if (mobs.length >= 16) {
+            showInvToast('Слишком много животных');
+            return false;
+        }
+        const hit = raycastVoxel(6.5);
+        let x, y, z;
+        if (hit.hit && !hit.isMob && hit.place) {
+            x = hit.place.x + 0.5;
+            y = hit.place.y;
+            z = hit.place.z + 0.5;
+        } else {
+            x = player.pos.x - Math.sin(player.yaw) * 2.2;
+            z = player.pos.z - Math.cos(player.yaw) * 2.2;
+            y = getSurfaceY(Math.floor(x), Math.floor(z));
+        }
+        if (isOpaque(getBlock(Math.floor(x), Math.floor(y), Math.floor(z)))) {
+            y = getSurfaceY(Math.floor(x), Math.floor(z));
+        }
+        mobs.push(new Mob(type, x, y + 0.05, z));
+        showInvToast(BLOCK_NAMES[{
+            chicken: ITEM_SPAWN_CHICKEN, pig: ITEM_SPAWN_PIG, sheep: ITEM_SPAWN_SHEEP, cow: ITEM_SPAWN_COW
+        }[type]] || 'Животное');
+        return true;
+    }
+
     document.getElementById('btn-place').addEventListener('touchstart', (e) => {
         e.preventDefault();
         triggerHandPunch();
         const currentSlot = inventory[selectedSlotIndex];
         if (!currentSlot || currentSlot.type === BLOCK_EMPTY || currentSlot.count <= 0) return;
+
+        if (isSpawnEgg(currentSlot.type)) {
+            const kind = spawnEggMobType(currentSlot.type);
+            if (kind && spawnMobInFront(kind)) consumeSelectedOne();
+            return;
+        }
+        if (currentSlot.type === ITEM_EGG) {
+            consumeSelectedOne();
+            if (Math.random() < 0.14) {
+                spawnMobInFront('chicken');
+                showInvToast('Цыплёнок!');
+            } else {
+                showInvToast('Яйцо разбилось');
+            }
+            return;
+        }
 
         const heal = foodHeal(currentSlot.type);
         if (!canPlaceType(currentSlot.type) && !heal) return;
@@ -4731,10 +4857,7 @@
         if (heal) {
             if (player.health < player.maxHealth) {
                 player.health = Math.min(player.maxHealth, player.health + heal);
-                currentSlot.count--;
-                if (currentSlot.count <= 0) currentSlot.type = BLOCK_EMPTY;
-                saveInventory();
-                refreshInventoryUI();
+                consumeSelectedOne();
                 updateHUD();
             }
             return;
@@ -4752,10 +4875,7 @@
 
             if (!intersectPlayer) {
                 setBlock(p.x, p.y, p.z, currentSlot.type);
-                currentSlot.count--;
-                if (currentSlot.count <= 0) currentSlot.type = BLOCK_EMPTY;
-                saveInventory();
-                refreshInventoryUI();
+                consumeSelectedOne();
             }
         }
     });
@@ -5076,7 +5196,7 @@
                     const sy = getSurfaceY(sx, sz);
                     const ground = getBlock(sx, sy - 1, sz);
                     const here = getBlock(sx, sy, sz);
-                    if ((ground === BLOCK_GRASS || ground === BLOCK_SAND || ground === BLOCK_DIRT) && !isOpaque(here)) {
+                    if (isOpaque(ground) && !isOpaque(here) && here !== BLOCK_WATER) {
                         mobs.push(new Mob(type, sx + 0.5, sy, sz + 0.5));
                         return true;
                     }
@@ -5086,11 +5206,28 @@
         return false;
     }
 
-    trySpawnMobNear('chicken', player.pos.x, player.pos.z, 3, 10);
-    trySpawnMobNear('chicken', player.pos.x, player.pos.z, 4, 12);
-    trySpawnMobNear('pig', player.pos.x, player.pos.z, 4, 12);
-    trySpawnMobNear('sheep', player.pos.x, player.pos.z, 4, 12);
-    trySpawnMobNear('cow', player.pos.x, player.pos.z, 5, 14);
+    trySpawnMobNear('chicken', player.pos.x, player.pos.z, 2, 8);
+    trySpawnMobNear('chicken', player.pos.x, player.pos.z, 3, 9);
+    trySpawnMobNear('pig', player.pos.x, player.pos.z, 2, 8);
+    trySpawnMobNear('pig', player.pos.x, player.pos.z, 3, 10);
+    trySpawnMobNear('sheep', player.pos.x, player.pos.z, 2, 8);
+    trySpawnMobNear('sheep', player.pos.x, player.pos.z, 4, 10);
+    trySpawnMobNear('cow', player.pos.x, player.pos.z, 3, 9);
+    trySpawnMobNear('cow', player.pos.x, player.pos.z, 4, 11);
+
+    (function forceNearbyAnimals() {
+        const ring = [
+            ['chicken', 3.2, 0.4], ['pig', 3.6, 1.9], ['sheep', 3.4, 3.3], ['cow', 4.0, 4.8],
+            ['chicken', 3.8, 5.6], ['pig', 4.2, 2.6]
+        ];
+        for (let i = 0; i < ring.length && mobs.length < 10; i++) {
+            const spec = ring[i];
+            const x = player.pos.x + Math.sin(spec[2]) * spec[1];
+            const z = player.pos.z + Math.cos(spec[2]) * spec[1];
+            const y = getSurfaceY(Math.floor(x), Math.floor(z));
+            mobs.push(new Mob(spec[0], x, y + 0.05, z));
+        }
+    })();
 
     function animate(currentTime) {
         requestAnimationFrame(animate);
