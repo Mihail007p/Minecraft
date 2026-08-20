@@ -13,6 +13,10 @@
             -webkit-user-select: none;
             touch-action: none;
         }
+        #inv-overlay, #inv-panel, #recipe-book, #book-grid, #book-scroll-wrap {
+            touch-action: pan-y !important;
+            -webkit-overflow-scrolling: touch;
+        }
         body, html {
             width: 100%;
             height: 100%;
@@ -350,8 +354,9 @@
         }
         #inv-panel {
             width: min(420px, 96vw);
-            max-height: 94vh;
-            overflow-y: auto;
+            max-height: 88vh;
+            overflow-x: hidden;
+            overflow-y: scroll;
             background: #c6c6c6;
             border: 3px solid #000;
             border-radius: 0;
@@ -370,7 +375,11 @@
         }
         #inv-panel input, #inv-panel button, #inv-panel .inv-slot,
         #inv-panel .craft-slot, #inv-panel .craft-out, #inv-panel .book-cell {
-            touch-action: manipulation;
+            touch-action: pan-y manipulation;
+        }
+        #book-search {
+            user-select: text;
+            -webkit-user-select: text;
         }
         #inv-tabs {
             display: grid;
@@ -457,13 +466,32 @@
             display: grid;
             grid-template-columns: repeat(5, 1fr);
             gap: 3px;
-            min-height: 88px;
-            max-height: 168px;
-            overflow-y: auto;
+            height: min(42vh, 250px);
+            min-height: 160px;
+            overflow-x: hidden;
+            overflow-y: scroll;
+            touch-action: pan-y;
+            -webkit-overflow-scrolling: touch;
+            overscroll-behavior: contain;
+            padding-right: 4px;
+            padding-bottom: 10px;
+        }
+        #book-grid::-webkit-scrollbar {
+            width: 10px;
+        }
+        #book-grid::-webkit-scrollbar-track {
+            background: #8b8b8b;
+            box-shadow: inset 1px 1px 0 #373737;
+        }
+        #book-grid::-webkit-scrollbar-thumb {
+            background: #5a8f3a;
+            border: 2px solid #373737;
         }
         .book-cell {
             position: relative;
             aspect-ratio: 1;
+            touch-action: pan-y;
+            flex-shrink: 0;
             background: #8b8b8b;
             box-shadow: inset 2px 2px 0 #373737, inset -1px -1px 0 #fff;
             border: none;
@@ -778,7 +806,13 @@
                     <button type="button" data-cat="equipment">Снаряж.</button>
                     <button type="button" data-cat="misc">Разное</button>
                 </div>
-                <div id="book-grid"></div>
+                <div id="book-scroll-wrap">
+                    <div id="book-grid"></div>
+                    <div id="book-scroll-btns">
+                        <button type="button" id="book-up" aria-label="Вверх">▲</button>
+                        <button type="button" id="book-down" aria-label="Вниз">▼</button>
+                    </div>
+                </div>
                 <div id="recipe-preview"></div>
             </div>
             <div id="inv-view-main">
@@ -960,6 +994,14 @@
         [ITEM_WOOD_PICK]: 'Дер. кирка',
         [ITEM_STONE_PICK]: 'Кам. кирка',
         [ITEM_WOOD_AXE]: 'Дер. топор',
+        [ITEM_STONE_AXE]: 'Мясо',
+        [ITEM_WOOL]: 'Шерсть',
+        [ITEM_FEATHER]: 'Перо',
+        [ITEM_STICK]: 'Палки',
+        [BLOCK_CRAFT]: 'Верстак',
+        [ITEM_WOOD_PICK]: 'Дер. кирка',
+        [ITEM_STONE_PICK]: 'Кам. кирка',
+        [ITEM_WOOD_AXE]: 'Дер. топор',
         [ITEM_STONE_AXE]: 'Кам. топор',
         [ITEM_WOOD_SWORD]: 'Дер. меч',
         [ITEM_STONE_SWORD]: 'Кам. меч',
@@ -1041,6 +1083,367 @@
             !isNonBlockItem(type);
     }
 
+    const MC_TEX = { tiles: new Array(32) };
+    (function buildMcTextures() {
+        function hash(x, y, s) {
+            let n = Math.imul(x * 374761393 + y * 668265263 + s * 1274126177, 1597334677);
+            n = (n ^ (n >>> 13)) >>> 0;
+            return n;
+        }
+        function n01(x, y, s) { return (hash(x, y, s) % 1024) / 1024; }
+        function fbm(x, y, s) {
+            return n01(x, y, s) * 0.42 + n01(x >> 1, y >> 1, s + 17) * 0.32 + n01(x >> 2, y >> 2, s + 41) * 0.26;
+        }
+        function hexToRgb(hex) {
+            const n = parseInt(hex.slice(1), 16);
+            return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+        }
+        function rgbToHex(r, g, b) {
+            r = Math.max(0, Math.min(255, r | 0));
+            g = Math.max(0, Math.min(255, g | 0));
+            b = Math.max(0, Math.min(255, b | 0));
+            return '#' + ((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1);
+        }
+        function mixHex(a, b, t) {
+            const A = hexToRgb(a), B = hexToRgb(b);
+            return rgbToHex(A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t, A[2] + (B[2] - A[2]) * t);
+        }
+        function shade(hex, k) {
+            if (!hex || hex.charAt(0) !== '#') return hex;
+            const A = hexToRgb(hex);
+            return rgbToHex(A[0] * k, A[1] * k, A[2] * k);
+        }
+        function make(fill) {
+            const t = new Array(1024);
+            function s(x, y, c) {
+                if (x >= 0 && y >= 0 && x < 32 && y < 32) t[y * 32 + x] = c;
+            }
+            fill(s, t);
+            for (let i = 0; i < 1024; i++) if (!t[i]) t[i] = '#000000';
+            return t;
+        }
+        function dirtCol(x, y) {
+            const v = fbm(x, y, 21);
+            let c = mixHex('#5a361c', '#b07848', v);
+            c = mixHex(c, '#6e4524', n01(x, y, 22) * 0.35);
+            if (n01(x, y, 23) > 0.93) c = mixHex(c, '#3a2410', 0.7);
+            if (n01(x, y, 24) > 0.96) c = '#c49a6a';
+            if (n01(x, y, 25) > 0.97) c = '#8a8a7a';
+            return c;
+        }
+        function stoneCol(x, y) {
+            const v = fbm(x, y, 33);
+            let c = mixHex('#4a4a4a', '#b0b0b0', v);
+            if (n01(x, y, 34) > 0.92) c = '#3a3a3a';
+            if (n01(x, y, 35) > 0.96) c = '#d0d0d0';
+            return c;
+        }
+        function plankCol(x, y) {
+            const board = Math.floor(y / 8);
+            const gy = y % 8;
+            const grain = n01(x + board * 13, y, 6);
+            let c = mixHex('#8a6230', '#e0c088', 0.35 + grain * 0.5);
+            if (gy === 0) c = mixHex(c, '#f0d8a0', 0.45);
+            if (gy === 7) c = '#5a3c18';
+            if (gy === 6) c = mixHex(c, '#6b4423', 0.4);
+            if (((x + board * 11) % 32) === 9 && gy > 0 && gy < 7) c = '#6b4423';
+            if (n01(x, y, 61) > 0.97) c = '#4a3018';
+            return c;
+        }
+
+        MC_TEX.tiles[0] = make(function (s) {
+            for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
+                const v = fbm(x, y, 11);
+                let c = mixHex('#1e4a0c', '#8fd64a', v);
+                c = mixHex(c, '#3d7319', n01(x, y, 12) * 0.3);
+                if (v > 0.78) c = mixHex(c, '#c8f06a', 0.35);
+                if (v < 0.18) c = mixHex(c, '#5a361c', 0.45);
+                if (n01(x, y, 13) > 0.94) c = '#2a5410';
+                s(x, y, c);
+            }
+        });
+        MC_TEX.tiles[1] = make(function (s) {
+            for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) s(x, y, dirtCol(x, y));
+        });
+        MC_TEX.tiles[2] = make(function (s) {
+            for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) s(x, y, dirtCol(x, y));
+            for (let x = 0; x < 32; x++) {
+                const h = 6 + (hash(x, 0, 44) % 5);
+                for (let y = 0; y < h; y++) {
+                    const v = fbm(x, y, 11);
+                    s(x, y, mixHex('#2a5410', '#7cc63a', v));
+                }
+                s(x, h, mixHex('#3d7319', '#5a361c', 0.35));
+                if (hash(x, 1, 55) & 1) s(x, h + 1, '#4e8c20');
+            }
+        });
+        MC_TEX.tiles[3] = make(function (s) {
+            for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) s(x, y, stoneCol(x, y));
+            for (let i = 0; i < 18; i++) {
+                let x = hash(i, 2, 12) % 32, y = hash(i, 4, 13) % 32;
+                const len = 3 + (hash(i, 5, 14) % 6);
+                for (let k = 0; k < len; k++) {
+                    s(x, y, '#2e2e2e');
+                    x = (x + ((hash(i, k, 15) & 1) ? 1 : 0)) & 31;
+                    y = (y + 1) & 31;
+                }
+            }
+        });
+        MC_TEX.tiles[4] = make(function (s) {
+            for (let x = 0; x < 32; x++) {
+                const band = Math.floor(x / 5);
+                const gx = x % 5;
+                for (let y = 0; y < 32; y++) {
+                    const v = n01(band, y, 70);
+                    let c = mixHex('#1a0e06', '#8a5a30', 0.25 + v * 0.55);
+                    if (gx === 0) c = '#1a0e06';
+                    if (gx === 1) c = mixHex(c, '#4a3018', 0.4);
+                    if (n01(x, y, 71) > 0.92) c = '#c4a06a';
+                    if (n01(x, y, 72) > 0.94) c = '#2a6418';
+                    s(x, y, c);
+                }
+            }
+        });
+        MC_TEX.tiles[5] = make(function (s) {
+            for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
+                const dx = x - 15.5, dy = y - 15.5, r = Math.sqrt(dx * dx + dy * dy);
+                const grain = n01(x, y, 5) * 0.2;
+                let c = mixHex('#c4a06a', '#8a6230', grain + (r % 3) / 8);
+                if (r > 14.6) c = '#3d2814';
+                else if (Math.abs(r - 12) < 0.9) c = '#5a3c18';
+                else if (Math.abs(r - 8.5) < 0.8) c = '#6b4423';
+                else if (Math.abs(r - 5) < 0.7) c = '#8a6230';
+                else if (r < 2.2) c = '#3d2814';
+                else c = mixHex('#e0c088', '#a07838', n01(x, y, 51) * 0.6);
+                s(x, y, c);
+            }
+        });
+        MC_TEX.tiles[6] = make(function (s) {
+            for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) s(x, y, plankCol(x, y));
+        });
+        MC_TEX.tiles[7] = make(function (s) {
+            for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
+                const v = fbm(x, y, 77);
+                if (n01(x, y, 78) > 0.88) s(x, y, '#0a1806');
+                else s(x, y, mixHex('#14380c', '#6ad040', v));
+            }
+        });
+        MC_TEX.tiles[8] = make(function (s) {
+            for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
+                const v = fbm(x, y, 88);
+                let c = mixHex('#c2b373', '#f5ecd0', v);
+                if (n01(x, y, 89) > 0.93) c = '#a89860';
+                if (n01(x, y, 90) > 0.97) c = '#8a7a48';
+                s(x, y, c);
+            }
+        });
+        MC_TEX.tiles[9] = make(function (s) {
+            for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) s(x, y, '#4a1814');
+            for (let y = 6; y < 26; y++) for (let x = 4; x < 28; x++) {
+                const v = fbm(x, y, 9);
+                s(x, y, mixHex('#a03028', '#f09890', v));
+            }
+            for (let x = 6; x < 18; x++) for (let y = 8; y < 12; y++) s(x, y, mixHex('#f0c0b8', '#fff0e8', n01(x, y, 91)));
+            for (let x = 8; x < 22; x++) s(x, 20, '#7a2820');
+        });
+        MC_TEX.tiles[10] = make(function (s) {
+            for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
+                const v = fbm(x, y, 10);
+                const knit = ((x >> 2) + (y >> 2)) & 1;
+                let c = mixHex('#d0d0d0', '#ffffff', v);
+                if (knit) c = mixHex(c, '#c4c4c4', 0.4);
+                if (y % 8 === 0) c = mixHex(c, '#b0b0b0', 0.5);
+                s(x, y, c);
+            }
+        });
+        MC_TEX.tiles[11] = make(function (s) {
+            for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
+                const w = Math.sin((x * 0.45) + Math.sin(y * 0.35) * 2.2);
+                const c1 = w > 0 ? 'rgba(40, 105, 210, 0.55)' : 'rgba(22, 70, 170, 0.52)';
+                s(x, y, c1);
+            }
+            for (let y = 4; y < 32; y += 5) {
+                const ox = (y % 10 === 4) ? 0 : 3;
+                for (let x = ox; x < 32; x += 6) s(x, y, 'rgba(150, 210, 255, 0.42)');
+            }
+        });
+        MC_TEX.tiles[12] = make(function (s) {
+            for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) s(x, y, mixHex('#bba57a', '#d4c4a0', n01(x, y, 12)));
+            for (let y = 4; y < 28; y++) { s(15, y, '#8a6230'); s(16, y, '#c4a06a'); }
+            for (let i = 0; i < 16; i++) {
+                s(14 - (i >> 2), 6 + i, '#fff8ee');
+                s(17 + (i >> 2), 7 + i, '#f5ead4');
+                s(12 - (i >> 2), 8 + i, '#efe0c4');
+                s(19 + (i >> 2), 9 + i, '#fff8ee');
+            }
+            s(14, 27, '#d4a017'); s(15, 27, '#d4a017'); s(16, 27, '#c49210');
+        });
+        MC_TEX.tiles[13] = make(function (s) {
+            for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) s(x, y, '#3a2410');
+            for (let i = 0; i < 22; i++) {
+                s(5 + i, 24 - i, '#8a6230');
+                s(6 + i, 24 - i, '#c4a06a');
+                s(5 + i, 25 - i, '#5a3c18');
+            }
+        });
+        MC_TEX.tiles[14] = make(function (s) {
+            for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) s(x, y, plankCol(x, y));
+            for (let y = 2; y < 14; y++) for (let x = 2; x < 30; x++) s(x, y, mixHex('#a07838', '#c4a06a', n01(x, y, 14)));
+            s(5, 5, '#5a3c18'); s(6, 5, '#5a3c18'); s(14, 5, '#5a3c18'); s(15, 5, '#5a3c18');
+            s(22, 6, '#4a3018'); s(23, 6, '#4a3018');
+            for (let y = 16; y < 32; y++) { s(6, y, '#6e542d'); s(25, y, '#6e542d'); }
+            for (let x = 10; x < 22; x++) for (let y = 18; y < 28; y++) s(x, y, '#5a4224');
+        });
+        MC_TEX.tiles[15] = make(function (s) {
+            for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) s(x, y, mixHex('#2a1c10', '#4a3018', n01(x, y, 15)));
+            for (let i = 0; i < 16; i++) {
+                s(10 + i, 24 - i, '#8a6230');
+                s(11 + i, 24 - i, '#c4a06a');
+            }
+            for (let x = 8; x < 30; x++) {
+                s(x, 6, '#8a8a8a'); s(x, 7, '#d0d0d0'); s(x, 8, '#a0a0a0'); s(x, 9, '#707070');
+            }
+        });
+        MC_TEX.tiles[16] = make(function (s) {
+            for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) s(x, y, '#1a120a');
+            for (let y = 16; y < 32; y++) { s(15, y, '#8a6230'); s(16, y, '#c4a06a'); }
+            const flame = ['#fff8c0', '#ffe680', '#ffcc33', '#ffaa00', '#ff7722'];
+            for (let y = 4; y < 17; y++) for (let x = 12; x < 20; x++) {
+                const dx = x - 15.5, dy = y - 10;
+                if (dx * dx + dy * dy * 0.7 < 18) s(x, y, flame[Math.min(4, Math.abs(dy / 2) | 0)]);
+            }
+            s(15, 5, '#ffffff'); s(16, 6, '#fff8c0');
+        });
+        MC_TEX.tiles[17] = make(function (s) {
+            for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
+                const edge = y < 2 || y > 29 || x < 2 || x > 29;
+                s(x, y, edge ? '#3d2814' : mixHex('#8a6230', '#d4b888', n01(x, y, 17)));
+            }
+            for (let x = 0; x < 32; x++) { s(x, 13, '#5a3c18'); s(x, 14, '#2a1a0c'); s(x, 15, '#5a3c18'); }
+            s(14, 14, '#d4a017'); s(15, 14, '#f0c040'); s(16, 14, '#d4a017'); s(17, 14, '#b8860b');
+            s(15, 15, '#8a6230'); s(16, 15, '#8a6230');
+        });
+        MC_TEX.tiles[18] = make(function (s) {
+            for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) s(x, y, stoneCol(x, y));
+            for (let y = 10; y < 30; y++) for (let x = 6; x < 26; x++) s(x, y, '#121212');
+            for (let y = 16; y < 28; y++) for (let x = 10; x < 22; x++) {
+                s(x, y, mixHex('#cc4400', '#ffe680', n01(x, y, 18)));
+            }
+            s(14, 18, '#fff8c0'); s(15, 19, '#ffffff');
+        });
+        MC_TEX.tiles[19] = make(function (s) {
+            for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) s(x, y, stoneCol(x + 4, y));
+            for (let y = 8; y < 14; y++) for (let x = 8; x < 24; x++) s(x, y, '#2a2a2a');
+            for (let y = 20; y < 26; y++) for (let x = 8; x < 24; x++) s(x, y, '#1a1a1a');
+        });
+        MC_TEX.tiles[20] = make(function (s) {
+            for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
+                let c = mixHex('#c2b373', '#efe4b0', fbm(x, y, 20));
+                if (x === 15 || y === 15) c = '#b8a868';
+                s(x, y, c);
+            }
+        });
+        MC_TEX.tiles[21] = make(function (s) {
+            for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
+                const edge = x < 2 || y < 2 || x > 29 || y > 29;
+                const v = fbm(x, y, 21);
+                s(x, y, edge ? '#6aa8b8' : mixHex('#9fd0dc', '#f2fcff', v));
+            }
+            for (let y = 4; y < 14; y++) for (let x = 4; x < 16; x++) s(x, y, mixHex('#f0fbff', '#ffffff', 0.4));
+            for (let y = 18; y < 28; y++) for (let x = 18; x < 28; x++) s(x, y, '#6aa8b8');
+        });
+        MC_TEX.tiles[22] = make(function (s) {
+            for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
+                const edge = x < 2 || x > 29;
+                s(x, y, edge ? '#5a3c18' : plankCol(x, y));
+            }
+            s(24, 16, '#3d2814'); s(25, 16, '#2a1a0c'); s(24, 17, '#2a1a0c'); s(25, 17, '#1a0e06');
+        });
+        MC_TEX.tiles[23] = make(function (s) {
+            for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) s(x, y, '#2a1a0c');
+            for (let y = 0; y < 32; y++) {
+                s(4, y, '#8a6230'); s(5, y, '#c4a06a'); s(6, y, '#6b4423');
+                s(25, y, '#6b4423'); s(26, y, '#c4a06a'); s(27, y, '#8a6230');
+            }
+            for (let k = 0; k < 5; k++) {
+                const y = 3 + k * 6;
+                for (let x = 4; x < 28; x++) { s(x, y, '#c4a06a'); s(x, y + 1, '#8a6230'); }
+            }
+        });
+        MC_TEX.tiles[24] = make(function (s) {
+            for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) s(x, y, '#2a1a0c');
+            for (let y = 0; y < 32; y++) {
+                s(6, y, '#6b4423'); s(7, y, '#c4a06a'); s(8, y, '#8a6230');
+                s(23, y, '#8a6230'); s(24, y, '#c4a06a'); s(25, y, '#6b4423');
+            }
+            for (let x = 6; x < 26; x++) {
+                s(x, 8, '#c4a06a'); s(x, 9, '#8a6230');
+                s(x, 20, '#c4a06a'); s(x, 21, '#8a6230');
+            }
+        });
+        MC_TEX.tiles[25] = make(function (s) {
+            for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) s(x, y, '#5a3c18');
+            for (let y = 8; y < 20; y++) for (let x = 0; x < 32; x++) {
+                s(x, y, mixHex('#8a2020', '#f08080', fbm(x, y, 25)));
+            }
+            for (let y = 20; y < 28; y++) for (let x = 0; x < 32; x++) s(x, y, plankCol(x, y));
+            for (let y = 28; y < 32; y++) { s(1, y, '#6b4423'); s(2, y, '#8a6230'); s(29, y, '#8a6230'); s(30, y, '#6b4423'); }
+            for (let x = 2; x < 12; x++) s(x, 10, '#f09890');
+        });
+        MC_TEX.tiles[26] = make(function (s) {
+            for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) s(x, y, plankCol(x, y));
+            s(15, 16, '#5a4224'); s(16, 16, '#3d2814');
+        });
+        MC_TEX.tiles[27] = make(function (s) {
+            for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) s(x, y, stoneCol(x, y));
+            for (let x = 0; x < 32; x++) { s(x, 15, '#3a3a3a'); s(x, 31, '#3a3a3a'); }
+            for (let y = 0; y < 16; y++) s(15, y, '#3a3a3a');
+            for (let y = 16; y < 32; y++) { s(7, y, '#3a3a3a'); s(23, y, '#3a3a3a'); }
+        });
+        MC_TEX.tiles[28] = make(function (s) {
+            for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
+                const edge = x < 2 || y < 2 || x > 29 || y > 29;
+                const inner = x < 4 || y < 4 || x > 27 || y > 27;
+                if (edge) s(x, y, '#7a7a7a');
+                else if (inner) s(x, y, '#c8c8c8');
+                else s(x, y, mixHex('#d0d0d0', '#ececec', fbm(x, y, 28)));
+            }
+        });
+        MC_TEX.tiles[29] = make(function (s) {
+            for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) s(x, y, '#1a120a');
+            for (let x = 2; x < 30; x++) { s(x, 26, '#6b4423'); s(x, 27, '#4a3018'); s(x, 28, '#2a1a0c'); }
+            for (let y = 8; y < 26; y++) for (let x = 10; x < 22; x++) {
+                const dx = x - 16, dy = y - 16;
+                if (dx * dx + dy * dy * 0.6 < 50) s(x, y, mixHex('#cc4400', '#ffe680', n01(x, y, 29)));
+            }
+            s(15, 8, '#ffffff'); s(16, 9, '#fff8c0');
+        });
+        MC_TEX.tiles[30] = make(function (s) {
+            for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
+                const edge = x < 3 || x > 28;
+                s(x, y, edge ? '#4a3018' : mixHex('#5a3c18', '#8a6230', n01(x, y, 30)));
+            }
+            for (let x = 0; x < 32; x++) {
+                s(x, 0, '#c4a06a'); s(x, 1, '#8a6230');
+                s(x, 30, '#8a6230'); s(x, 31, '#4a3018');
+            }
+            for (let x = 10; x < 22; x++) for (let y = 12; y < 22; y++) s(x, y, '#3d2814');
+        });
+        MC_TEX.tiles[31] = make(function (s) {
+            for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) s(x, y, stoneCol(x, y));
+            for (let y = 0; y < 12; y++) for (let x = 0; x < 32; x++) s(x, y, mixHex('#4a3018', '#8a6230', n01(x, y, 31)));
+            for (let y = 14; y < 30; y++) for (let x = 8; x < 24; x++) s(x, y, '#121212');
+            for (let y = 20; y < 28; y++) for (let x = 12; x < 20; x++) s(x, y, '#ff7722');
+        });
+
+        MC_TEX.get = function (id, x, y) {
+            const t = MC_TEX.tiles[id];
+            if (!t) return '#7a7a7a';
+            return t[(y & 31) * 32 + (x & 31)];
+        };
+        MC_TEX.shade = shade;
+    })();
+
     const ITEM_ICON = {};
     (function bakeItemIcons() {
         const c = document.createElement('canvas');
@@ -1048,208 +1451,353 @@
         const g = c.getContext('2d');
         g.imageSmoothingEnabled = false;
         function clr() { g.clearRect(0, 0, 32, 32); }
-        function p(x, y, w, h, col) { g.fillStyle = col; g.fillRect(x, y, w, h); }
         function save(type) { ITEM_ICON[type] = c.toDataURL('image/png'); }
-        function blockFace(base, dark, light) {
-            p(4, 4, 24, 24, base);
-            p(4, 4, 24, 3, light);
-            p(4, 25, 24, 3, dark);
-            p(4, 4, 3, 24, light);
-            p(25, 4, 3, 24, dark);
-            for (let i = 0; i < 18; i++) {
-                const x = 6 + ((i * 7) % 20), y = 7 + ((i * 11) % 18);
-                p(x, y, 2, 2, dark);
+        function px(x, y, col) {
+            if (x < 0 || y < 0 || x > 31 || y > 31 || !col) return;
+            g.fillStyle = col; g.fillRect(x, y, 1, 1);
+        }
+
+        function drawIso(tileTop, tileSide) {
+            clr();
+            const getT = function (x, y) { return MC_TEX.get(tileTop, x, y); };
+            const getS = function (x, y) { return MC_TEX.get(tileSide, x, y); };
+            for (let ty = 0; ty < 16; ty++) {
+                for (let tx = 0; tx < 16; tx++) {
+                    const sx = 16 + tx - ty;
+                    const sy = 3 + ((tx + ty) >> 1);
+                    px(sx, sy, getT(tx * 2, ty * 2));
+                }
+            }
+            for (let h = 0; h < 14; h++) {
+                for (let d = 0; d < 16; d++) {
+                    const col = MC_TEX.shade(getS(d * 2, (h + 1) * 2), 0.78);
+                    px(16 - d, 4 + (d >> 1) + h, col);
+                }
+            }
+            for (let h = 0; h < 14; h++) {
+                for (let d = 0; d < 16; d++) {
+                    const col = MC_TEX.shade(getS(d * 2, (h + 1) * 2), 0.58);
+                    px(16 + d, 4 + (d >> 1) + h, col);
+                }
             }
         }
 
-        clr(); blockFace('#5d9140', '#3e6828', '#7bb84e'); p(4, 4, 24, 7, '#5d9140'); p(5, 5, 22, 4, '#6dad3a'); save(1);
-        clr(); blockFace('#8a5a32', '#5c3a1e', '#a56d40'); save(2);
-        clr(); blockFace('#8a8a8a', '#5a5a5a', '#b0b0b0'); save(3);
-        clr(); p(6, 4, 20, 24, '#6b4a28'); p(6, 4, 20, 3, '#8a6234'); p(6, 25, 20, 3, '#4a3018');
-        p(8, 4, 3, 24, '#4a3018'); p(16, 4, 2, 24, '#4a3018'); p(22, 4, 2, 24, '#553818'); save(4);
-        clr(); p(4, 4, 24, 24, '#c4a06a'); p(4, 10, 24, 2, '#6e542d'); p(4, 18, 24, 2, '#6e542d'); p(4, 26, 24, 2, '#6e542d');
-        p(4, 4, 24, 2, '#d4b888'); p(4, 4, 2, 24, '#a08048'); save(5);
-        clr(); p(4, 4, 24, 24, '#3a8a28'); p(6, 6, 4, 4, '#2a6418'); p(14, 8, 5, 5, '#4aad30'); p(20, 16, 4, 4, '#2a6418');
-        p(8, 18, 6, 4, '#1f4d13'); p(16, 6, 3, 6, '#2f7020'); save(6);
-        clr(); blockFace('#d8cb8c', '#b8a868', '#efe4b0'); save(7);
-        clr();
-        p(6, 10, 20, 14, '#e07070'); p(8, 8, 16, 4, '#f09890'); p(8, 22, 16, 4, '#c05048');
-        p(10, 12, 5, 4, '#fff0e8'); p(18, 16, 4, 3, '#b04038'); p(12, 18, 8, 2, '#a83830'); save(9);
-        clr(); p(5, 6, 22, 20, '#f4f4f4'); p(7, 8, 6, 5, '#ffffff'); p(16, 12, 5, 4, '#d8d8d8');
-        p(8, 18, 4, 4, '#e8e8e8'); p(18, 20, 5, 3, '#cccccc'); p(5, 6, 22, 2, '#ffffff'); save(10);
-        clr();
-        p(15, 4, 2, 22, '#8a6230'); p(14, 5, 2, 4, '#fff8ee'); p(17, 6, 3, 8, '#fff8ee');
-        p(11, 8, 3, 10, '#f5ead4'); p(18, 12, 3, 8, '#efe0c4'); p(12, 16, 2, 6, '#fff8ee');
-        p(14, 24, 4, 3, '#d4a017'); save(11);
-        clr();
-        p(8, 22, 3, 3, '#8a6230'); p(10, 20, 3, 3, '#c49a54'); p(12, 18, 3, 3, '#a07838');
-        p(14, 16, 3, 3, '#c49a54'); p(16, 14, 3, 3, '#8a6230'); p(18, 12, 3, 3, '#c49a54');
-        p(20, 10, 3, 3, '#a07838'); p(22, 8, 3, 3, '#c49a54'); p(15, 15, 2, 2, '#6b4a24'); save(12);
-        clr(); p(4, 4, 24, 24, '#8b6914'); p(5, 5, 22, 10, '#c4a06a'); p(5, 15, 22, 2, '#5a4224');
-        p(7, 17, 4, 10, '#6e542d'); p(21, 17, 4, 10, '#6e542d'); p(13, 17, 6, 8, '#5a4224');
-        p(6, 6, 4, 3, '#6e542d'); p(14, 6, 4, 3, '#6e542d'); p(22, 6, 4, 3, '#6e542d'); save(13);
-
-        function handle(x0, y0) {
-            p(x0, y0, 3, 14, '#8a6230'); p(x0 + 1, y0 + 1, 1, 12, '#c49a54');
-        }
-        function woodHead() { return ['#c4a06a', '#8a6230']; }
-        function stoneHead() { return ['#b0b0b0', '#6a6a6a']; }
-
-        function drawPick(wood) {
+        function sprite(plot) {
+            const buf = new Array(256).fill(null);
+            function s(x, y, col) {
+                if (x >= 0 && y >= 0 && x < 16 && y < 16) buf[y * 16 + x] = col;
+            }
+            plot(s);
+            const out = buf.slice();
+            for (let y = 0; y < 16; y++) {
+                for (let x = 0; x < 16; x++) {
+                    if (buf[y * 16 + x]) continue;
+                    const n = (x > 0 && buf[y * 16 + x - 1]) || (x < 15 && buf[y * 16 + x + 1]) ||
+                        (y > 0 && buf[(y - 1) * 16 + x]) || (y < 15 && buf[(y + 1) * 16 + x]);
+                    if (n) out[y * 16 + x] = '#1a1008';
+                }
+            }
             clr();
-            const h = wood ? woodHead() : stoneHead();
-            p(7, 22, 4, 4, '#8a6230'); p(10, 18, 4, 5, '#c49a54'); p(13, 14, 4, 5, '#8a6230');
-            p(16, 10, 4, 5, '#c49a54');
-            p(8, 8, 18, 5, h[0]); p(8, 8, 18, 2, h[1]); p(8, 8, 3, 5, h[1]); p(23, 8, 3, 5, h[1]);
-            save(wood ? 14 : 15);
+            for (let y = 0; y < 16; y++) {
+                for (let x = 0; x < 16; x++) {
+                    const col = out[y * 16 + x];
+                    if (!col) continue;
+                    g.fillStyle = col;
+                    g.fillRect(x * 2, y * 2, 2, 2);
+                }
+            }
         }
-        function drawAxe(wood) {
-            clr();
-            const h = wood ? woodHead() : stoneHead();
-            p(8, 22, 4, 4, '#8a6230'); p(11, 17, 4, 6, '#c49a54'); p(14, 12, 4, 6, '#8a6230');
-            p(16, 6, 10, 10, h[0]); p(18, 8, 6, 6, h[1]); p(16, 6, 10, 2, '#fff8'); 
-            save(wood ? 16 : 17);
+
+        function woodA() { return '#c4a06a'; }
+        function woodB() { return '#8a6230'; }
+        function woodC() { return '#5a3c18'; }
+        function stA() { return '#c6c6c6'; }
+        function stB() { return '#8a8a8a'; }
+        function stC() { return '#5a5a5a'; }
+
+        function handle(s, x0, y0) {
+            for (let i = 0; i < 10; i++) {
+                s(x0 + i, y0 - i, (i % 2) ? woodA() : woodB());
+                s(x0 + i + 1, y0 - i, woodB());
+            }
         }
-        function drawSword(wood) {
-            clr();
-            const h = wood ? woodHead() : stoneHead();
-            p(8, 24, 5, 4, '#8a6230'); p(10, 20, 4, 5, '#6b4a24');
-            p(12, 6, 6, 16, h[0]); p(13, 7, 4, 14, h[1]); p(14, 5, 2, 3, '#eee');
-            p(9, 18, 12, 3, '#6b4a24');
-            save(wood ? 18 : 19);
+
+        drawIso(0, 2); save(1);
+        drawIso(1, 1); save(2);
+        drawIso(3, 3); save(3);
+        drawIso(5, 4); save(4);
+        drawIso(6, 6); save(5);
+        drawIso(7, 7); save(6);
+        drawIso(8, 8); save(7);
+
+        sprite(function (s) {
+            for (let y = 4; y < 13; y++) for (let x = 2; x < 14; x++) {
+                const dx = x - 8, dy = y - 8;
+                if (dx * dx + dy * dy * 1.4 < 28) s(x, y, (y < 7) ? '#f09890' : (y > 10) ? '#a83830' : '#e07070');
+            }
+            s(4, 6, '#fff0e8'); s(5, 6, '#fff0e8'); s(5, 7, '#ffe0d8');
+            s(9, 9, '#b04038'); s(10, 9, '#a03028'); s(8, 11, '#902820');
+        }); save(9);
+
+        drawIso(10, 10); save(10);
+
+        sprite(function (s) {
+            for (let y = 1; y < 14; y++) s(7, y, '#8a6230');
+            for (let i = 0; i < 9; i++) {
+                s(6 - (i >> 2), 2 + i, '#fff8ee');
+                s(8 + (i >> 2), 3 + i, '#f5ead4');
+                s(5 - (i >> 2), 4 + i, '#efe0c4');
+                s(9 + (i >> 2), 5 + i, '#fff8ee');
+            }
+            s(6, 13, '#d4a017'); s(7, 13, '#d4a017'); s(8, 13, '#c49210');
+        }); save(11);
+
+        sprite(function (s) {
+            for (let i = 0; i < 12; i++) {
+                s(2 + i, 13 - i, woodB());
+                s(3 + i, 13 - i, woodA());
+                s(2 + i, 14 - i, woodC());
+            }
+        }); save(12);
+
+        drawIso(14, 14); save(13);
+
+        function drawPick(stone) {
+            sprite(function (s) {
+                handle(s, 2, 14);
+                const a = stone ? stA() : woodA(), b = stone ? stB() : woodB(), c = stone ? stC() : woodC();
+                for (let x = 5; x < 15; x++) { s(x, 2, c); s(x, 3, a); s(x, 4, b); s(x, 5, c); }
+                s(4, 3, b); s(4, 4, c); s(14, 3, b); s(14, 4, c);
+            });
         }
-        function drawShovel(wood) {
-            clr();
-            const h = wood ? woodHead() : stoneHead();
-            p(14, 16, 4, 12, '#8a6230'); p(15, 17, 2, 10, '#c49a54');
-            p(10, 6, 12, 12, h[0]); p(12, 8, 8, 8, h[1]); p(10, 6, 12, 3, h[0]);
-            save(wood ? 20 : 21);
+        function drawAxe(stone) {
+            sprite(function (s) {
+                handle(s, 2, 14);
+                const a = stone ? stA() : woodA(), b = stone ? stB() : woodB(), c = stone ? stC() : woodC();
+                for (let y = 1; y < 8; y++) for (let x = 8; x < 15; x++) {
+                    if (x + y > 10 && x + y < 20) s(x, y, (y === 1) ? a : (y === 7) ? c : b);
+                }
+                s(9, 2, a); s(13, 2, a);
+            });
         }
-        drawPick(true); drawPick(false);
-        drawAxe(true); drawAxe(false);
-        drawSword(true); drawSword(false);
-        drawShovel(true); drawShovel(false);
-
-        function drawHoe(wood) {
-            clr();
-            const h = wood ? woodHead() : stoneHead();
-            p(8, 22, 4, 4, '#8a6230'); p(11, 17, 4, 6, '#c49a54'); p(14, 12, 4, 6, '#8a6230');
-            p(16, 6, 12, 4, h[0]); p(16, 6, 3, 8, h[0]); p(17, 7, 10, 2, h[1]);
-            save(wood ? 22 : 23);
+        function drawSword(stone) {
+            sprite(function (s) {
+                const a = stone ? stA() : woodA(), b = stone ? stB() : woodB(), c = stone ? stC() : woodC();
+                s(2, 13, woodC()); s(3, 13, woodB()); s(3, 12, woodA()); s(4, 12, woodB());
+                s(4, 11, woodC()); s(5, 11, woodB());
+                for (let x = 3; x < 12; x++) { s(x, 10, woodC()); s(x, 9, woodB()); }
+                for (let i = 0; i < 9; i++) {
+                    s(6 + i, 8 - i, a);
+                    s(7 + i, 8 - i, b);
+                    s(6 + i, 7 - i, c);
+                }
+                s(14, 0, '#f0f0f0'); s(15, 0, a);
+            });
         }
-        drawHoe(true); drawHoe(false);
+        function drawShovel(stone) {
+            sprite(function (s) {
+                handle(s, 3, 14);
+                const a = stone ? stA() : woodA(), b = stone ? stB() : woodB(), c = stone ? stC() : woodC();
+                for (let y = 1; y < 7; y++) for (let x = 8; x < 15; x++) {
+                    const dx = x - 11, dy = y - 4;
+                    if (dx * dx + dy * dy < 10) s(x, y, (dy < -1) ? a : (dy > 1) ? c : b);
+                }
+            });
+        }
+        function drawHoe(stone) {
+            sprite(function (s) {
+                handle(s, 2, 14);
+                const a = stone ? stA() : woodA(), b = stone ? stB() : woodB(), c = stone ? stC() : woodC();
+                for (let x = 7; x < 15; x++) { s(x, 2, a); s(x, 3, b); }
+                s(7, 4, b); s(7, 5, c); s(8, 4, a);
+                s(14, 1, a); s(13, 1, b);
+            });
+        }
+        drawPick(false); save(14);
+        drawPick(true); save(15);
+        drawAxe(false); save(16);
+        drawAxe(true); save(17);
+        drawSword(false); save(18);
+        drawSword(true); save(19);
+        drawShovel(false); save(20);
+        drawShovel(true); save(21);
+        drawHoe(false); save(22);
+        drawHoe(true); save(23);
 
-        clr(); p(8, 8, 16, 16, '#e8e8e8'); p(10, 10, 4, 4, '#fff'); p(18, 14, 5, 3, '#ccc');
-        p(12, 18, 8, 2, '#d0d0d0'); p(14, 6, 4, 3, '#f5f5f5'); save(24);
+        sprite(function (s) {
+            for (let i = 0; i < 10; i++) {
+                s(3 + (i % 3), 4 + Math.floor(i / 3), '#e8e8e8');
+                s(8 + (i % 3), 7 + Math.floor(i / 3), '#d0d0d0');
+            }
+            s(5, 5, '#ffffff'); s(6, 6, '#ffffff'); s(10, 8, '#c8c8c8');
+            s(4, 8, '#f0f0f0'); s(9, 10, '#b8b8b8'); s(7, 4, '#eeeeee');
+        }); save(24);
 
-        clr(); p(8, 6, 3, 20, '#8a6230'); p(9, 8, 12, 2, '#c49a54'); p(18, 8, 2, 14, '#c49a54');
-        p(9, 20, 10, 2, '#8a6230'); p(20, 10, 2, 10, '#e8e8e8'); save(25);
+        sprite(function (s) {
+            for (let i = 0; i < 11; i++) {
+                s(2 + i, 13 - i, woodB());
+                s(3 + i, 13 - i, woodA());
+            }
+            s(12, 2, '#e8e8e8'); s(13, 3, '#e8e8e8'); s(13, 4, '#d0d0d0');
+            s(14, 5, '#e8e8e8'); s(14, 6, '#d0d0d0'); s(14, 7, '#c8c8c8');
+            s(13, 8, '#e8e8e8'); s(12, 4, '#ffffff');
+            s(4, 10, woodA()); s(5, 9, woodB());
+        }); save(25);
 
-        clr(); p(15, 4, 2, 18, '#c49a54'); p(14, 20, 4, 4, '#8a8a8a'); p(13, 5, 3, 6, '#fff8ee');
-        p(17, 6, 3, 5, '#efe0c4'); p(14, 22, 4, 2, '#6a6a6a'); save(26);
+        sprite(function (s) {
+            for (let i = 0; i < 10; i++) {
+                s(6, 3 + i, woodA()); s(7, 3 + i, woodB());
+            }
+            s(5, 2, '#fff8ee'); s(6, 2, '#fff8ee'); s(4, 3, '#f5ead4'); s(5, 3, '#fff8ee');
+            s(8, 3, '#efe0c4'); s(9, 4, '#fff8ee'); s(8, 5, '#f5ead4');
+            s(6, 13, stB()); s(7, 13, stA()); s(5, 14, stC()); s(6, 14, stB()); s(7, 14, stC());
+        }); save(26);
 
-        clr(); p(8, 10, 16, 14, '#2a2a2a'); p(10, 12, 6, 5, '#4a4a4a'); p(16, 16, 5, 4, '#1a1a1a');
-        p(11, 18, 8, 3, '#3a3a3a'); save(27);
+        sprite(function (s) {
+            for (let y = 5; y < 13; y++) for (let x = 4; x < 12; x++) {
+                const dx = x - 8, dy = y - 9;
+                if (dx * dx + dy * dy < 14) {
+                    const k = (x + y * 3) % 4;
+                    s(x, y, k === 0 ? '#1a1a1a' : k === 1 ? '#3a3a3a' : k === 2 ? '#2a2a2a' : '#4a4a4a');
+                }
+            }
+            s(6, 7, '#6a6a6a'); s(7, 8, '#555555'); s(9, 9, '#111111'); s(8, 10, '#333333');
+            s(5, 9, '#3a3a3a'); s(10, 8, '#222222');
+        }); save(27);
 
-        clr(); p(6, 10, 20, 14, '#c07840'); p(8, 8, 16, 4, '#d4a06a');
-        p(8, 22, 16, 4, '#8a5028'); p(10, 12, 5, 4, '#fff0e8'); p(16, 16, 6, 3, '#6a3018'); save(28);
+        sprite(function (s) {
+            for (let y = 4; y < 13; y++) for (let x = 2; x < 14; x++) {
+                const dx = x - 8, dy = y - 8;
+                if (dx * dx + dy * dy * 1.3 < 28) s(x, y, (y < 7) ? '#e0b070' : (y > 10) ? '#8a5028' : '#c07840');
+            }
+            s(4, 6, '#fff0e8'); s(5, 7, '#f5d0b0'); s(9, 9, '#6a3018'); s(10, 10, '#5a2810');
+        }); save(28);
 
-        clr(); p(14, 16, 4, 12, '#8a6230'); p(12, 6, 8, 12, '#ffcc33'); p(13, 7, 6, 8, '#ffe680');
-        p(15, 4, 2, 4, '#fff8c0'); save(29);
+        drawIso(16, 16); save(29);
+        drawIso(17, 17); save(30);
+        drawIso(18, 19); save(31);
+        drawIso(20, 20); save(32);
+        drawIso(21, 21); save(33);
+        drawIso(22, 22); save(34);
+        drawIso(23, 23); save(35);
+        drawIso(24, 24); save(36);
+        drawIso(24, 6); save(37);
+        drawIso(25, 25); save(38);
+        drawIso(10, 10); save(39);
+        drawIso(26, 26); save(40);
+        sprite(function (s) {
+            for (let y = 1; y < 10; y++) for (let x = 3; x < 13; x++) s(x, y, (y === 1 || x === 3 || x === 12) ? woodB() : '#efe4b0');
+            for (let y = 10; y < 15; y++) { s(7, y, woodB()); s(8, y, woodA()); }
+        }); save(41);
+        sprite(function (s) {
+            for (let y = 6; y < 10; y++) for (let x = 1; x < 15; x++) s(x, y, (y === 6) ? '#d4b888' : (y === 9) ? woodC() : woodA());
+        }); save(42);
+        sprite(function (s) {
+            for (let y = 5; y < 11; y++) for (let x = 5; x < 11; x++) s(x, y, (x === 5 || y === 5) ? '#d4b888' : woodB());
+        }); save(43);
+        drawIso(27, 27); save(44);
+        drawIso(28, 28); save(45);
+        drawIso(29, 29); save(46);
+        drawIso(30, 30); save(47);
+        drawIso(31, 31); save(48);
+        drawIso(6, 6); save(49);
+        drawIso(6, 3); save(50);
+        drawIso(3, 6); save(51);
+        drawIso(10, 4); save(52);
+        drawIso(27, 3); save(53);
 
-        clr(); p(4, 8, 24, 20, '#8b6914'); p(6, 10, 20, 10, '#5a3c14'); p(8, 12, 16, 6, '#3a2810');
-        p(4, 8, 24, 3, '#c4a06a'); p(10, 11, 12, 2, '#2a1c08'); save(30);
+        sprite(function (s) {
+            for (let x = 3; x < 13; x++) s(x, 11, woodB());
+            for (let x = 4; x < 12; x++) s(x, 10, woodA());
+            for (let x = 5; x < 11; x++) s(x, 9, woodB());
+            for (let x = 6; x < 10; x++) s(x, 8, woodA());
+            s(7, 7, woodB()); s(8, 7, woodA());
+        }); save(54);
 
-        clr(); blockFace('#7a7a7a', '#4a4a4a', '#9a9a9a'); p(10, 12, 12, 10, '#1a1a1a');
-        p(12, 14, 8, 6, '#ff7722'); p(4, 4, 24, 6, '#8a8a8a'); save(31);
+        sprite(function (s) {
+            for (let x = 3; x < 13; x++) s(x, 12, woodB());
+            for (let x = 4; x < 12; x++) s(x, 11, woodA());
+            for (let y = 6; y < 11; y++) for (let x = 4; x < 12; x++) {
+                const cols = ['#c07840', '#8a5028', '#6dad3a'];
+                s(x, y, cols[(x + y) % 3]);
+            }
+            s(6, 7, '#6dad3a'); s(8, 8, '#c07840');
+        }); save(55);
 
-        clr(); blockFace('#d8cb8c', '#b8a868', '#efe4b0'); p(4, 14, 24, 2, '#c2b373');
-        p(14, 4, 2, 24, '#c2b373'); save(32);
+        sprite(function (s) {
+            for (let x = 1; x < 15; x++) { s(x, 10, woodA()); s(x, 11, woodB()); s(x, 12, woodC()); }
+            for (let y = 6; y < 10; y++) { s(2, y, woodB()); s(13, y, woodB()); }
+            for (let x = 3; x < 13; x++) s(x, 6, '#d4b888');
+            s(7, 8, woodC()); s(8, 8, woodB());
+        }); save(56);
 
-        clr(); p(4, 4, 24, 24, '#8ec8d8'); p(6, 6, 20, 20, '#b8e0ec'); p(8, 8, 8, 8, '#e8f8fc');
-        p(18, 16, 6, 6, '#6aa8b8'); p(4, 4, 24, 2, '#d0f0f8'); save(33);
+        sprite(function (s) {
+            for (let i = 0; i < 12; i++) {
+                s(2 + i, 14 - i, woodB());
+                s(3 + i, 14 - i, woodA());
+            }
+            s(12, 2, '#e8e8e8'); s(13, 3, '#e8e8e8'); s(13, 4, '#d0d0d0');
+            s(14, 5, '#e8e8e8'); s(14, 6, '#cccccc'); s(13, 7, '#e8e8e8');
+        }); save(57);
 
-        clr(); p(8, 4, 16, 24, '#c4a06a'); p(8, 4, 16, 2, '#d4b888'); p(8, 16, 16, 2, '#6e542d');
-        p(20, 14, 3, 3, '#5a4224'); p(8, 26, 16, 2, '#6e542d'); save(34);
+        sprite(function (s) {
+            for (let y = 2; y < 14; y++) for (let x = 4; x < 13; x++) {
+                if (x === 4 || x === 12 || y === 2 || y === 13) s(x, y, woodC());
+                else s(x, y, (x < 8) ? woodA() : woodB());
+            }
+            for (let y = 5; y < 11; y++) for (let x = 6; x < 11; x++) s(x, y, '#f4f4f4');
+        }); save(58);
 
-        clr(); p(6, 4, 4, 24, '#8a6230'); p(22, 4, 4, 24, '#8a6230');
-        p(6, 8, 20, 3, '#c49a54'); p(6, 16, 20, 3, '#c49a54'); p(6, 24, 20, 3, '#a07838'); save(35);
+        sprite(function (s) {
+            for (let y = 3; y < 7; y++) for (let x = 4; x < 12; x++) s(x, y, '#f4f4f4');
+            for (let y = 7; y < 13; y++) for (let x = 3; x < 13; x++) s(x, y, '#e8e8e8');
+            s(5, 8, '#333333'); s(6, 8, '#1a1a1a'); s(9, 8, '#333333'); s(10, 8, '#1a1a1a');
+            s(4, 4, '#ffffff'); s(11, 4, '#d0d0d0');
+        }); save(59);
 
-        clr(); p(6, 6, 6, 20, '#8a6230'); p(20, 6, 6, 20, '#8a6230');
-        p(6, 10, 20, 3, '#c49a54'); p(6, 18, 20, 3, '#c49a54'); save(36);
+        sprite(function (s) {
+            for (let y = 2; y < 14; y++) for (let x = 3; x < 13; x++) {
+                if (x === 3 || x === 12 || y === 2 || y === 13) s(x, y, '#c8c8c8');
+                else s(x, y, '#f0f0f0');
+            }
+            for (let y = 6; y < 12; y++) s(7, y, '#d0d0d0');
+            s(5, 4, '#ffffff');
+        }); save(60);
 
-        clr(); p(6, 8, 20, 16, '#c4a06a'); p(8, 10, 16, 12, '#8a6230'); p(14, 14, 4, 4, '#5a4224');
-        p(6, 8, 20, 3, '#d4b888'); save(37);
+        sprite(function (s) {
+            for (let y = 2; y < 6; y++) for (let x = 4; x < 12; x++) s(x, y, '#f4f4f4');
+            for (let y = 6; y < 15; y++) {
+                for (let x = 3; x < 7; x++) s(x, y, '#e8e8e8');
+                for (let x = 9; x < 13; x++) s(x, y, '#e0e0e0');
+            }
+        }); save(61);
 
-        clr(); p(4, 14, 24, 10, '#c4a06a'); p(4, 8, 24, 8, '#e07070'); p(6, 10, 20, 5, '#f09890');
-        p(4, 22, 6, 6, '#8a6230'); p(22, 22, 6, 6, '#8a6230'); save(38);
+        sprite(function (s) {
+            for (let y = 6; y < 14; y++) {
+                for (let x = 2; x < 7; x++) s(x, y, '#f4f4f4');
+                for (let x = 9; x < 14; x++) s(x, y, '#ececec');
+            }
+            s(3, 13, '#333'); s(4, 13, '#222'); s(10, 13, '#333'); s(11, 13, '#222');
+            s(3, 7, '#ffffff');
+        }); save(62);
 
-        clr(); p(4, 12, 24, 10, '#f4f4f4'); p(6, 14, 8, 4, '#fff'); p(16, 16, 8, 3, '#d0d0d0'); save(39);
+        sprite(function (s) {
+            for (let y = 6; y < 10; y++) for (let x = 1; x < 15; x++) s(x, y, (y === 6) ? '#b0b0b0' : (y === 9) ? '#5a5a5a' : '#8a8a8a');
+        }); save(63);
 
-        clr(); p(4, 10, 24, 12, '#c4a06a'); p(4, 14, 24, 2, '#6e542d'); p(4, 10, 24, 2, '#d4b888'); save(40);
+        sprite(function (s) {
+            for (let y = 5; y < 11; y++) for (let x = 5; x < 11; x++) s(x, y, (x === 5 || y === 5) ? '#b0b0b0' : '#6a6a6a');
+        }); save(64);
 
-        clr(); p(6, 4, 20, 16, '#c4a06a'); p(8, 6, 16, 12, '#efe4b0'); p(14, 20, 4, 8, '#8a6230'); save(41);
+        drawIso(20, 20); save(65);
 
-        clr(); p(4, 14, 24, 6, '#c4a06a'); p(4, 14, 24, 2, '#d4b888'); p(4, 18, 24, 2, '#6e542d'); save(42);
-
-        clr(); p(10, 10, 12, 12, '#c4a06a'); p(12, 12, 8, 8, '#d4b888'); save(43);
-
-        clr(); blockFace('#8a8a8a', '#5a5a5a', '#b0b0b0'); p(4, 12, 24, 2, '#5a5a5a');
-        p(12, 4, 2, 24, '#5a5a5a'); p(20, 4, 2, 24, '#5a5a5a'); save(44);
-
-        clr(); blockFace('#a8a8a8', '#7a7a7a', '#c8c8c8'); save(45);
-
-        clr(); p(6, 18, 20, 6, '#6b4a28'); p(8, 16, 16, 4, '#8a6230');
-        p(12, 6, 8, 12, '#ff7722'); p(14, 4, 4, 8, '#ffcc33'); save(46);
-
-        clr(); p(6, 4, 20, 24, '#6b4a28'); p(8, 8, 16, 16, '#8a6230'); p(10, 10, 12, 4, '#c4a06a');
-        p(6, 4, 20, 3, '#c4a06a'); p(6, 25, 20, 3, '#4a3018'); save(47);
-
-        clr(); blockFace('#7a7a7a', '#4a4a4a', '#9a9a9a'); p(10, 12, 12, 10, '#1a1a1a');
-        p(4, 4, 24, 8, '#6b4a28'); p(12, 14, 8, 6, '#ff7722'); save(48);
-
-        clr(); p(4, 8, 24, 16, '#c4a06a'); p(6, 10, 20, 6, '#8a6230'); p(8, 18, 16, 4, '#e8e8e8'); save(49);
-
-        clr(); p(4, 16, 24, 8, '#8a8a8a'); p(6, 6, 20, 12, '#c4a06a'); p(8, 8, 16, 8, '#8a6230'); save(50);
-
-        clr(); p(6, 18, 20, 6, '#c4a06a'); p(8, 8, 16, 12, '#8a8a8a'); p(10, 10, 12, 8, '#b0b0b0'); save(51);
-
-        clr(); p(6, 6, 20, 20, '#8a6230'); p(8, 8, 16, 16, '#f4f4f4'); p(10, 10, 6, 6, '#5b8c32');
-        p(16, 14, 5, 5, '#3a7ee0'); save(52);
-
-        clr(); blockFace('#7d7d7d', '#555555', '#9a9a9a'); p(8, 4, 4, 24, '#5a5a5a');
-        p(20, 4, 4, 24, '#5a5a5a'); save(53);
-
-        clr(); p(6, 16, 20, 8, '#8a6230'); p(8, 12, 16, 6, '#c4a06a'); p(10, 10, 12, 4, '#a07838'); save(54);
-
-        clr(); p(6, 16, 20, 8, '#8a6230'); p(8, 10, 16, 10, '#c07840'); p(10, 12, 12, 6, '#8a5028');
-        p(12, 8, 8, 4, '#6dad3a'); save(55);
-
-        clr(); p(4, 16, 24, 8, '#c4a06a'); p(6, 12, 20, 6, '#8a6230'); p(8, 8, 16, 6, '#d4b888'); save(56);
-
-        clr(); p(8, 6, 3, 20, '#8a6230'); p(10, 8, 10, 2, '#c49a54'); p(18, 8, 2, 12, '#e8e8e8');
-        p(16, 18, 6, 2, '#e8e8e8'); save(57);
-
-        clr(); p(8, 6, 16, 20, '#c4a06a'); p(10, 8, 12, 16, '#8a6230'); p(12, 12, 8, 8, '#f4f4f4'); save(58);
-
-        clr(); p(8, 8, 16, 6, '#f4f4f4'); p(6, 12, 20, 10, '#e8e8e8'); p(10, 14, 4, 4, '#333');
-        p(18, 14, 4, 4, '#333'); save(59);
-
-        clr(); p(6, 6, 20, 20, '#f4f4f4'); p(10, 8, 12, 14, '#e0e0e0'); p(14, 12, 4, 8, '#ccc'); save(60);
-
-        clr(); p(8, 4, 16, 8, '#f4f4f4'); p(6, 12, 8, 16, '#e8e8e8'); p(18, 12, 8, 16, '#e8e8e8'); save(61);
-
-        clr(); p(6, 12, 8, 12, '#f4f4f4'); p(18, 12, 8, 12, '#f4f4f4'); p(8, 20, 4, 4, '#333');
-        p(20, 20, 4, 4, '#333'); save(62);
-
-        clr(); p(4, 14, 24, 6, '#8a8a8a'); p(4, 14, 24, 2, '#b0b0b0'); p(4, 18, 24, 2, '#5a5a5a'); save(63);
-
-        clr(); p(10, 10, 12, 12, '#8a8a8a'); p(12, 12, 8, 8, '#b0b0b0'); save(64);
-
-        clr(); blockFace('#d8cb8c', '#b8a868', '#efe4b0'); p(8, 8, 16, 16, '#c2b373');
-        p(10, 10, 12, 12, '#efe4b0'); save(65);
-
-        clr(); p(12, 6, 8, 20, '#8ec8d8'); p(13, 8, 6, 16, '#b8e0ec'); p(14, 10, 4, 8, '#e8f8fc'); save(66);
+        sprite(function (s) {
+            for (let y = 2; y < 14; y++) for (let x = 5; x < 11; x++) {
+                if (x === 5 || x === 10 || y === 2) s(x, y, '#7eb8c8');
+                else s(x, y, y < 8 ? '#e8f8fc' : '#b8e0ec');
+            }
+            s(6, 13, '#7eb8c8'); s(9, 13, '#7eb8c8');
+        }); save(66);
     })();
 
     // --- 2. ИНВЕНТАРЬ И СОХРАНЕНИЕ ---
@@ -2432,215 +2980,21 @@
         canvas.width = 128; canvas.height = 256;
         const ctx = canvas.getContext('2d');
         ctx.imageSmoothingEnabled = false;
-
-        function fillNoise(x, y, baseColor, noiseColor, count = 60) {
-            ctx.fillStyle = baseColor;
-            ctx.fillRect(x, y, 32, 32);
-            ctx.fillStyle = noiseColor;
-            for (let i = 0; i < count; i++) {
-                const nx = x + Math.floor(Math.random() * 32);
-                const ny = y + Math.floor(Math.random() * 32);
-                ctx.fillRect(nx, ny, 2, 2);
+        for (let id = 0; id < 32; id++) {
+            const tile = MC_TEX.tiles[id];
+            if (!tile) continue;
+            const ox = (id % 4) * 32, oy = Math.floor(id / 4) * 32;
+            for (let y = 0; y < 32; y++) {
+                for (let x = 0; x < 32; x++) {
+                    ctx.fillStyle = tile[y * 32 + x];
+                    ctx.fillRect(ox + x, oy + y, 1, 1);
+                }
             }
         }
-
-        fillNoise(0, 0, '#5b8c32', '#487226', 70); // 0: Трава верх
-        fillNoise(32, 0, '#866043', '#5c3e26', 70); // 1: Земля
-        fillNoise(64, 0, '#866043', '#5c3e26', 60); // 2: Трава бок
-        ctx.fillStyle = '#5b8c32'; ctx.fillRect(64, 0, 32, 8);
-        for(let i = 0; i < 32; i += 4) ctx.fillRect(64 + i, 8, 4, (i % 8 === 0 ? 6 : 3));
-        fillNoise(96, 0, '#7d7d7d', '#555555', 80); // 3: Камень
-        fillNoise(0, 32, '#674f32', '#44321d', 30); // 4: Дерево бок
-        for(let i = 0; i < 32; i += 8) { ctx.fillStyle = '#44321d'; ctx.fillRect(i, 32, 2, 32); }
-        fillNoise(32, 32, '#9a7b4f', '#725633', 40); // 5: Спил дерева
-        ctx.strokeStyle = '#5a4224'; ctx.strokeRect(36, 36, 24, 24);
-        fillNoise(64, 32, '#b8945f', '#8f6f3e', 30); // 6: Доски
-        ctx.fillStyle = '#6e542d';
-        ctx.fillRect(64, 32 + 8, 32, 2); ctx.fillRect(64, 32 + 16, 32, 2); ctx.fillRect(64, 32 + 24, 32, 2);
-        fillNoise(96, 32, '#357824', '#1f4d13', 90); // 7: Листва
-        fillNoise(0, 64, '#d8cb8c', '#c2b373', 70); // 8: Песок
-        // 9: Мясо / сырой стейк
-        ctx.fillStyle = '#7a2a22';
-        ctx.fillRect(32, 64, 32, 32);
-        ctx.fillStyle = '#e07070';
-        ctx.fillRect(36, 70, 24, 20);
-        ctx.fillStyle = '#f09890';
-        ctx.fillRect(38, 72, 14, 6);
-        ctx.fillStyle = '#c05048';
-        ctx.fillRect(42, 82, 12, 5);
-        ctx.fillStyle = '#fff0e8';
-        ctx.fillRect(40, 74, 5, 3);
-
-        // 10: Шерсть
-        ctx.fillStyle = '#d0d0d0';
-        ctx.fillRect(64, 64, 32, 32);
-        ctx.fillStyle = '#f4f4f4';
-        ctx.fillRect(66, 66, 28, 28);
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(68, 68, 8, 6);
-        ctx.fillStyle = '#c8c8c8';
-        ctx.fillRect(80, 80, 8, 6);
-        ctx.fillRect(70, 84, 6, 4);
-
-        // 11: Классическая пиксельная вода с альфа-каналом (дно видно сквозь неё)
-        ctx.clearRect(96, 64, 32, 32);
-        ctx.fillStyle = 'rgba(50, 120, 220, 0.55)';
-        ctx.fillRect(96, 64, 32, 32);
-        ctx.fillStyle = 'rgba(90, 160, 245, 0.40)';
-        for (let y = 0; y < 32; y += 4) {
-            for (let x = 0; x < 32; x += 8) {
-                const ox = (y % 8 === 0) ? 0 : 4;
-                ctx.fillRect(96 + x + ox, 64 + y, 4, 2);
-            }
-        }
-        ctx.fillStyle = 'rgba(25, 70, 170, 0.35)';
-        for (let i = 0; i < 40; i++) {
-            const rx = 96 + Math.floor(Math.random() * 30);
-            const ry = 64 + Math.floor(Math.random() * 30);
-            ctx.fillRect(rx, ry, 2, 2);
-        }
-
-        // 12: Перо (прозрачный фон для дропа — лёгкий беж)
-        ctx.fillStyle = '#bba57a';
-        ctx.fillRect(0, 96, 32, 32);
-        ctx.fillStyle = '#8a6230';
-        ctx.fillRect(15, 100, 2, 20);
-        ctx.fillStyle = '#fff8ee';
-        ctx.fillRect(10, 104, 5, 10);
-        ctx.fillRect(17, 106, 5, 9);
-        ctx.fillStyle = '#efe0c4';
-        ctx.fillRect(8, 110, 4, 6);
-        ctx.fillRect(20, 112, 4, 5);
-        ctx.fillStyle = '#d4a017';
-        ctx.fillRect(14, 120, 4, 3);
-
-        // 13: Палки
-        ctx.fillStyle = '#5a3c1c';
-        ctx.fillRect(32, 96, 32, 32);
-        ctx.fillStyle = '#c49a54';
-        ctx.fillRect(38, 118, 4, 4); ctx.fillRect(41, 114, 4, 5); ctx.fillRect(44, 110, 4, 5);
-        ctx.fillRect(47, 106, 4, 5); ctx.fillRect(50, 102, 4, 5); ctx.fillRect(53, 98, 4, 5);
-        ctx.fillStyle = '#8a6230';
-        ctx.fillRect(47, 108, 2, 2);
-
-        // 14: Верстак
-        ctx.fillStyle = '#6e542d';
-        ctx.fillRect(64, 96, 32, 32);
-        ctx.fillStyle = '#c4a06a';
-        ctx.fillRect(66, 98, 28, 12);
-        ctx.fillStyle = '#5a4224';
-        ctx.fillRect(66, 110, 28, 2);
-        ctx.fillRect(70, 112, 4, 14);
-        ctx.fillRect(86, 112, 4, 14);
-        ctx.fillRect(78, 114, 6, 8);
-        ctx.fillStyle = '#8a6230';
-        ctx.fillRect(68, 100, 6, 4); ctx.fillRect(78, 100, 6, 4); ctx.fillRect(88, 100, 4, 4);
-
-        // 15: Инструмент (кирка)
-        ctx.fillStyle = '#4a3020';
-        ctx.fillRect(96, 96, 32, 32);
-        ctx.fillStyle = '#8a6230';
-        ctx.fillRect(104, 116, 4, 8);
-        ctx.fillStyle = '#c49a54';
-        ctx.fillRect(106, 110, 4, 7);
-        ctx.fillStyle = '#c0c0c0';
-        ctx.fillRect(100, 100, 20, 8);
-        ctx.fillStyle = '#8a8a8a';
-        ctx.fillRect(100, 100, 20, 2);
-
-        function tileXY(id) { return [(id % 4) * 32, Math.floor(id / 4) * 32]; }
-        function paintTile(id, fn) {
-            const xy = tileXY(id);
-            fn(xy[0], xy[1]);
-        }
-
-        paintTile(16, function (x, y) {
-            fillNoise(x, y, '#3a2a18', '#2a1c10', 20);
-            ctx.fillStyle = '#8a6230'; ctx.fillRect(x + 14, y + 16, 4, 14);
-            ctx.fillStyle = '#ffcc33'; ctx.fillRect(x + 12, y + 6, 8, 12);
-            ctx.fillStyle = '#ffe680'; ctx.fillRect(x + 14, y + 8, 4, 6);
-        });
-        paintTile(17, function (x, y) {
-            fillNoise(x, y, '#8b6914', '#5a4224', 30);
-            ctx.fillStyle = '#5a3c14'; ctx.fillRect(x + 6, y + 10, 20, 12);
-            ctx.fillStyle = '#c4a06a'; ctx.fillRect(x, y, 32, 6);
-            ctx.fillStyle = '#2a1c08'; ctx.fillRect(x + 13, y + 14, 6, 4);
-        });
-        paintTile(18, function (x, y) {
-            fillNoise(x, y, '#7a7a7a', '#4a4a4a', 40);
-            ctx.fillStyle = '#1a1a1a'; ctx.fillRect(x + 8, y + 12, 16, 14);
-            ctx.fillStyle = '#ff7722'; ctx.fillRect(x + 11, y + 16, 10, 8);
-            ctx.fillStyle = '#9a9a9a'; ctx.fillRect(x, y, 32, 8);
-        });
-        paintTile(19, function (x, y) {
-            fillNoise(x, y, '#6a6a6a', '#4a4a4a', 50);
-        });
-        paintTile(20, function (x, y) {
-            fillNoise(x, y, '#d8cb8c', '#c2b373', 40);
-            ctx.fillStyle = '#c2b373'; ctx.fillRect(x, y + 14, 32, 2); ctx.fillRect(x + 14, y, 2, 32);
-        });
-        paintTile(21, function (x, y) {
-            ctx.fillStyle = '#8ec8d8'; ctx.fillRect(x, y, 32, 32);
-            ctx.fillStyle = '#b8e0ec'; ctx.fillRect(x + 2, y + 2, 28, 28);
-            ctx.fillStyle = '#e8f8fc'; ctx.fillRect(x + 4, y + 4, 10, 10);
-            ctx.fillStyle = '#6aa8b8'; ctx.fillRect(x + 18, y + 16, 8, 8);
-        });
-        paintTile(22, function (x, y) {
-            fillNoise(x, y, '#c4a06a', '#8f6f3e', 20);
-            ctx.fillStyle = '#6e542d'; ctx.fillRect(x, y + 16, 32, 2);
-            ctx.fillStyle = '#5a4224'; ctx.fillRect(x + 22, y + 14, 4, 4);
-        });
-        paintTile(23, function (x, y) {
-            fillNoise(x, y, '#5a3c1c', '#3a2810', 10);
-            ctx.fillStyle = '#8a6230'; ctx.fillRect(x + 4, y, 4, 32); ctx.fillRect(x + 24, y, 4, 32);
-            ctx.fillStyle = '#c49a54';
-            ctx.fillRect(x + 4, y + 6, 24, 3); ctx.fillRect(x + 4, y + 14, 24, 3); ctx.fillRect(x + 4, y + 22, 24, 3);
-        });
-        paintTile(24, function (x, y) {
-            fillNoise(x, y, '#6b4a28', '#4a3018', 15);
-            ctx.fillStyle = '#8a6230'; ctx.fillRect(x + 6, y, 6, 32); ctx.fillRect(x + 20, y, 6, 32);
-            ctx.fillStyle = '#c49a54'; ctx.fillRect(x + 6, y + 10, 20, 4); ctx.fillRect(x + 6, y + 20, 20, 4);
-        });
-        paintTile(25, function (x, y) {
-            ctx.fillStyle = '#c4a06a'; ctx.fillRect(x, y + 16, 32, 16);
-            ctx.fillStyle = '#e07070'; ctx.fillRect(x, y + 6, 32, 12);
-            ctx.fillStyle = '#f09890'; ctx.fillRect(x + 4, y + 8, 24, 6);
-            ctx.fillStyle = '#8a6230'; ctx.fillRect(x, y + 24, 6, 8); ctx.fillRect(x + 26, y + 24, 6, 8);
-        });
-        paintTile(26, function (x, y) {
-            fillNoise(x, y, '#c4a06a', '#8f6f3e', 20);
-            ctx.fillStyle = '#6e542d'; ctx.fillRect(x, y + 14, 32, 3);
-        });
-        paintTile(27, function (x, y) {
-            fillNoise(x, y, '#8a8a8a', '#5a5a5a', 30);
-            ctx.fillStyle = '#5a5a5a';
-            ctx.fillRect(x, y + 10, 32, 2); ctx.fillRect(x, y + 22, 32, 2);
-            ctx.fillRect(x + 10, y, 2, 10); ctx.fillRect(x + 22, y + 10, 2, 12);
-        });
-        paintTile(28, function (x, y) {
-            fillNoise(x, y, '#a8a8a8', '#7a7a7a', 25);
-        });
-        paintTile(29, function (x, y) {
-            fillNoise(x, y, '#3a2a18', '#2a1c10', 15);
-            ctx.fillStyle = '#6b4a28'; ctx.fillRect(x + 4, y + 20, 24, 8);
-            ctx.fillStyle = '#ff7722'; ctx.fillRect(x + 10, y + 6, 12, 16);
-            ctx.fillStyle = '#ffcc33'; ctx.fillRect(x + 13, y + 4, 6, 10);
-        });
-        paintTile(30, function (x, y) {
-            fillNoise(x, y, '#6b4a28', '#4a3018', 20);
-            ctx.fillStyle = '#c4a06a'; ctx.fillRect(x, y, 32, 4); ctx.fillRect(x, y + 28, 32, 4);
-            ctx.fillStyle = '#8a6230'; ctx.fillRect(x + 8, y + 8, 16, 16);
-        });
-        paintTile(31, function (x, y) {
-            fillNoise(x, y, '#7a7a7a', '#4a4a4a', 30);
-            ctx.fillStyle = '#6b4a28'; ctx.fillRect(x, y, 32, 10);
-            ctx.fillStyle = '#1a1a1a'; ctx.fillRect(x + 8, y + 14, 16, 12);
-            ctx.fillStyle = '#ff7722'; ctx.fillRect(x + 11, y + 18, 10, 6);
-        });
-
         const texture = new THREE.CanvasTexture(canvas);
         texture.magFilter = THREE.NearestFilter;
         texture.minFilter = THREE.NearestFilter;
+        texture.generateMipmaps = false;
         return texture;
     }
 
@@ -4351,6 +4705,14 @@
     bindTap('btn-book', function () { setBookOpen(!bookOpen); });
     bindTap('btn-book-3', function () { setBookOpen(!bookOpen); });
     bindTap('btn-book-f', function () { setBookOpen(!bookOpen); });
+    bindTap('book-up', function () {
+        const g = document.getElementById('book-grid');
+        if (g) g.scrollTop -= 90;
+    });
+    bindTap('book-down', function () {
+        const g = document.getElementById('book-grid');
+        if (g) g.scrollTop += 90;
+    });
     bindTap('btn-craft-all-2', function () { handleCraftOutput(2, 64); });
     bindTap('btn-craft-all-3', function () { handleCraftOutput(3, 64); });
     bindTap('btn-smelt-1', function () { handleSmelt(false); });
@@ -4363,14 +4725,12 @@
     });
     document.querySelectorAll('.book-cats button').forEach(function (btn) {
         const go = function (e) {
-            e.preventDefault();
             e.stopPropagation();
             bookCat = btn.getAttribute('data-cat');
             document.querySelectorAll('.book-cats button').forEach(function (b) { b.className = (b === btn) ? 'on' : ''; });
             renderCraftBook();
         };
         btn.addEventListener('click', go);
-        btn.addEventListener('touchstart', go, { passive: false });
     });
     const searchEl = document.getElementById('book-search');
     if (searchEl) {
@@ -4399,74 +4759,147 @@
         flt.style.display = 'block';
     }
 
+    let invTouchState = null;
+    let skipInvClick = false;
+    function invHandleTap(target, x, y) {
+        if (!target || !target.closest) {
+            if (target && target.parentElement) target = target.parentElement;
+            else return;
+        }
+        if (target === invOverlay) {
+            setInventoryOpen(false);
+            return;
+        }
+        const bookCell = target.closest('.book-cell');
+        if (bookCell && bookCell.dataset.rid) {
+            const rec = findBookRecipe(bookCell.dataset.rid);
+            if (rec) {
+                bookSelected = rec.id;
+                showRecipePreview(rec);
+                renderCraftBook();
+            }
+            return;
+        }
+        const catBtn = target.closest('.book-cats button');
+        if (catBtn) {
+            bookCat = catBtn.getAttribute('data-cat');
+            document.querySelectorAll('.book-cats button').forEach(function (b) {
+                b.className = (b === catBtn) ? 'on' : '';
+            });
+            renderCraftBook();
+            return;
+        }
+        const furn = target.closest('[data-furnace]');
+        if (furn) {
+            handleFurnaceSlotTap(furn.getAttribute('data-furnace'));
+            if (x != null) moveInvCursorFloat(x, y);
+            return;
+        }
+        const out = target.closest('.craft-out');
+        if (out) {
+            handleCraftOutput(parseInt(out.dataset.out, 10));
+            if (x != null) moveInvCursorFloat(x, y);
+            return;
+        }
+        const cs = target.closest('.craft-slot');
+        if (cs && cs.dataset.craft) {
+            const parts = cs.dataset.craft.split(':');
+            handleCraftSlotTap(parseInt(parts[0], 10), parseInt(parts[1], 10));
+            if (x != null) moveInvCursorFloat(x, y);
+            return;
+        }
+        const slot = target.closest('.inv-slot');
+        if (slot) {
+            handleInvSlotTap(parseInt(slot.dataset.index, 10));
+            if (x != null) moveInvCursorFloat(x, y);
+        }
+    }
     invOverlay.addEventListener('touchstart', (e) => {
         e.stopPropagation();
+        const t = e.changedTouches[0];
+        if (!t) return;
         if (e.target === invOverlay) {
             e.preventDefault();
             setInventoryOpen(false);
+            invTouchState = null;
             return;
         }
-        const furn = e.target.closest('[data-furnace]');
-        if (furn) {
-            e.preventDefault();
-            handleFurnaceSlotTap(furn.getAttribute('data-furnace'));
-            if (e.changedTouches && e.changedTouches[0]) moveInvCursorFloat(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
-            return;
-        }
-        const out = e.target.closest('.craft-out');
-        if (out) {
-            e.preventDefault();
-            handleCraftOutput(parseInt(out.dataset.out, 10));
-            if (e.changedTouches && e.changedTouches[0]) moveInvCursorFloat(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
-            return;
-        }
-        const cs = e.target.closest('.craft-slot');
-        if (cs && cs.dataset.craft) {
-            e.preventDefault();
-            const parts = cs.dataset.craft.split(':');
-            handleCraftSlotTap(parseInt(parts[0], 10), parseInt(parts[1], 10));
-            if (e.changedTouches && e.changedTouches[0]) moveInvCursorFloat(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
-            return;
-        }
-        const slot = e.target.closest('.inv-slot');
-        if (slot) {
-            e.preventDefault();
-            handleInvSlotTap(parseInt(slot.dataset.index, 10));
-            if (e.changedTouches && e.changedTouches[0]) {
-                moveInvCursorFloat(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
-            }
-        }
+        invTouchState = { x: t.clientX, y: t.clientY, target: e.target, moved: false };
     }, { passive: false });
     invOverlay.addEventListener('touchmove', (e) => {
-        if (e.changedTouches && e.changedTouches[0]) {
-            moveInvCursorFloat(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
+        if (!invTouchState || !e.changedTouches || !e.changedTouches[0]) return;
+        const t = e.changedTouches[0];
+        if (Math.hypot(t.clientX - invTouchState.x, t.clientY - invTouchState.y) > 10) {
+            invTouchState.moved = true;
         }
+        if (!invTouchState.moved) moveInvCursorFloat(t.clientX, t.clientY);
+    }, { passive: true });
+    invOverlay.addEventListener('touchend', (e) => {
+        const st = invTouchState;
+        invTouchState = null;
+        if (!st || st.moved) return;
+        const t = e.changedTouches && e.changedTouches[0];
+        skipInvClick = true;
+        setTimeout(function () { skipInvClick = false; }, 350);
+        invHandleTap(st.target, t ? t.clientX : st.x, t ? t.clientY : st.y);
     }, { passive: true });
     invOverlay.addEventListener('click', (e) => {
-        if (e.target === invOverlay) {
-            setInventoryOpen(false);
-            return;
-        }
-        const furn = e.target.closest('[data-furnace]');
-        if (furn) { handleFurnaceSlotTap(furn.getAttribute('data-furnace')); moveInvCursorFloat(e.clientX, e.clientY); return; }
-        const out = e.target.closest('.craft-out');
-        if (out) { handleCraftOutput(parseInt(out.dataset.out, 10)); moveInvCursorFloat(e.clientX, e.clientY); return; }
-        const cs = e.target.closest('.craft-slot');
-        if (cs && cs.dataset.craft) {
-            const parts = cs.dataset.craft.split(':');
-            handleCraftSlotTap(parseInt(parts[0], 10), parseInt(parts[1], 10));
-            moveInvCursorFloat(e.clientX, e.clientY);
-            return;
-        }
-        const slot = e.target.closest('.inv-slot');
-        if (!slot) return;
-        if (e.detail === 0) return;
-        handleInvSlotTap(parseInt(slot.dataset.index, 10));
-        moveInvCursorFloat(e.clientX, e.clientY);
+        if (skipInvClick) return;
+        invHandleTap(e.target, e.clientX, e.clientY);
     });
     invOverlay.addEventListener('mousemove', (e) => {
         moveInvCursorFloat(e.clientX, e.clientY);
     });
+
+    (function bindInvDragScroll() {
+        function wheelY(el) {
+            if (!el) return;
+            el.addEventListener('wheel', function (e) {
+                el.scrollTop += e.deltaY;
+                e.preventDefault();
+            }, { passive: false });
+        }
+        function dragY(el) {
+            if (!el) return;
+            let y0 = 0, top0 = 0, on = false, pid = null;
+            el.addEventListener('touchstart', function (e) {
+                if (!e.changedTouches[0]) return;
+                if (el.id === 'inv-panel' && e.target.closest && e.target.closest('#book-grid, #book-scroll-btns')) return;
+                if (e.target && e.target.closest && (
+                    e.target.closest('#book-scroll-btns') ||
+                    e.target.closest('#book-search') ||
+                    e.target.closest('input') ||
+                    (e.target.closest('button') && !e.target.closest('.book-cell'))
+                )) return;
+                const t = e.changedTouches[0];
+                on = true;
+                pid = t.identifier;
+                y0 = t.clientY;
+                top0 = el.scrollTop;
+            }, { passive: true });
+            el.addEventListener('touchmove', function (e) {
+                if (!on) return;
+                let t = null;
+                for (let i = 0; i < e.changedTouches.length; i++) {
+                    if (e.changedTouches[i].identifier === pid) t = e.changedTouches[i];
+                }
+                if (!t) return;
+                const dy = y0 - t.clientY;
+                if (Math.abs(dy) < 2) return;
+                el.scrollTop = top0 + dy;
+                if (invTouchState) invTouchState.moved = true;
+                e.preventDefault();
+                e.stopPropagation();
+            }, { passive: false });
+            function off() { on = false; pid = null; }
+            el.addEventListener('touchend', off, { passive: true });
+            el.addEventListener('touchcancel', off, { passive: true });
+        }
+        dragY(document.getElementById('book-grid'));
+        dragY(document.getElementById('inv-panel'));
+        wheelY(document.getElementById('book-grid'));
+        wheelY(document.getElementById('inv-panel'));
+    })();
 
     document.getElementById('inv-btn-split').addEventListener('touchstart', invUiTap(splitHeldStack), { passive: false });
     document.getElementById('inv-btn-split').addEventListener('click', invUiTap(splitHeldStack));
