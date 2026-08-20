@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Minecraft</title>
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #87ceeb; font-family: "Segoe UI", system-ui, sans-serif; }
+    canvas { display: block; width: 100%; height: 100%; }
+    #hud { position: fixed; inset: 0; pointer-events: none; color: #fff; text-shadow: 0 1px 2px #000; }
+    #cross { position: absolute; left: 50%; top: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px; }
+    #cross::before, #cross::after { content: ""; position: absolute; background: #fff; box-shadow: 0 0 0 1px #000; }
+    #cross::before { left: 8px; top: 2px; width: 2px; height: 14px; }
+    #cross::after { left: 2px; top: 8px; width: 14px; height: 2px; }
+    #hint { position: absolute; left: 16px; top: 16px; font-size: 14px; line-height: 1.5; }
+    #bar { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); display: flex; gap: 4px; }
+    .slot { width: 44px; height: 44px; border: 2px solid #555; background: rgba(0,0,0,.45); box-sizing: border-box; display: flex; align-items: center; justify-content: center; }
+    .slot.on { border-color: #fff; outline: 2px solid #000; }
+    .sw { width: 28px; height: 28px; image-rendering: pixelated; }
+    #lock {
+      position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+      background: rgba(0,0,0,.55); color: #fff; cursor: pointer; z-index: 5;
+    }
+    #lock .box { background: #2d2d2d; border: 4px solid #111; padding: 28px 36px; text-align: center; max-width: 420px; }
+    #lock h1 { margin: 0 0 10px; font-size: 28px; }
+    #lock p { margin: 6px 0; opacity: .9; }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div id="hud">
+    <div id="cross"></div>
+    <div id="hint">WASD — ходьба · мышь — взгляд · пробел — прыжок<br>ЛКМ — ломать · ПКМ — ставить · 1–7 — блок · Esc — меню</div>
+    <div id="bar"></div>
+  </div>
+  <div id="lock">
+    <div class="box">
+      <h1>Minecraft</h1>
+      <p>Нажмите, чтобы играть</p>
+      <p>Кликните по экрану и двигайте мышью</p>
+    </div>
+  </div>
+  <script>
+(function () {
+  const W = 64, H = 40, D = 64;
+  const AIR = 0, GRASS = 1, DIRT = 2, STONE = 3, WOOD = 4, LEAVES = 5, SAND = 6, PLANKS = 7;
+  const NAMES = ["", "трава", "земля", "камень", "дерево", "листва", "песок", "доски"];
+  const COLORS = [
+    [0,0,0],
+    [0.35, 0.72, 0.22],
+    [0.55, 0.36, 0.20],
+    [0.50, 0.50, 0.52],
+    [0.45, 0.28, 0.12],
+    [0.18, 0.55, 0.16],
+    [0.86, 0.78, 0.45],
+    [0.72, 0.58, 0.32]
+  ];
+
+  const world = new Uint8Array(W * H * D);
+  function idx(x, y, z) { return (y * D + z) * W + x; }
+  function inb(x, y, z) { return x >= 0 && y >= 0 && z >= 0 && x < W && y < H && z < D; }
+  function get(x, y, z) { return inb(x,y,z) ? world[idx(x,y,z)] : 0; }
+  function set(x, y, z, v) { if (inb(x,y,z)) world[idx(x,y,z)] = v; }
+
+  function hash(x, z) {
+    let n = x * 374761393 + z * 668265263;
+    n = (n ^ (n >> 13)) * 1274126177;
+    return ((n ^ (n >> 16)) >>> 0) / 4294967296;
+  }
+  function noise(x, z) {
+    const xi = Math.floor(x), zi = Math.floor(z);
+    const xf = x - xi, zf = z - zi;
+    const u = xf * xf * (3 - 2 * xf);
+    const v = zf * zf * (3 - 2 * zf);
+    const a = hash(xi, zi), b = hash(xi+1, zi), c = hash(xi, zi+1), d = hash(xi+1, zi+1);
+    return a + (b-a)*u + (c-a)*v + (a-b-c+d)*u*v;
+  }
+  function fbm(x, z) {
+    return noise(x*0.08, z*0.08)*0.6 + noise(x*0.18, z*0.18)*0.28 + noise(x*0.4, z*0.4)*0.12;
+  }
+
+  for (let z = 0; z < D; z++) {
+    for (let x = 0; x < W; x++) {
+      const h = Math.floor(10 + fbm(x, z) * 14);
+      const beach = h < 13;
+      for (let y = 0; y <= h && y < H; y++) {
+        let t = STONE;
+        if (y === h) t = beach ? SAND : GRASS;
+        else if (y >= h - 3) t = beach ? SAND : DIRT;
+        set(x, y, z, t);
+      }
+    }
+  }
+  function tree(tx, tz) {
+    const h = Math.floor(10 + fbm(tx, tz) * 14);
+    if (get(tx, h, tz) !== GRASS) return;
+    const th = 4 + (hash(tx+3, tz+7) * 3 | 0);
+    for (let i = 1; i <= th; i++) set(tx, h+i, tz, WOOD);
+    const top = h + th;
+    for (let dy = -2; dy <= 2; dy++)
+      for (let dx = -2; dx <= 2; dx++)
+        for (let dz = -2; dz <= 2; dz++) {
+          if (Math.abs(dx)+Math.abs(dy)+Math.abs(dz) > 4) continue;
+          if (dx===0 && dz===0 && dy<=0) continue;
+          if (get(tx+dx, top+dy, tz+dz) === AIR) set(tx+dx, top+dy, tz+dz, LEAVES);
+        }
+  }
+  for (let z = 4; z < D-4; z += 5)
+    for (let x = 4; x < W-4; x += 5)
+      if (hash(x*9, z*11) > 0.62) tree(x + (hash(x,z)*3|0), z + (hash(z,x)*3|0));
+
+  const canvas = document.getElementById("c");
+  const gl = canvas.getContext("webgl", { antialias: false });
+  if (!gl) { alert("Нужен WebGL"); return; }
+
+  const vs = `
+    attribute vec3 aPos;
+    attribute vec3 aNrm;
+    attribute vec3 aCol;
+    uniform mat4 uMVP;
+    varying vec3 vCol;
+    void main() {
+      float light = 0.45 + 0.55 * max(dot(normalize(aNrm), normalize(vec3(0.4,1.0,0.35))), 0.0);
+      vCol = aCol * light;
+      gl_Position = uMVP * vec4(aPos, 1.0);
+    }
+  `;
+  const fs = `
+    precision mediump float;
+    varying vec3 vCol;
+    void main() { gl_FragColor = vec4(vCol, 1.0); }
+  `;
+  function compile(type, src) {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+    return s;
+  }
+  const prog = gl.createProgram();
+  gl.attachShader(prog, compile(gl.VERTEX_SHADER, vs));
+  gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(prog);
+  gl.useProgram(prog);
+  const aPos = gl.getAttribLocation(prog, "aPos");
+  const aNrm = gl.getAttribLocation(prog, "aNrm");
+  const aCol = gl.getAttribLocation(prog, "aCol");
+  const uMVP = gl.getUniformLocation(prog, "uMVP");
+
+  const faces = [
+    { n:[0,1,0], v:[[0,1,0],[0,1,1],[1,1,1],[1,1,0]] },
+    { n:[0,-1,0], v:[[0,0,0],[1,0,0],[1,0,1],[0,0,1]] },
+    { n:[0,0,1], v:[[0,0,1],[1,0,1],[1,1,1],[0,1,1]] },
+    { n:[0,0,-1], v:[[1,0,0],[0,0,0],[0,1,0],[1,1,0]] },
+    { n:[1,0,0], v:[[1,0,0],[1,1,0],[1,1,1],[1,0,1]] },
+    { n:[-1,0,0], v:[[0,0,1],[0,1,1],[0,1,0],[0,0,0]] }
+  ];
+
+  let vbo = gl.createBuffer();
+  let vertexCount = 0;
+
+  function shade(id, ny) {
+    const c = COLORS[id];
+    if (id === GRASS && ny > 0.5) return [0.28, 0.78, 0.22];
+    if (id === GRASS && ny < -0.5) return COLORS[DIRT];
+    return c;
+  }
+
+  function rebuild() {
+    const pos = [], nrm = [], col = [];
+    for (let y = 0; y < H; y++)
+      for (let z = 0; z < D; z++)
+        for (let x = 0; x < W; x++) {
+          const id = get(x,y,z);
+          if (!id) continue;
+          for (const f of faces) {
+            const nx = x + f.n[0], ny = y + f.n[1], nz = z + f.n[2];
+            if (get(nx,ny,nz)) continue;
+            const rgb = shade(id, f.n[1]);
+            const q = f.v;
+            const tri = [0,1,2, 0,2,3];
+            for (const i of tri) {
+              pos.push(x+q[i][0], y+q[i][1], z+q[i][2]);
+              nrm.push(f.n[0], f.n[1], f.n[2]);
+              col.push(rgb[0], rgb[1], rgb[2]);
+            }
+          }
+        }
+    const n = pos.length / 3;
+    vertexCount = n;
+    const data = new Float32Array(n * 9);
+    for (let i = 0; i < n; i++) {
+      data[i*9+0] = pos[i*3]; data[i*9+1] = pos[i*3+1]; data[i*9+2] = pos[i*3+2];
+      data[i*9+3] = nrm[i*3]; data[i*9+4] = nrm[i*3+1]; data[i*9+5] = nrm[i*3+2];
+      data[i*9+6] = col[i*3]; data[i*9+7] = col[i*3+1]; data[i*9+8] = col[i*3+2];
+    }
+    gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+    gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+  }
+  rebuild();
+
+  function resize() {
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+    canvas.width = innerWidth * dpr;
+    canvas.height = innerHeight * dpr;
+    gl.viewport(0, 0, canvas.width, canvas.height);
+  }
+  addEventListener("resize", resize);
+  resize();
+
+  let px = 32.5, py = 28, pz = 32.5, yaw = 0.4, pitch = -0.25;
+  let vx = 0, vy = 0, vz = 0;
+  const keys = Object.create(null);
+  let selected = GRASS;
+  let locked = false;
+
+  const lockEl = document.getElementById("lock");
+  lockEl.onclick = () => canvas.requestPointerLock();
+  document.addEventListener("pointerlockchange", () => {
+    locked = document.pointerLockElement === canvas;
+    lockEl.style.display = locked ? "none" : "flex";
+  });
+  addEventListener("mousemove", e => {
+    if (!locked) return;
+    yaw += e.movementX * 0.0022;
+    pitch -= e.movementY * 0.0022;
+    pitch = Math.max(-1.5, Math.min(1.5, pitch));
+  });
+  addEventListener("keydown", e => {
+    keys[e.code] = true;
+    const n = e.code.match(/^Digit([1-7])$/);
+    if (n) selected = +n[1];
+    renderBar();
+  });
+  addEventListener("keyup", e => { keys[e.code] = false; });
+  addEventListener("mousedown", e => {
+    if (!locked) return;
+    const hit = raycast();
+    if (!hit) return;
+    if (e.button === 0) {
+      set(hit.x, hit.y, hit.z, AIR);
+      rebuild();
+    } else if (e.button === 2) {
+      const nx = hit.x + hit.nx, ny = hit.y + hit.ny, nz = hit.z + hit.nz;
+      if (!aabbBlock(px, py, pz, nx, ny, nz)) {
+        set(nx, ny, nz, selected);
+        rebuild();
+      }
+    }
+  });
+  addEventListener("contextmenu", e => e.preventDefault());
+
+  function aabbBlock(px, py, pz, bx, by, bz) {
+    const r = 0.3, h = 1.7;
+    return px+r > bx && px-r < bx+1 && pz+r > bz && pz-r < bz+1 && py < by+1 && py+h > by;
+  }
+
+  function collide(nx, ny, nz) {
+    const r = 0.3, h = 1.65;
+    const x0 = Math.floor(nx-r), x1 = Math.floor(nx+r);
+    const y0 = Math.floor(ny), y1 = Math.floor(ny+h);
+    const z0 = Math.floor(nz-r), z1 = Math.floor(nz+r);
+    for (let y = y0; y <= y1; y++)
+      for (let z = z0; z <= z1; z++)
+        for (let x = x0; x <= x1; x++)
+          if (get(x,y,z)) return true;
+    return false;
+  }
+
+  function raycast() {
+    const dx = Math.cos(pitch)*Math.sin(yaw);
+    const dy = Math.sin(pitch);
+    const dz = Math.cos(pitch)*Math.cos(yaw);
+    let x = px, y = py + 1.55, z = pz;
+    let lx = Math.floor(x), ly = Math.floor(y), lz = Math.floor(z);
+    for (let i = 0; i < 80; i++) {
+      x += dx * 0.08; y += dy * 0.08; z += dz * 0.08;
+      const bx = Math.floor(x), by = Math.floor(y), bz = Math.floor(z);
+      if (get(bx,by,bz)) {
+        return { x: bx, y: by, z: bz, nx: lx-bx, ny: ly-by, nz: lz-bz };
+      }
+      lx = bx; ly = by; lz = bz;
+    }
+    return null;
+  }
+
+  function mul(a, b) {
+    const o = new Float32Array(16);
+    for (let c = 0; c < 4; c++)
+      for (let r = 0; r < 4; r++)
+        o[c*4+r] = a[0*4+r]*b[c*4+0] + a[1*4+r]*b[c*4+1] + a[2*4+r]*b[c*4+2] + a[3*4+r]*b[c*4+3];
+    return o;
+  }
+  function perspective(fovy, aspect, near, far) {
+    const f = 1 / Math.tan(fovy/2), nf = 1/(near-far);
+    const m = new Float32Array(16);
+    m[0]=f/aspect; m[5]=f; m[10]=(far+near)*nf; m[11]=-1; m[14]=2*far*near*nf;
+    return m;
+  }
+  function lookAt() {
+    const cx = Math.cos(pitch)*Math.sin(yaw);
+    const cy = Math.sin(pitch);
+    const cz = Math.cos(pitch)*Math.cos(yaw);
+    const ex = px, ey = py+1.55, ez = pz;
+    const zx = -cx, zy = -cy, zz = -cz;
+    let xx = -zz, xy = 0, xz = zx;
+    let xl = Math.hypot(xx,xy,xz) || 1; xx/=xl; xy/=xl; xz/=xl;
+    const yx = zy*xz - zz*xy, yy = zz*xx - zx*xz, yz = zx*xy - zy*xx;
+    const m = new Float32Array(16);
+    m[0]=xx; m[1]=yx; m[2]=zx;
+    m[4]=xy; m[5]=yy; m[6]=zy;
+    m[8]=xz; m[9]=yz; m[10]=zz;
+    m[12]=-(xx*ex+xy*ey+xz*ez);
+    m[13]=-(yx*ex+yy*ey+yz*ez);
+    m[14]=-(zx*ex+zy*ey+zz*ez);
+    m[15]=1;
+    return m;
+  }
+
+  const bar = document.getElementById("bar");
+  function renderBar() {
+    bar.innerHTML = "";
+    for (let i = 1; i <= 7; i++) {
+      const s = document.createElement("div");
+      s.className = "slot" + (selected === i ? " on" : "");
+      const sw = document.createElement("div");
+      sw.className = "sw";
+      const c = COLORS[i];
+      sw.style.background = `rgb(${c[0]*255|0},${c[1]*255|0},${c[2]*255|0})`;
+      s.appendChild(sw);
+      bar.appendChild(s);
+    }
+  }
+  renderBar();
+
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+
+    const speed = keys.ShiftLeft ? 12 : 6;
+    const fx = Math.sin(yaw), fz = Math.cos(yaw);
+    let mx = 0, mz = 0;
+    if (keys.KeyW) { mx += fx; mz += fz; }
+    if (keys.KeyS) { mx -= fx; mz -= fz; }
+    if (keys.KeyA) { mx += fz; mz -= fx; }
+    if (keys.KeyD) { mx -= fz; mz += fx; }
+    const ml = Math.hypot(mx, mz);
+    if (ml > 0) { mx = mx/ml*speed; mz = mz/ml*speed; }
+    vx = mx; vz = mz;
+    vy -= 28 * dt;
+    if (keys.Space && collide(px, py-0.08, pz)) vy = 8.4;
+
+    let nx = px + vx * dt;
+    if (!collide(nx, py, pz)) px = nx;
+    let nz = pz + vz * dt;
+    if (!collide(px, py, nz)) pz = nz;
+    let ny = py + vy * dt;
+    if (!collide(px, ny, pz)) py = ny; else vy = 0;
+    if (py < -20) { px = 32.5; py = 30; pz = 32.5; vy = 0; }
+
+    const proj = perspective(Math.PI/3, canvas.width/canvas.height, 0.08, 200);
+    const view = lookAt();
+    const mvp = mul(proj, view);
+    gl.clearColor(0.53, 0.81, 0.92, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    gl.enable(gl.DEPTH_TEST);
+    gl.enable(gl.CULL_FACE);
+    gl.useProgram(prog);
+    gl.uniformMatrix4fv(uMVP, false, mvp);
+    gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+    gl.enableVertexAttribArray(aPos);
+    gl.enableVertexAttribArray(aNrm);
+    gl.enableVertexAttribArray(aCol);
+    gl.vertexAttribPointer(aPos, 3, gl.FLOAT, false, 36, 0);
+    gl.vertexAttribPointer(aNrm, 3, gl.FLOAT, false, 36, 12);
+    gl.vertexAttribPointer(aCol, 3, gl.FLOAT, false, 36, 24);
+    gl.drawArrays(gl.TRIANGLES, 0, vertexCount);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+  </script>
+</body>
+</html>
