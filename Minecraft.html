@@ -13,9 +13,15 @@
             -webkit-user-select: none;
             touch-action: none;
         }
-        #inv-overlay, #inv-panel, #recipe-book, #book-grid, #book-scroll-wrap {
+        #inv-overlay, #inv-panel, #recipe-book, #book-grid, #book-scroll-wrap,
+        #chat-overlay, #chat-log, #chat-panel {
             touch-action: pan-y !important;
             -webkit-overflow-scrolling: touch;
+        }
+        #chat-overlay input, #chat-overlay textarea {
+            touch-action: manipulation !important;
+            user-select: text !important;
+            -webkit-user-select: text !important;
         }
         body, html {
             width: 100%;
@@ -781,6 +787,86 @@
             font-size: 13px;
         }
         #trade-panel button.alt { background: #8b8b8b; }
+        #speech-layer {
+            position: absolute; inset: 0;
+            pointer-events: none; z-index: 35;
+            overflow: hidden;
+        }
+        .speech-bubble {
+            position: absolute;
+            transform: translate(-50%, -100%);
+            background: #f4f0dc;
+            color: #222;
+            border: 2px solid #000;
+            border-radius: 8px;
+            padding: 5px 8px;
+            font-size: 12px;
+            max-width: 180px;
+            line-height: 1.25;
+            box-shadow: 2px 2px 0 #000;
+            white-space: normal;
+        }
+        .speech-bubble b { display: block; font-size: 10px; color: #5a3c18; }
+        #chat-overlay {
+            position: absolute; inset: 0;
+            background: rgba(0,0,0,0.55);
+            display: none;
+            align-items: flex-end;
+            justify-content: center;
+            z-index: 86;
+            pointer-events: auto;
+        }
+        #chat-panel {
+            width: min(420px, 96vw);
+            max-height: 78vh;
+            background: #c6c6c6;
+            border: 3px solid #000;
+            padding: 8px;
+            color: #222;
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 8px;
+        }
+        #chat-panel h2 { font-size: 14px; margin: 0 0 6px; }
+        #chat-log {
+            background: #1b1b1b;
+            color: #eee;
+            min-height: 110px;
+            max-height: 32vh;
+            overflow-y: auto;
+            padding: 8px;
+            font-size: 13px;
+            line-height: 1.35;
+            flex: 1;
+        }
+        #chat-log .me { color: #8fd64a; }
+        #chat-log .them { color: #ffe08a; }
+        #chat-quick { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
+        #chat-quick button {
+            flex: 1 1 auto;
+            padding: 7px 8px;
+            font-size: 12px;
+            border: 2px solid #373737;
+            background: #8a8a5a;
+            color: #fff;
+            font-weight: bold;
+        }
+        #chat-row { display: flex; gap: 6px; }
+        #chat-input {
+            flex: 1;
+            padding: 10px 8px;
+            font-size: 16px;
+            border: 2px solid #373737;
+        }
+        #chat-send, #chat-trade, #chat-close {
+            padding: 10px 10px;
+            border: 2px solid #373737;
+            font-weight: bold;
+            color: #fff;
+        }
+        #chat-send { background: #5a8f3a; }
+        #chat-trade { background: #3d6e9a; width: 100%; margin-top: 6px; }
+        #chat-close { background: #8b8b8b; width: 100%; margin-top: 4px; }
         #world-loading {
             position: absolute;
             inset: 0;
@@ -990,6 +1076,7 @@
             <button id="inv-close" type="button">Закрыть</button>
         </div>
     </div>
+    <div id="speech-layer"></div>
     <div id="trade-overlay">
         <div id="trade-panel">
             <h2>Житель</h2>
@@ -998,6 +1085,25 @@
             <button type="button" data-trade="gem">6 мяса → 1 изумруд</button>
             <button type="button" data-trade="pick">1 изумруд → кам. кирка</button>
             <button type="button" id="trade-close" class="alt">Закрыть</button>
+        </div>
+    </div>
+    <div id="chat-overlay">
+        <div id="chat-panel">
+            <h2 id="chat-title">Житель</h2>
+            <div id="chat-log"></div>
+            <div id="chat-quick">
+                <button type="button" data-chat="Привет!">Привет</button>
+                <button type="button" data-chat="Как дела?">Как дела?</button>
+                <button type="button" data-chat="Что продаёшь?">Торговля</button>
+                <button type="button" data-chat="Где голем?">Голем</button>
+                <button type="button" data-chat="Что за остров?">Остров</button>
+            </div>
+            <div id="chat-row">
+                <input id="chat-input" type="text" placeholder="Напиши жителю…" autocomplete="off" autocorrect="on">
+                <button type="button" id="chat-send">Ок</button>
+            </div>
+            <button type="button" id="chat-trade">Открыть торговлю</button>
+            <button type="button" id="chat-close">Закрыть</button>
         </div>
     </div>
     <div id="inv-toast"></div>
@@ -2314,6 +2420,9 @@
     let inventory = [];
     let invOpen = false;
     let tradeOpen = false;
+    let chatOpen = false;
+    let chatMob = null;
+    const chatHistory = [];
     let cursorStack = { type: 0, count: 0 };
     let craft2 = null;
     let craft3 = null;
@@ -4680,6 +4789,13 @@
             this.sheared = false;
             this.shearTimer = 0;
             this.attackCd = 0;
+            this.talkCd = 0;
+            this.bubble = null;
+            this.talkWith = null;
+            if (type === 'villager') {
+                const names = ['Иван','Пётр','Олег','Борис','Глеб','Тихон','Анна','Маша','Катя','Ника','Федя','Лёша'];
+                this.vilName = names[(Math.abs(Math.floor(x * 13 + z * 17)) | 0) % names.length];
+            }
             this.ridden = false;
             this.onShoulder = false;
             this.sitting = false;
@@ -4801,6 +4917,12 @@
                     this.vel.z = 0;
                 }
                 this._lp.copy(this.pos);
+                if (this.type === 'villager' && this.talkWith && this.talkWith.health > 0) {
+                    this.yaw = Math.atan2(this.talkWith.pos.x - this.pos.x, this.talkWith.pos.z - this.pos.z);
+                    this.state = 'idle';
+                    this.vel.x = 0;
+                    this.vel.z = 0;
+                }
             }
 
             this.idleAnim += dt;
@@ -4938,6 +5060,12 @@
                 }
             }
             if (this.attackCd > 0) this.attackCd -= dt;
+            if (this.talkCd > 0) this.talkCd -= dt;
+            if (this.bubble) {
+                this.bubble.t -= dt;
+                if (this.bubble.t <= 0) this.bubble = null;
+            }
+            if (this.talkWith && this.talkWith.health <= 0) this.talkWith = null;
             if ((this.type === 'wolf' || this.type === 'bee' || this.type === 'golem' || this.type === 'llama') && this.angry && !this.tamed && this.attackCd <= 0) {
                 const d = this.pos.distanceTo(player.pos);
                 if (d < this.radius + player.radius + 0.45) {
@@ -6641,7 +6769,7 @@
     }
 
     function isHudTouch(touch) {
-        if (invOpen || tradeOpen) return true;
+        if (invOpen || tradeOpen || chatOpen) return true;
         if (touchHitsRect(touch, document.getElementById('hotbar'), 12)) return true;
         if (touchHitsRect(touch, document.getElementById('btn-fullscreen'), 8)) return true;
         if (touchHitsRect(touch, document.getElementById('btn-inventory'), 8)) return true;
@@ -6651,7 +6779,7 @@
         if (!t || !t.closest) return false;
         return !!(t.closest('#hotbar') || t.closest('.slot') || t.closest('.action-btn') ||
                   t.closest('#respawn-btn') || t.closest('#btn-fullscreen') || t.closest('#btn-inventory') ||
-                  t.closest('#inv-overlay') || t.closest('#trade-overlay') || t.closest('#death-screen'));
+                  t.closest('#inv-overlay') || t.closest('#trade-overlay') || t.closest('#chat-overlay') || t.closest('#death-screen'));
     }
 
     window.addEventListener('touchstart', (e) => {
@@ -6854,7 +6982,7 @@
     function updateMining(dt) {
         const bar = document.getElementById('mine-bar');
         const fill = document.getElementById('mine-bar-fill');
-        if (player.isDead || invOpen || tradeOpen) {
+        if (player.isDead || invOpen || tradeOpen || chatOpen) {
             if (mining || minePending) stopMining();
             return;
         }
@@ -6894,6 +7022,204 @@
             setBlock(mining.x, mining.y, mining.z, BLOCK_EMPTY);
             stopMining();
         }
+    }
+
+    const VILLAGER_GOSSIP = [
+        'Колодец сегодня чистый.',
+        'Голем опять у воды стоит.',
+        'Слышал, за морем другие острова.',
+        'Нужна лодка, если плыть далеко.',
+        'Железо дорого, уголь бери.',
+        'В доме тепло, не то что в поле.',
+        'Не ломай нам забор, ладно?',
+        'Ночью лучше сидеть дома.',
+        'Путь до соседнего острова долгий.',
+        'У меня шерсть на жаркое меняют.',
+        'Этот странник с мечом… ну-ну.',
+        'Двери чини, а то сквозняк.'
+    ];
+    function villagerSay(mob, text, dur) {
+        if (!mob) return;
+        mob.bubble = { text: String(text).slice(0, 80), t: dur || 3.4 };
+    }
+    function gossipLine(a, b) {
+        const i = Math.abs(Math.floor((a.pos.x + b.pos.z) * 3 + performance.now() * 0.001)) % VILLAGER_GOSSIP.length;
+        return VILLAGER_GOSSIP[i];
+    }
+    function updateVillagerSocial(dt) {
+        const vs = [];
+        for (let i = 0; i < mobs.length; i++) {
+            if (mobs[i].type === 'villager' && mobs[i].health > 0) vs.push(mobs[i]);
+        }
+        for (let i = 0; i < vs.length; i++) {
+            for (let j = i + 1; j < vs.length; j++) {
+                const a = vs[i], b = vs[j];
+                const d = a.pos.distanceTo(b.pos);
+                if (d > 2.8 || d < 0.4) continue;
+                if (a.talkCd > 0 || b.talkCd > 0) continue;
+                if (chatMob === a || chatMob === b) continue;
+                a.talkWith = b;
+                b.talkWith = a;
+                a.talkCd = 9 + Math.random() * 7;
+                b.talkCd = a.talkCd;
+                const l1 = gossipLine(a, b);
+                const l2 = gossipLine(b, a);
+                villagerSay(a, l1, 3.2);
+                setTimeout(function () { if (b.health > 0) villagerSay(b, l2, 3.2); }, 1400);
+                setTimeout(function () { a.talkWith = null; b.talkWith = null; }, 3800);
+            }
+        }
+        for (let i = 0; i < vs.length; i++) {
+            const v = vs[i];
+            if (chatOpen) continue;
+            const d = v.pos.distanceTo(player.pos);
+            if (d < 3.2 && d > 0.6 && v.talkCd <= 0 && Math.random() < 0.004) {
+                v.talkCd = 12;
+                villagerSay(v, (v.vilName || 'Житель') + ': путник, заговори со мной!', 3.5);
+            }
+        }
+    }
+    function updateSpeechBubbles() {
+        const layer = document.getElementById('speech-layer');
+        if (!layer || !camera) return;
+        const w = window.innerWidth, h = window.innerHeight;
+        let html = '';
+        const tmp = new THREE.Vector3();
+        for (let i = 0; i < mobs.length; i++) {
+            const mob = mobs[i];
+            if (!mob.bubble || mob.bubble.t <= 0) continue;
+            tmp.set(mob.pos.x, mob.pos.y + mob.height + 0.2, mob.pos.z);
+            tmp.project(camera);
+            if (tmp.z > 1) continue;
+            const x = (tmp.x * 0.5 + 0.5) * w;
+            const y = (-tmp.y * 0.5 + 0.5) * h;
+            if (x < 8 || x > w - 8 || y < 20 || y > h - 40) continue;
+            const who = mob.vilName ? '<b>' + mob.vilName + '</b>' : '';
+            html += '<div class="speech-bubble" style="left:' + x.toFixed(0) + 'px;top:' + y.toFixed(0) + 'px">' + who + escapeChat(mob.bubble.text) + '</div>';
+        }
+        layer.innerHTML = html;
+    }
+    function escapeChat(s) {
+        return String(s).replace(/[&<>]/g, function (c) { return ({'&':'&amp;','<':'&lt;','>':'&gt;'})[c]; });
+    }
+    function villagerBrain(mob, text) {
+        const t = (text || '').toLowerCase();
+        const n = mob.vilName || 'Житель';
+        const mood = (n.length + Math.floor(mob.pos.x)) % 3;
+        if (/привет|здравст|хай|hello|добрый/.test(t)) {
+            return mood === 2 ? 'Ну привет. Чего надо?' : ('Привет, путник! Я ' + n + '.');
+        }
+        if (/как дела|что нового|жизнь/.test(t)) {
+            return ['Дела? Деревня стоит, голем охраняет.', 'Нормально. Колодец не пересох — уже хорошо.', 'Устали немного. Ходишь, болтаешь…'][mood];
+        }
+        if (/торг|куп|прод|обмен|цен|кирк|желез|изумруд|шерст/.test(t)) {
+            return 'Торгую: уголь на железо, шерсть на жаркое, мясо на изумруд. Нажми «Открыть торговлю».';
+        }
+        if (/голем|железн/.test(t)) {
+            return 'Голем наш. У колодца патрулирует, в дома не лезет. Не бей его.';
+        }
+        if (/дом|деревн|жить|кроват/.test(t)) {
+            return 'Это наша деревня. Дома с дверями и стёклами. Не ломай, чини если что.';
+        }
+        if (/остров|море|океан|лодк|плыть|далеко/.test(t)) {
+            return 'Мы на острове. Дальше океан. Скрафти лодку из досок, если хочешь плыть.';
+        }
+        if (/еда|есть|голод|мясо|хлеб/.test(t)) {
+            return 'Жаркое из шерсти по торгу, или охоться в поле. Коров не трогай без нужды.';
+        }
+        if (/руд|алмаз|шахт|копа/.test(t)) {
+            return 'Копай глубже. Уголь выше, алмазы внизу. Кирка нужна.';
+        }
+        if (/имя|кто ты|как зовут/.test(t)) {
+            return 'Я ' + n + ', житель этой деревни.';
+        }
+        if (/пока|бывай|до свидан/.test(t)) {
+            return mood === 2 ? 'Ну иди уж.' : 'Приходи ещё. Дверь не забудь закрыть.';
+        }
+        if (/помощь|помоги|что делать/.test(t)) {
+            return 'Выживай: дерево, лодка, еда, руда. С нами можно торговать и болтать.';
+        }
+        const fallback = [
+            'Хм. Скажи проще: привет, торговля, остров, голем.',
+            'Не понял. Спроси про дом, еду или кирку.',
+            'Мы простые люди. Говори о деле.'
+        ];
+        return fallback[mood];
+    }
+    function appendChat(cls, who, text) {
+        chatHistory.push({ cls: cls, who: who, text: text });
+        if (chatHistory.length > 40) chatHistory.shift();
+        const log = document.getElementById('chat-log');
+        if (!log) return;
+        const line = document.createElement('div');
+        line.className = cls;
+        line.textContent = who + ': ' + text;
+        log.appendChild(line);
+        log.scrollTop = log.scrollHeight;
+    }
+    function openVillagerChat(mob) {
+        chatMob = mob;
+        chatOpen = true;
+        const ov = document.getElementById('chat-overlay');
+        if (ov) ov.style.display = 'flex';
+        const title = document.getElementById('chat-title');
+        if (title) title.textContent = 'Чат · ' + (mob.vilName || 'Житель');
+        const log = document.getElementById('chat-log');
+        if (log) log.innerHTML = '';
+        chatHistory.length = 0;
+        const greet = villagerBrain(mob, 'привет');
+        villagerSay(mob, greet, 3);
+        appendChat('them', mob.vilName || 'Житель', greet);
+        const inp = document.getElementById('chat-input');
+        if (inp) {
+            inp.value = '';
+            setTimeout(function () { try { inp.focus(); } catch (e) {} }, 200);
+        }
+    }
+    function closeVillagerChat() {
+        chatOpen = false;
+        chatMob = null;
+        const ov = document.getElementById('chat-overlay');
+        if (ov) ov.style.display = 'none';
+        const inp = document.getElementById('chat-input');
+        if (inp) inp.blur();
+    }
+    function sendVillagerChat(text) {
+        if (!chatMob || !text) return;
+        const msg = String(text).trim();
+        if (!msg) return;
+        appendChat('me', 'Ты', msg);
+        const ans = villagerBrain(chatMob, msg);
+        villagerSay(chatMob, ans, 3.6);
+        appendChat('them', chatMob.vilName || 'Житель', ans);
+        const inp = document.getElementById('chat-input');
+        if (inp) inp.value = '';
+    }
+    function bindVillagerChatUi() {
+        const ov = document.getElementById('chat-overlay');
+        if (!ov) return;
+        ov.addEventListener('touchstart', function (e) { e.stopPropagation(); }, { passive: true });
+        const send = document.getElementById('chat-send');
+        const inp = document.getElementById('chat-input');
+        const close = document.getElementById('chat-close');
+        const trade = document.getElementById('chat-trade');
+        function go() { sendVillagerChat(inp && inp.value); }
+        if (send) send.addEventListener('click', function (e) { e.preventDefault(); go(); });
+        if (inp) inp.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') { e.preventDefault(); go(); }
+        });
+        if (close) close.addEventListener('click', function (e) { e.preventDefault(); closeVillagerChat(); });
+        if (trade) trade.addEventListener('click', function (e) {
+            e.preventDefault();
+            closeVillagerChat();
+            setTradeOpen(true);
+        });
+        ov.querySelectorAll('[data-chat]').forEach(function (b) {
+            b.addEventListener('click', function (e) {
+                e.preventDefault();
+                sendVillagerChat(b.getAttribute('data-chat'));
+            });
+        });
     }
 
     function setTradeOpen(on) {
@@ -7064,7 +7390,7 @@
             return true;
         }
         if (mob.type === 'villager' && !isSwordItem(tool)) {
-            setTradeOpen(true);
+            openVillagerChat(mob);
             return true;
         }
         if (mob.type === 'frog' && !isSwordItem(tool)) {
@@ -7088,7 +7414,7 @@
         return true;
     }
     function tryMeleeAt(clientX, clientY) {
-        if (player.isDead || invOpen || tradeOpen) return;
+        if (player.isDead || invOpen || tradeOpen || chatOpen) return;
         const hit = raycastFromScreen(clientX, clientY, 5.2);
         if (hit.hit && hit.isMob) {
             const tool = heldType();
@@ -7294,6 +7620,7 @@
             if (btn) doVillagerTrade(btn.getAttribute('data-trade'));
             if (e.target === ov || (e.target && e.target.id === 'trade-close')) setTradeOpen(false);
         });
+        bindVillagerChatUi();
         ov.querySelectorAll('button').forEach(function (b) {
             b.addEventListener('touchstart', function (e) {
                 e.preventDefault(); e.stopPropagation();
@@ -7567,6 +7894,8 @@
         updateDayNightCycle(dt);
         updateDroppedItems(dt);
         updateMobsManager(dt);
+        updateVillagerSocial(dt);
+        updateSpeechBubbles();
 
         if (cloudsMesh) {
             const windSpeed = 0.8;
@@ -7648,646 +7977,8 @@
     
     
     
+    
     </script><!--DOWNLOAD-PAD
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
