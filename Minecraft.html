@@ -1093,10 +1093,11 @@
             <div id="chat-log"></div>
             <div id="chat-quick">
                 <button type="button" data-chat="Привет!">Привет</button>
-                <button type="button" data-chat="Как дела?">Как дела?</button>
+                <button type="button" data-chat="Кто ты?">Кто ты?</button>
+                <button type="button" data-chat="Расскажи историю">История</button>
+                <button type="button" data-chat="Что случилось?">Буря</button>
                 <button type="button" data-chat="Что продаёшь?">Торговля</button>
-                <button type="button" data-chat="Где голем?">Голем</button>
-                <button type="button" data-chat="Что за остров?">Остров</button>
+                <button type="button" data-chat="Что мне делать?">Сюжет</button>
             </div>
             <div id="chat-row">
                 <input id="chat-input" type="text" placeholder="Напиши жителю…" autocomplete="off" autocorrect="on">
@@ -4793,8 +4794,8 @@
             this.bubble = null;
             this.talkWith = null;
             if (type === 'villager') {
-                const names = ['Иван','Пётр','Олег','Борис','Глеб','Тихон','Анна','Маша','Катя','Ника','Федя','Лёша'];
-                this.vilName = names[(Math.abs(Math.floor(x * 13 + z * 17)) | 0) % names.length];
+                this.vilId = 'wanderer';
+                this.vilName = 'Житель';
             }
             this.ridden = false;
             this.onShoulder = false;
@@ -6341,20 +6342,26 @@
         camera.position.set(player.pos.x, player.pos.y + player.eyeHeight, player.pos.z);
         player.boating = false;
         seedVillageMobs();
-        setTimeout(function () { showInvToast('Пройди по полю — там деревня'); }, 1200);
-        setTimeout(function () { showInvToast('Тапни жителя без меча — торговля'); }, 3400);
+        setTimeout(function () { showInvToast('Ты вынесся бурей. Деревня впереди'); }, 1200);
+        setTimeout(function () { showInvToast('Тапни Ивана — он знает историю'); }, 3400);
         hideWorldLoading();
     }
     function seedVillageMobs() {
         const spots = [
-            [20.5, 12.5], [17.5, 16.5], [23.5, 16.5], [20.5, 19.5], [18.5, 13.5]
+            ['ivan', 20.5, 12.5],
+            ['masha', 17.5, 16.5],
+            ['boris', 23.5, 16.5],
+            ['anna', 20.5, 19.5],
+            ['gleb', 18.5, 13.5]
         ];
         for (let i = 0; i < spots.length; i++) {
             if (mobs.length >= 20) break;
-            const x = spots[i][0], z = spots[i][1];
+            const id = spots[i][0], x = spots[i][1], z = spots[i][2];
             const m = new Mob('villager', x, VILLAGE_Y + 1.05, z);
             m.homeX = VILLAGE_OX + 0.5;
             m.homeZ = VILLAGE_OZ + 0.5;
+            const card = VILLAGER_STORY[id];
+            if (card) { m.vilId = id; m.vilName = card.name; }
             mobs.push(m);
         }
         if (mobs.length < 20) {
@@ -7024,27 +7031,80 @@
         }
     }
 
+    const VILLAGER_STORY = {
+        ivan: {
+            name: 'Иван',
+            role: 'староста',
+            gossip: ['Помню ночь, когда море встало стеной.', 'Этот путник пахнет той же бурей.', 'Пока мы помним имена — деревня жива.']
+        },
+        masha: {
+            name: 'Маша',
+            role: 'травница',
+            gossip: ['Брат ушёл в пустынный остров и не вернулся.', 'Если найдёшь кактус — это его примета.', 'Не ешь сырое мясо, я тебе потом жаркое выпрошу.']
+        },
+        boris: {
+            name: 'Борис',
+            role: 'кузнец',
+            gossip: ['Голема ковал из железа утопленников.', 'У него в груди не сердце — слиток.', 'Уголь неси, железо берегу для него.']
+        },
+        anna: {
+            name: 'Анна',
+            role: 'картограф',
+            gossip: ['Острова как осколки одной земли.', 'Скажи, что видел за морем — я запомню.', 'На карте у меня дыры. Их закроет только ты.']
+        },
+        gleb: {
+            name: 'Глеб',
+            role: 'рыбак',
+            gossip: ['Ночью в океане мигают огни. Не звёзды.', 'Лодку из досок — и не тони.', 'Море забирает тех, кто плывёт без имени.']
+        },
+        wanderer: {
+            name: 'Житель',
+            role: 'гость',
+            gossip: ['Буря всех перемешала.', 'Держись деревни.', 'Староста Иван всё помнит.']
+        }
+    };
+    function loadStory() {
+        try {
+            const s = localStorage.getItem('mc_pova_story');
+            if (s) return JSON.parse(s);
+        } catch (e) {}
+        return { talked: {}, flags: {}, chapter: 0 };
+    }
+    function saveStory() {
+        try { localStorage.setItem('mc_pova_story', JSON.stringify(story)); } catch (e) {}
+    }
+    let story = loadStory();
+    function storyMark(id) {
+        story.talked[id] = (story.talked[id] || 0) + 1;
+        const n = Object.keys(story.talked).filter(function (k) { return story.talked[k] > 0 && k !== 'wanderer'; }).length;
+        if (n >= 5 && story.chapter < 2) story.chapter = 2;
+        else if (n >= 1 && story.chapter < 1) story.chapter = 1;
+        saveStory();
+    }
+    function storyHas(item) {
+        return typeof countInvType === 'function' && countInvType(item) > 0;
+    }
+    function playerBio() {
+        return biomeTitle(biomeAt(Math.floor(player.pos.x), Math.floor(player.pos.z)));
+    }
+
     const VILLAGER_GOSSIP = [
         'Колодец сегодня чистый.',
         'Голем опять у воды стоит.',
         'Слышал, за морем другие острова.',
         'Нужна лодка, если плыть далеко.',
-        'Железо дорого, уголь бери.',
-        'В доме тепло, не то что в поле.',
-        'Не ломай нам забор, ладно?',
-        'Ночью лучше сидеть дома.',
-        'Путь до соседнего острова долгий.',
-        'У меня шерсть на жаркое меняют.',
         'Этот странник с мечом… ну-ну.',
         'Двери чини, а то сквозняк.'
     ];
     function villagerSay(mob, text, dur) {
         if (!mob) return;
-        mob.bubble = { text: String(text).slice(0, 80), t: dur || 3.4 };
+        mob.bubble = { text: String(text).slice(0, 90), t: dur || 3.4 };
     }
     function gossipLine(a, b) {
-        const i = Math.abs(Math.floor((a.pos.x + b.pos.z) * 3 + performance.now() * 0.001)) % VILLAGER_GOSSIP.length;
-        return VILLAGER_GOSSIP[i];
+        const ca = VILLAGER_STORY[a.vilId] || VILLAGER_STORY.wanderer;
+        const pool = (ca.gossip && ca.gossip.length) ? ca.gossip : VILLAGER_GOSSIP;
+        const i = Math.abs(Math.floor((a.pos.x + (b ? b.pos.z : 0)) * 3 + (story.chapter || 0))) % pool.length;
+        return pool[i];
     }
     function updateVillagerSocial(dt) {
         const vs = [];
@@ -7062,10 +7122,8 @@
                 b.talkWith = a;
                 a.talkCd = 9 + Math.random() * 7;
                 b.talkCd = a.talkCd;
-                const l1 = gossipLine(a, b);
-                const l2 = gossipLine(b, a);
-                villagerSay(a, l1, 3.2);
-                setTimeout(function () { if (b.health > 0) villagerSay(b, l2, 3.2); }, 1400);
+                villagerSay(a, gossipLine(a, b), 3.2);
+                setTimeout(function () { if (b.health > 0) villagerSay(b, gossipLine(b, a), 3.2); }, 1400);
                 setTimeout(function () { a.talkWith = null; b.talkWith = null; }, 3800);
             }
         }
@@ -7073,9 +7131,11 @@
             const v = vs[i];
             if (chatOpen) continue;
             const d = v.pos.distanceTo(player.pos);
-            if (d < 3.2 && d > 0.6 && v.talkCd <= 0 && Math.random() < 0.004) {
-                v.talkCd = 12;
-                villagerSay(v, (v.vilName || 'Житель') + ': путник, заговори со мной!', 3.5);
+            if (d < 3.2 && d > 0.6 && v.talkCd <= 0 && Math.random() < 0.003) {
+                v.talkCd = 14;
+                const hook = v.vilId === 'ivan' ? 'Путник бури. Поговори со мной.' :
+                    (v.vilName || 'Житель') + ': есть что рассказать…';
+                villagerSay(v, hook, 3.5);
             }
         }
     }
@@ -7104,49 +7164,90 @@
     }
     function villagerBrain(mob, text) {
         const t = (text || '').toLowerCase();
-        const n = mob.vilName || 'Житель';
-        const mood = (n.length + Math.floor(mob.pos.x)) % 3;
+        const id = mob.vilId || 'wanderer';
+        const card = VILLAGER_STORY[id] || VILLAGER_STORY.wanderer;
+        const n = card.name;
+        storyMark(id);
+        const talks = story.talked[id] || 1;
+        const bio = playerBio();
+        const hasBoat = storyHas(ITEM_BOAT);
+        const hasIron = storyHas(ITEM_IRON_INGOT);
+        const hasMilk = storyHas(ITEM_MILK);
+        const hasCactus = storyHas(BLOCK_CACTUS);
+        const hasEmerald = storyHas(ITEM_EMERALD);
+        const allFive = ['ivan','masha','boris','anna','gleb'].every(function (k) { return (story.talked[k] || 0) > 0; });
+        if (allFive && story.chapter < 3) { story.chapter = 3; saveStory(); }
+
         if (/привет|здравст|хай|hello|добрый/.test(t)) {
-            return mood === 2 ? 'Ну привет. Чего надо?' : ('Привет, путник! Я ' + n + '.');
+            if (id === 'ivan') return talks === 1 ? 'Я Иван, староста Тихой Заводи. Тебя вынесло той же бурей, что расколола мир на острова. Слушай нас — и поймёшь, кто ты.' : ('Снова ты. Глава ' + (story.chapter + 1) + ' твоей истории ещё пишется.');
+            if (id === 'masha') return 'Маша. Лечу и корми. Брат пропал на песчаном острове. Если поплывёшь — ищи кактусы. Он их рисовал на двери.';
+            if (id === 'boris') return 'Борис-кузнец. Голема я собрал из железа тех, кого море вернуло пустыми. Не смей его бить — это наша память.';
+            if (id === 'anna') return 'Анна. Черчу острова по рассказам. Ты видел: ' + bio + '. Расскажи ещё — карта зарастёт дырами меньше.';
+            if (id === 'gleb') return 'Глеб. Сети рву, на огни в океане смотрю. Без лодки туда не суйся. Доски, киль — и молитва.';
+            return 'Привет, путник бури.';
         }
-        if (/как дела|что нового|жизнь/.test(t)) {
-            return ['Дела? Деревня стоит, голем охраняет.', 'Нормально. Колодец не пересох — уже хорошо.', 'Устали немного. Ходишь, болтаешь…'][mood];
+        if (/кто ты|имя|как зовут|о себе/.test(t)) {
+            if (id === 'ivan') return 'Староста. Держу имена живых. Пока я помню Машу, Бориса, Анну и Глеба — буря нас не доела.';
+            if (id === 'masha') return 'Травница. Шерсть, молоко, жаркое. Брат ушёл «за солью песка» и стал историей. Не хочу, чтобы ты стал второй.';
+            if (id === 'boris') return 'Молот и уголь. Голем — не раб. В груди у него слиток с гравировкой «вернись». Это не приказ. Это просьба утопших.';
+            if (id === 'anna') return 'Картограф без бумаги. Рисую прутиком на земле. Джунгли, снега, меса, грибы — всё осколки одного материка.';
+            if (id === 'gleb') return 'Рыбак, которому море должно жизнь. Оно забрало лодку, оставило меня. Теперь я учу других не повторять.';
+            return 'Я ' + n + '.';
+        }
+        if (/истор|расскаж|сюжет|что случи|бур|прошл/.test(t)) {
+            if (id === 'ivan') return 'Ночь без звёзд. Вода встала стеной и разрезала землю. Кто выжил — на островах. Кто забыл имя — бродит зверем. Ты помнишь своё. Значит, ты якорь.';
+            if (id === 'masha') return 'Мы пекли хлеб на большой земле. Потом песок. Потом крик. Брат сказал: «Я найду соль и вернусь». Соль он нашёл. Обратной лодки — нет.';
+            if (id === 'boris') return 'После бури берег был из шлемов и рельс. Я не хоронил. Я ковал. Голем встал сам, когда вставил слиток. С тех пор он у колодца — как будто ждёт хозяев.';
+            if (id === 'anna') return 'Карта мира теперь как разбитая миска. Каждый остров — черепок. Если обойти их и вернуться, черепки сложатся. Это и есть твой сюжет.';
+            if (id === 'gleb') return 'Я видел в волнах огонь, который не гаснет. Не маяк. Как будто деревня, которая не знает, что утонула. Плыви только днём.';
+            return 'Буря расколола землю. Дальше — острова и память.';
+        }
+        if (/что мне делать|делать|квест|цель|задание|помоги/.test(t)) {
+            if (!allFive) return 'Поговори со всеми пятью: Иван, Маша, Борис, Анна, Глеб. Пока не услышишь всех — история дырявая.';
+            if (!hasBoat) return 'Слушал всех. Теперь скрафти лодку из досок и коснись океана. Без этого якорь не держит.';
+            if (story.chapter >= 3) return 'Плыви. Смотри биомы. Возвращайся и расскажи Анне. Если принесёшь Маше кактус, Борису железо — они станут спокойнее. Это и есть сюжет: не победить дракона, а склеить дом.';
+            return 'Выживай, слушай, плыви, возвращайся.';
         }
         if (/торг|куп|прод|обмен|цен|кирк|желез|изумруд|шерст/.test(t)) {
-            return 'Торгую: уголь на железо, шерсть на жаркое, мясо на изумруд. Нажми «Открыть торговлю».';
+            if (id === 'boris' && hasIron) return 'Вижу железо у тебя. Хорошо. Голему не нужно, нам — да. Открой торговлю, уголь меняю честно.';
+            if (id === 'masha') return 'Шерсть на жаркое, мясо на изумруд. Еда — тоже память: пока едим вместе, не дичаем.';
+            return 'Уголь→железо, шерсть→жаркое, мясо→изумруд. Кнопка «Открыть торговлю».';
         }
         if (/голем|железн/.test(t)) {
-            return 'Голем наш. У колодца патрулирует, в дома не лезет. Не бей его.';
+            return id === 'boris' ? 'Не машина. Памятник. Если ударишь — он ответит, как море.' : 'Спроси Бориса. Он его отец и не скрывает.';
         }
-        if (/дом|деревн|жить|кроват/.test(t)) {
-            return 'Это наша деревня. Дома с дверями и стёклами. Не ломай, чини если что.';
+        if (/дом|деревн|жить|кроват|завод/.test(t)) {
+            return 'Тихая Заводь. Поле, колодец, дома. Мы не герои. Мы те, кто остался закрывать двери на ночь.';
         }
-        if (/остров|море|океан|лодк|плыть|далеко/.test(t)) {
-            return 'Мы на острове. Дальше океан. Скрафти лодку из досок, если хочешь плыть.';
+        if (/остров|море|океан|лодк|плыть|далеко|биом/.test(t)) {
+            if (id === 'anna') return 'Сейчас ты в: ' + bio + '. Запомни. Пустыня — Машин брат. Снега — тишина. Джунгли — крик попугаев. Меса — глина старого дна.';
+            if (id === 'gleb') return hasBoat ? 'Лодка есть. Держись поверхности, прыжком выходи. И не смотри на ночные огни слишком долго.' : 'Нет лодки — нет истории за горизонтом. Доски, верстак, киль.';
+            return 'Острова далеко. Это не баг мира. Это рана.';
         }
-        if (/еда|есть|голод|мясо|хлеб/.test(t)) {
-            return 'Жаркое из шерсти по торгу, или охоться в поле. Коров не трогай без нужды.';
+        if (/еда|есть|голод|мясо|хлеб|молок/.test(t)) {
+            if (id === 'masha' && hasMilk) return 'Молоко. Хорошо. Пей, не геройствуй натощак.';
+            return 'Корова, бутылка, молоко. Или торг. Голод делает из путника зверя — мы это уже видели.';
+        }
+        if (/кактус|брат|песок|пустын/.test(t)) {
+            if (id === 'masha') return hasCactus ? 'Кактус… как его рисунок. Спасибо. Теперь я могу злиться на море, а не на тишину.' : 'Пустынный остров. Кактусы. Если принесёшь хоть один — я расскажу, как его звали. Пока не могу.';
+            return 'Это к Маше. У неё дыра в семье размером с океан.';
         }
         if (/руд|алмаз|шахт|копа/.test(t)) {
-            return 'Копай глубже. Уголь выше, алмазы внизу. Кирка нужна.';
+            return id === 'boris' ? 'Глубже камень темнее. Алмаз — не цель. Цель — не заблудиться в дыре, как мир заблудился в море.' : 'Кирка и глубина. Борис больше скажет.';
         }
-        if (/имя|кто ты|как зовут/.test(t)) {
-            return 'Я ' + n + ', житель этой деревни.';
+        if (/как дела|что нового|жизнь/.test(t)) {
+            return ['Деревня дышит. Ты — сквозняк, но нужный.', 'Пока ты спрашиваешь, мы ещё люди.', 'Новое? Ты. Остальное — старая буря.'][talks % 3];
         }
         if (/пока|бывай|до свидан/.test(t)) {
-            return mood === 2 ? 'Ну иди уж.' : 'Приходи ещё. Дверь не забудь закрыть.';
+            return allFive ? 'Иди. И вернись с именем, не с добычей.' : 'Поговори с остальными, прежде чем геройствовать.';
         }
-        if (/помощь|помоги|что делать/.test(t)) {
-            return 'Выживай: дерево, лодка, еда, руда. С нами можно торговать и болтать.';
-        }
-        const fallback = [
-            'Хм. Скажи проще: привет, торговля, остров, голем.',
-            'Не понял. Спроси про дом, еду или кирку.',
-            'Мы простые люди. Говори о деле.'
-        ];
-        return fallback[mood];
+        if (id === 'masha' && hasCactus && talks > 2) return 'Кактус на полке. Брат бы рассмеялся. Ступай, якорь.';
+        if (id === 'boris' && hasIron && talks > 2) return 'Железо звенит правильно. Голем ночью тише. Это ты сделал.';
+        if (id === 'anna' && bio.indexOf('Океан') >= 0) return 'Ты в океане даже стоя здесь… нет, это я чую соль. Плыл. Хорошо. Рисую.';
+        if (allFive && id === 'ivan') return 'Ты выслушал всех пятерых. Сюжет не в драконе. Сюжет: склеить осколки и не стать бурей самому. Плыви и возвращайся.';
+        return 'Спроси: кто ты, история, буря, сюжет, остров, кактус, голем. Мы не оракулы — мы свидетели.';
     }
-    function appendChat(cls, who, text) {
+        function appendChat(cls, who, text) {
         chatHistory.push({ cls: cls, who: who, text: text });
         if (chatHistory.length > 40) chatHistory.shift();
         const log = document.getElementById('chat-log');
@@ -7978,456 +8079,8 @@
     
     
     
+    
     </script><!--DOWNLOAD-PAD
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
