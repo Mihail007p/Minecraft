@@ -781,6 +781,31 @@
             font-size: 13px;
         }
         #trade-panel button.alt { background: #8b8b8b; }
+        #world-loading {
+            position: absolute;
+            inset: 0;
+            background: #1a1a1a;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            font-weight: 700;
+            z-index: 50;
+            text-align: center;
+            padding: 20px;
+        }
+        #boot-error {
+            position: absolute;
+            left: 8px; right: 8px; bottom: 88px;
+            background: rgba(120,0,0,0.85);
+            color: #fff;
+            padding: 8px 10px;
+            font-size: 13px;
+            display: none;
+            z-index: 60;
+            pointer-events: none;
+        }
         #biome-banner {
             position: absolute;
             top: 18%;
@@ -839,6 +864,8 @@
 </head>
 <body>
     <canvas id="game-canvas"></canvas>
+    <div id="world-loading">Загрузка мира…</div>
+    <div id="boot-error"></div>
     <div id="crosshair"></div>
     <div id="mine-bar"><div id="mine-bar-fill"></div></div>
     <div id="damage-flash"></div>
@@ -1000,6 +1027,14 @@
     </div>
 
     <script>
+    window.addEventListener('error', function (e) {
+        const el = document.getElementById('boot-error');
+        if (el) {
+            el.style.display = 'block';
+            el.textContent = 'Ошибка: ' + (e.message || e);
+        }
+    });
+
     // --- 1. ПАРАМЕТРЫ МИРА И БЛОКОВ ---
     const CHUNK_SIZE = 16;
     const CHUNK_HEIGHT = 128;
@@ -3441,17 +3476,25 @@
         canvas.width = 128; canvas.height = 512;
         const ctx = canvas.getContext('2d');
         ctx.imageSmoothingEnabled = false;
+        const img = ctx.createImageData(128, 512);
+        const data = img.data;
         for (let id = 0; id < 64; id++) {
             const tile = MC_TEX.tiles[id];
             if (!tile) continue;
             const ox = (id % 4) * 32, oy = Math.floor(id / 4) * 32;
             for (let y = 0; y < 32; y++) {
                 for (let x = 0; x < 32; x++) {
-                    ctx.fillStyle = tile[y * 32 + x];
-                    ctx.fillRect(ox + x, oy + y, 1, 1);
+                    const hex = tile[y * 32 + x] || '#7a7a7a';
+                    const n = parseInt(hex.charAt(0) === '#' ? hex.slice(1) : hex, 16);
+                    const p = ((oy + y) * 128 + (ox + x)) * 4;
+                    data[p] = (n >> 16) & 255;
+                    data[p + 1] = (n >> 8) & 255;
+                    data[p + 2] = n & 255;
+                    data[p + 3] = 255;
                 }
             }
         }
+        ctx.putImageData(img, 0, 0);
         const texture = new THREE.CanvasTexture(canvas);
         texture.magFilter = THREE.NearestFilter;
         texture.minFilter = THREE.NearestFilter;
@@ -3526,14 +3569,28 @@
 
     // --- 5. THREE.JS СЦЕНА И КЛАССИЧЕСКИЕ МАТЕРИАЛЫ ---
     const canvas = document.getElementById('game-canvas');
-    const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: "high-performance" });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    function viewSize() {
+        const w = Math.max(1, window.innerWidth || document.documentElement.clientWidth || 360);
+        const h = Math.max(1, window.innerHeight || document.documentElement.clientHeight || 640);
+        return { w: w, h: h };
+    }
+    let renderer;
+    try {
+        renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
+    } catch (err) {
+        renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
+    }
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.25));
+    (function bootSize() {
+        const s = viewSize();
+        renderer.setSize(s.w, s.h);
+    })();
 
     const scene = new THREE.Scene();
     scene.fog = new THREE.Fog(0x78B5E8, 42, 88);
 
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 180);
+    const _vs0 = viewSize();
+    const camera = new THREE.PerspectiveCamera(75, _vs0.w / _vs0.h, 0.1, 180);
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
     scene.add(ambientLight);
     
@@ -5431,7 +5488,7 @@
                     else if (bio === 'mushroom') placeGiantMushroom(chunk, lx, h, lz);
                     else if (bio === 'dark') placeOakTree(chunk, lx, h, lz, 6);
                     else placeOakTree(chunk, lx, h, lz, bio === 'swamp' ? 4 : 5);
-                } else if (bio === 'ice_spikes' && h > WATER_LEVEL && treeRoll < 70 && lx >= 1 && lx <= CHUNK_SIZE - 2 && lz >= 1 && lz <= CHUNK_SIZE - 2) {
+                } else if (bio === 'ice_spikes' && h > WATER_LEVEL && treeRoll < 22 && lx >= 1 && lx <= CHUNK_SIZE - 2 && lz >= 1 && lz <= CHUNK_SIZE - 2) {
                     placeIceSpike(chunk, lx, h, lz, 7 + (treeRoll % 9));
                 } else if (bio === 'desert' && h > WATER_LEVEL && treeRoll < 22 && chunk.getBlock(lx, h, lz) === BLOCK_SAND) {
                     const ch = 2 + (treeRoll % 3);
@@ -5497,6 +5554,7 @@
                     if (block === BLOCK_EMPTY) continue;
 
                     const wx = startX + lx, wz = startZ + lz;
+                    const gbio = biomeAt(wx, wz);
 
                     if (block === BLOCK_WATER) {
                         const waterTile = getTileUV(11); // Классический тайл воды
@@ -5533,7 +5591,6 @@
                                     solidNorm.push(faces[f].norm[0], faces[f].norm[1], faces[f].norm[2]);
                                 }
                                 let tileId = getBlockFaceTile(block, f);
-                                const gbio = biomeAt(wx, wz);
                                 if (block === BLOCK_GRASS && f === 2) {
                                     if (gbio === 'jungle') tileId = 43;
                                     else if (gbio === 'savanna') tileId = 44;
@@ -5582,6 +5639,13 @@
         chunk.isDirty = false;
     }
 
+    let worldReady = false;
+    let firstChunkBurst = true;
+    function hideWorldLoading() {
+        const el = document.getElementById('world-loading');
+        if (el) el.style.display = 'none';
+        worldReady = true;
+    }
     function updateInfiniteChunks(playerX, playerZ) {
         const centerCX = Math.floor(playerX / CHUNK_SIZE);
         const centerCZ = Math.floor(playerZ / CHUNK_SIZE);
@@ -5594,8 +5658,11 @@
                 if (!chunks.has(key)) {
                     const chunk = new Chunk(cx, cz);
                     chunks.set(key, chunk);
-                    generateChunkTerrain(chunk);
-                    populateChunkFauna(chunk);
+                    try {
+                        generateChunkTerrain(chunk);
+                    } catch (err) {
+                        console.error('terrain', err);
+                    }
                     chunkBuildQueue.push(chunk);
                 }
             }
@@ -5609,14 +5676,25 @@
             }
         }
 
+        const burst = firstChunkBurst ? 9 : 2;
         let builtCount = 0;
-        while (chunkBuildQueue.length > 0 && builtCount < 2) {
+        while (chunkBuildQueue.length > 0 && builtCount < burst) {
             const chunk = chunkBuildQueue.shift();
             if (chunks.has(getChunkKey(chunk.cx, chunk.cz))) {
-                rebuildChunkMesh(chunk);
+                try {
+                    rebuildChunkMesh(chunk);
+                    if (!chunk.faunaDone) {
+                        chunk.faunaDone = true;
+                        try { populateChunkFauna(chunk); } catch (e2) {}
+                    }
+                } catch (err) {
+                    console.error('mesh', err);
+                }
                 builtCount++;
             }
         }
+        if (firstChunkBurst) firstChunkBurst = false;
+        if (!worldReady && builtCount > 0) hideWorldLoading();
     }
 
     const highlightBox = new THREE.LineSegments(
@@ -5760,9 +5838,16 @@
         player.highestFallY = player.pos.y;
         player.onGround = true;
         player.spawnProtect = 2.5;
+        if (checkSolidCollision(player.pos.x, player.pos.y, player.pos.z)) {
+            player.pos.y += 2;
+            for (let i = 0; i < 12 && checkSolidCollision(player.pos.x, player.pos.y, player.pos.z); i++) {
+                player.pos.y += 1;
+            }
+        }
         camera.position.set(player.pos.x, player.pos.y + player.eyeHeight, player.pos.z);
         setTimeout(function () { showInvToast('Иди вперёд — сменятся биомы'); }, 1200);
         setTimeout(function () { showInvToast('Тапни животное без меча'); }, 3200);
+        hideWorldLoading();
     }
 
     function checkSolidCollision(px, py, pz, r, h) {
@@ -6678,11 +6763,14 @@
         }
     });
 
-    window.addEventListener('resize', () => {
-        camera.aspect = window.innerWidth / window.innerHeight;
+    function fitRenderer() {
+        const s = viewSize();
+        camera.aspect = s.w / Math.max(1, s.h);
         camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-    });
+        renderer.setSize(s.w, s.h);
+    }
+    window.addEventListener('resize', fitRenderer);
+    window.addEventListener('orientationchange', function () { setTimeout(fitRenderer, 200); });
 
     const btnFullscreen = document.getElementById('btn-fullscreen');
     const fsIconEnter = document.getElementById('fs-icon-enter');
@@ -7016,6 +7104,7 @@
 
         function animate(currentTime) {
         requestAnimationFrame(animate);
+        if (!worldReady) fitRenderer();
 
         const dt = Math.min((currentTime - lastTime) / 1000, 0.05);
         lastTime = currentTime;
@@ -7097,139 +7186,8 @@
     
     
     
+    
     </script><!--DOWNLOAD-PAD
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
