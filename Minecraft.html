@@ -3811,8 +3811,77 @@
     const bedTopMat = new THREE.MeshLambertMaterial({ map: bedTopTex });
     const bedSideMat = new THREE.MeshLambertMaterial({ color: 0x5a3c18 });
     const bedMats = [bedSideMat, bedSideMat, bedTopMat, bedSideMat, bedSideMat, bedSideMat];
+    const workIronMat = new THREE.MeshLambertMaterial({ color: 0x6a6a74 });
+    const workIronDark = new THREE.MeshLambertMaterial({ color: 0x2e2e34 });
+    const workStoneMat = new THREE.MeshLambertMaterial({ color: 0x6a6860 });
+    const workWoodMat = new THREE.MeshLambertMaterial({ color: 0x8a6230 });
+    const workCoalMat = new THREE.MeshLambertMaterial({ color: 0x1a120c });
+    const workGlowMat = new THREE.MeshBasicMaterial({ color: 0xff6a20, fog: false });
+    const workMapMat = new THREE.MeshLambertMaterial({ color: 0xc8d4a8 });
+    const workWheatA = new THREE.MeshLambertMaterial({ color: 0xc4a040, side: THREE.DoubleSide });
+    const workWheatB = new THREE.MeshLambertMaterial({ color: 0x6dad3a, side: THREE.DoubleSide });
+    const geoAnvilBase = new THREE.BoxGeometry(0.40, 0.14, 0.40);
+    const geoAnvilNeck = new THREE.BoxGeometry(0.16, 0.22, 0.16);
+    const geoAnvilTop = new THREE.BoxGeometry(0.68, 0.16, 0.28);
+    const geoAnvilHorn = new THREE.BoxGeometry(0.22, 0.10, 0.14);
+    const geoForgeRing = new THREE.BoxGeometry(0.62, 0.22, 0.62);
+    const geoForgeHole = new THREE.BoxGeometry(0.36, 0.10, 0.36);
+    const geoForgeCoal = new THREE.BoxGeometry(0.30, 0.08, 0.30);
+    const geoTableTop = new THREE.BoxGeometry(1.15, 0.08, 0.70);
+    const geoTableLeg = new THREE.BoxGeometry(0.08, 0.52, 0.08);
+    const geoMapSheet = new THREE.BoxGeometry(0.72, 0.02, 0.48);
+    const geoPole = new THREE.BoxGeometry(0.05, 1.15, 0.05);
+    const geoWheat = new THREE.PlaneGeometry(0.55, 0.85);
+    function buildAnvilDecor() {
+        const g = new THREE.Group();
+        const base = new THREE.Mesh(geoAnvilBase, workIronDark); base.position.y = 0.07;
+        const neck = new THREE.Mesh(geoAnvilNeck, workIronMat); neck.position.y = 0.25;
+        const top = new THREE.Mesh(geoAnvilTop, workIronMat); top.position.y = 0.44;
+        const horn = new THREE.Mesh(geoAnvilHorn, workIronMat); horn.position.set(0.40, 0.44, 0);
+        g.add(base); g.add(neck); g.add(top); g.add(horn);
+        return g;
+    }
+    function buildForgeDecor() {
+        const g = new THREE.Group();
+        const ring = new THREE.Mesh(geoForgeRing, workStoneMat); ring.position.y = 0.11;
+        const hole = new THREE.Mesh(geoForgeHole, workCoalMat); hole.position.y = 0.20;
+        const coal = new THREE.Mesh(geoForgeCoal, workGlowMat); coal.position.y = 0.24;
+        const fl = new THREE.Mesh(geoTorchFlame, torchFlameMat); fl.position.y = 0.40;
+        g.add(ring); g.add(hole); g.add(coal); g.add(fl);
+        return g;
+    }
+    function buildMapTableDecor() {
+        const g = new THREE.Group();
+        const top = new THREE.Mesh(geoTableTop, workWoodMat); top.position.y = 0.56;
+        g.add(top);
+        const legs = [[-0.48, -0.26], [0.48, -0.26], [-0.48, 0.26], [0.48, 0.26]];
+        for (let i = 0; i < 4; i++) {
+            const leg = new THREE.Mesh(geoTableLeg, workIronDark);
+            leg.position.set(legs[i][0], 0.26, legs[i][1]);
+            g.add(leg);
+        }
+        const sheet = new THREE.Mesh(geoMapSheet, workMapMat); sheet.position.y = 0.62;
+        g.add(sheet);
+        return g;
+    }
+    function buildFishRackDecor() {
+        const g = new THREE.Group();
+        const pole = new THREE.Mesh(geoPole, workWoodMat); pole.position.set(0, 0.58, 0); pole.rotation.z = 0.35;
+        const line = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.7, 0.02), workIronDark);
+        line.position.set(0.28, 0.55, 0.05);
+        g.add(pole); g.add(line);
+        return g;
+    }
+    function buildWheatDecor() {
+        const g = new THREE.Group();
+        const a = new THREE.Mesh(geoWheat, workWheatA); a.position.y = 0.42;
+        const b = new THREE.Mesh(geoWheat, workWheatB); b.position.y = 0.40; b.rotation.y = Math.PI / 2;
+        g.add(a); g.add(b);
+        return g;
+    }
     const torchSpots = new Map();
     const bedSpots = new Map();
+    const workSpots = new Map();
     let pendingTorchFace = 0;
     let decorDirty = true;
     const decorGroup = new THREE.Group();
@@ -6040,10 +6109,23 @@
             const mesh = new THREE.Mesh(geoBedSlab, bedMats);
             mesh.position.set(x + 0.5, y + 0.16, z + 0.5);
             mesh.rotation.y = Math.atan2(-(meta.dz || 0), meta.dx || 1);
-            // sprite pillow is on the left of the texture; local +X is head
             mesh.rotation.y += Math.PI;
             mesh.position.x += (meta.dx || 1) * 0.5;
             mesh.position.z += (meta.dz || 0) * 0.5;
+            decorGroup.add(mesh);
+        });
+        workSpots.forEach(function (meta, key) {
+            const p = key.split(',');
+            const x = +p[0], y = +p[1], z = +p[2];
+            let mesh = null;
+            if (meta.kind === 'anvil') mesh = buildAnvilDecor();
+            else if (meta.kind === 'forge') mesh = buildForgeDecor();
+            else if (meta.kind === 'maptable') mesh = buildMapTableDecor();
+            else if (meta.kind === 'fishrack') mesh = buildFishRackDecor();
+            else if (meta.kind === 'wheat') mesh = buildWheatDecor();
+            if (!mesh) return;
+            mesh.position.set(x + 0.5, y, z + 0.5);
+            if (meta.rot) mesh.rotation.y = meta.rot;
             decorGroup.add(mesh);
         });
         decorDirty = false;
@@ -6246,25 +6328,25 @@
         masha: {
             job: 'farmer',
             home: [13.5, 22.5],
-            sites: [[19.5, 9.5, 3.1416], [19.5, 3.5, 0], [15.5, 6.5, 1.57], [23.5, 6.5, -1.57]],
+            sites: [[19.5, 9.5, 3.1416], [19.5, 9.5, 3.1416], [15.5, 6.5, 1.57], [23.5, 6.5, -1.57]],
             lines: ['Грядки сохнут.', 'Воды на ферму.', 'Сорняк опять полез.']
         },
         boris: {
             job: 'smith',
             home: [26.5, 15.5],
-            sites: [[25.5, 9.5, 0], [25.5, 9.5, 0], [24.5, 9.5, 0], [26.5, 9.5, 0]],
+            sites: [[25.5, 9.5, 0], [25.5, 9.5, 0], [25.5, 9.5, 0], [24.5, 9.5, 0]],
             lines: ['Наковальня горячая.', 'Голему нужен гвоздь.', 'Уголь кончается.']
         },
         anna: {
             job: 'mapper',
             home: [27.5, 26.5],
-            sites: [[22.5, 21.5, 0], [22.5, 21.5, 0], [21.5, 21.5, 0], [23.5, 21.5, 0]],
+            sites: [[22.5, 20.5, 0], [22.5, 20.5, 0], [21.5, 20.5, 0], [23.5, 20.5, 0]],
             lines: ['Тут дыра на карте.', 'Остров кончается вон там.', 'Запомню этот поворот.']
         },
         gleb: {
             job: 'fisher',
             home: [14.5, 12.5],
-            sites: [[9.5, 4.5, 3.1416], [9.5, 4.5, 3.1416], [10.5, 4.5, 3.1416], [8.5, 4.5, 3.1416]],
+            sites: [[9.5, 1.5, 3.1416], [9.5, 1.5, 3.1416], [10.5, 1.5, 3.1416], [9.5, 2.5, 3.1416]],
             lines: ['Клюёт… нет, водоросли.', 'Сеть на берег.', 'Море сегодня злое.']
         }
     };
@@ -6338,6 +6420,11 @@
             }
             mob.jobTimer = 10 + Math.random() * 8;
             if (Math.random() < 0.4) villagerSay(mob, 'Пора по домам.', 2.2);
+            return;
+        }
+        if (Math.random() < 0.7 && spec.sites[0] && villagerWalkable(spec.sites[0][0], spec.sites[0][1], 0.34)) {
+            setTarget(spec.sites[0][0], spec.sites[0][1], 'goto', spec.sites[0][2]);
+            mob.jobTimer = 12 + Math.random() * 10;
             return;
         }
         const sites = spec.sites.slice();
@@ -6556,6 +6643,10 @@
         chunkPut(chunk, ox + lampR[0], y + 2, oz + lampR[1], BLOCK_TORCH);
     }
 
+    function workPut(wx, wy, wz, kind, rot) {
+        workSpots.set(wx + ',' + wy + ',' + wz, { kind: kind, rot: rot || 0 });
+        decorDirty = true;
+    }
     function paintSmithy(chunk, ox, oz, y) {
         for (let dx = 0; dx <= 3; dx++) {
             for (let dz = 0; dz <= 2; dz++) {
@@ -6566,25 +6657,24 @@
         }
         for (let dx = 0; dx <= 3; dx++) {
             chunkPut(chunk, ox + dx, y + 1, oz + 2, BLOCK_STONE_BRICK);
-            if (dx === 0 || dx === 3) chunkPut(chunk, ox + dx, y + 2, oz + 2, BLOCK_STONE_BRICK);
         }
-        chunkPut(chunk, ox + 1, y + 1, oz + 2, BLOCK_FURNACE);
-        chunkPut(chunk, ox + 2, y + 1, oz + 2, BLOCK_SMITHING);
-        chunkPut(chunk, ox + 3, y + 1, oz + 1, BLOCK_GRINDSTONE);
-        chunkPut(chunk, ox + 0, y + 1, oz + 1, BLOCK_CAMPFIRE);
+        chunkPut(chunk, ox + 2, y + 1, oz + 2, BLOCK_FURNACE);
+        chunkPut(chunk, ox + 3, y + 1, oz + 2, BLOCK_FURNACE);
+        chunkPut(chunk, ox + 0, y + 1, oz + 2, BLOCK_BARREL);
         const posts = [[0, 0], [3, 0], [0, 2], [3, 2]];
         for (let i = 0; i < posts.length; i++) {
             const wx = ox + posts[i][0], wz = oz + posts[i][1];
             chunkPut(chunk, wx, y + 1, wz, BLOCK_WOOD);
             chunkPut(chunk, wx, y + 2, wz, BLOCK_WOOD);
         }
-        for (let dx = -1; dx <= 4; dx++) {
-            for (let dz = -1; dz <= 3; dz++) {
-                chunkPut(chunk, ox + dx, y + 3, oz + dz, BLOCK_WOOD);
+        for (let dx = 0; dx <= 3; dx++) {
+            for (let dz = 0; dz <= 2; dz++) {
+                chunkPut(chunk, ox + dx, y + 3, oz + dz, BLOCK_PLANKS);
             }
         }
         chunkPut(chunk, ox + 3, y + 2, oz + 0, BLOCK_TORCH);
-        chunkPut(chunk, ox - 1, y + 1, oz + 1, BLOCK_BARREL);
+        workPut(ox + 1, y + 1, oz + 1, 'anvil', 0);
+        workPut(ox + 0, y + 1, oz + 1, 'forge', 0);
     }
     function paintDock(chunk, ox, oz, y) {
         for (let z = oz; z >= oz - 3; z--) {
@@ -6616,21 +6706,13 @@
         chunkPut(chunk, ox, y + 1, oz - 1, BLOCK_BARREL);
         chunkPut(chunk, ox + 1, y + 1, oz - 3, BLOCK_FENCE);
         chunkPut(chunk, ox + 1, y + 2, oz - 3, BLOCK_TORCH);
+        workPut(ox + 1, y + 1, oz - 2, 'fishrack', 0);
     }
     function paintMapDesk(chunk, ox, oz, y) {
-        for (let dx = 0; dx <= 2; dx++) {
-            for (let dz = 0; dz <= 1; dz++) {
-                chunkPut(chunk, ox + dx, y, oz + dz, BLOCK_PLANKS);
-                villageAir(chunk, ox + dx, y + 1, y + 3, oz + dz);
-            }
-        }
-        chunkPut(chunk, ox + 1, y + 1, oz + 1, BLOCK_LOOM);
-        chunkPut(chunk, ox + 0, y + 1, oz + 1, BLOCK_CRAFT);
-        chunkPut(chunk, ox + 2, y + 1, oz + 1, BLOCK_BARREL);
-        chunkPut(chunk, ox + 0, y + 1, oz + 0, BLOCK_FENCE);
-        chunkPut(chunk, ox + 0, y + 2, oz + 0, BLOCK_TORCH);
-        chunkPut(chunk, ox + 2, y + 1, oz + 0, BLOCK_FENCE);
-        chunkPut(chunk, ox + 2, y + 2, oz + 0, BLOCK_SIGN);
+        villageAir(chunk, ox + 1, y + 1, y + 3, oz + 1);
+        chunkPut(chunk, ox + 1, y + 1, oz + 2, BLOCK_FENCE);
+        chunkPut(chunk, ox + 1, y + 2, oz + 2, BLOCK_TORCH);
+        workPut(ox + 1, y + 1, oz + 1, 'maptable', 0);
     }
     function paintFarm(chunk, ox, oz, y) {
         for (let dx = -3; dx <= 3; dx++) {
@@ -6644,6 +6726,7 @@
                     chunkPut(chunk, wx, y, wz, (dx === 0 && dz === 0) ? BLOCK_WATER : BLOCK_DIRT);
                     villageAir(chunk, wx, y + 1, y + 3, wz);
                     if (dx === 2 && dz === 1) chunkPut(chunk, wx, y + 1, wz, BLOCK_PUMPKIN);
+                    else if (!(dx === 0 && dz === 0)) workPut(wx, y + 1, wz, 'wheat', (dx + dz) * 0.4);
                 }
             }
         }
@@ -7279,8 +7362,8 @@
             ['ivan', 20.5, 20.5],
             ['masha', 19.5, 9.5],
             ['boris', 25.5, 9.5],
-            ['anna', 22.5, 21.5],
-            ['gleb', 9.5, 4.5]
+            ['anna', 22.5, 20.5],
+            ['gleb', 9.5, 1.5]
         ];
         for (let i = 0; i < spots.length; i++) {
             if (mobs.length >= 20) break;
@@ -9098,194 +9181,6 @@
     
     
     </script><!--DOWNLOAD-PAD
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
