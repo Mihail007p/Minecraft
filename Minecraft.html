@@ -5358,19 +5358,26 @@
             this.vel.y = Math.max(this.vel.y, -28);
 
             let colX = false, colZ = false;
+            const useR = (this.thruDoor || this.nightStep === 'enter' || this.nightStep === 'leave') ? 0.16 : this.radius;
             this.pos.x += this.vel.x * dt;
-            if (checkSolidCollision(this.pos.x, this.pos.y, this.pos.z, this.radius, this.height, true)) {
+            if (checkSolidCollision(this.pos.x, this.pos.y, this.pos.z, useR, this.height, true)) {
                 this.pos.x -= this.vel.x * dt;
                 colX = true;
             }
             this.pos.z += this.vel.z * dt;
-            if (checkSolidCollision(this.pos.x, this.pos.y, this.pos.z, this.radius, this.height, true)) {
+            if (checkSolidCollision(this.pos.x, this.pos.y, this.pos.z, useR, this.height, true)) {
                 this.pos.z -= this.vel.z * dt;
                 colZ = true;
             }
 
             if ((colX || colZ) && this.onGround) {
-                if (this.type === 'golem' || this.type === 'villager') {
+                if (this.type === 'villager' && (this.thruDoor || this.nightStep === 'enter' || this.nightStep === 'leave')) {
+                    const spec = (typeof jobSpec === 'function') ? jobSpec(this) : null;
+                    if (spec && spec.door) {
+                        const tx = spec.door[0] + 0.5, tz = spec.door[1] + 0.5;
+                        this.yaw = Math.atan2(tx - this.pos.x, tz - this.pos.z);
+                    }
+                } else if (this.type === 'golem' || this.type === 'villager') {
                     this.yaw += 0.9 + Math.random() * 1.3;
                     this.vel.x = 0;
                     this.vel.z = 0;
@@ -6327,7 +6334,7 @@
             job: 'elder',
             home: [9.5, 15.5],
             door: [12, 15],
-            approach: [13.5, 15.5],
+            approach: [14.4, 15.5],
             inside: [10.5, 15.5],
             sites: [[20.5, 20.5], [16.5, 16.5], [24.5, 16.5], [20.5, 12.5], [16.5, 20.5], [24.5, 20.5]],
             lines: ['Проверяю площадь.', 'Голем на месте.', 'Пока ходим — деревня жива.']
@@ -6336,7 +6343,7 @@
             job: 'farmer',
             home: [13.5, 27.5],
             door: [13, 24],
-            approach: [13.5, 23.5],
+            approach: [13.5, 22.4],
             inside: [13.5, 26.5],
             sites: [[19.5, 9.5, 3.1416], [19.5, 9.5, 3.1416], [15.5, 6.5, 1.57], [23.5, 6.5, -1.57]],
             lines: ['Грядки сохнут.', 'Воды на ферму.', 'Сорняк опять полез.']
@@ -6345,7 +6352,7 @@
             job: 'smith',
             home: [30.5, 15.5],
             door: [28, 15],
-            approach: [27.5, 15.5],
+            approach: [26.4, 15.5],
             inside: [29.5, 15.5],
             sites: [[25.5, 9.5, 0], [25.5, 9.5, 0], [25.5, 9.5, 0], [24.5, 9.5, 0]],
             lines: ['Наковальня горячая.', 'Голему нужен гвоздь.', 'Уголь кончается.']
@@ -6354,7 +6361,7 @@
             job: 'mapper',
             home: [27.5, 21.5],
             door: [27, 24],
-            approach: [27.5, 25.5],
+            approach: [27.5, 26.4],
             inside: [27.5, 22.5],
             sites: [[22.5, 20.5, 0], [22.5, 20.5, 0], [21.5, 20.5, 0], [23.5, 20.5, 0]],
             lines: ['Тут дыра на карте.', 'Остров кончается вон там.', 'Запомню этот поворот.']
@@ -6363,7 +6370,7 @@
             job: 'fisher',
             home: [34.5, 20.5],
             door: [31, 20],
-            approach: [30.5, 20.5],
+            approach: [29.4, 20.5],
             inside: [32.5, 20.5],
             sites: [[9.5, 1.5, 3.1416], [9.5, 1.5, 3.1416], [10.5, 1.5, 3.1416], [9.5, 2.5, 3.1416]],
             lines: ['Клюёт… нет, водоросли.', 'Сеть на берег.', 'Море сегодня злое.']
@@ -6503,7 +6510,7 @@
             return;
         }
         mob.jobTimer = (mob.jobTimer || 0) - dt;
-        unstickVillager(mob);
+        if (!mob.nightStep || mob.nightStep === 'inside') unstickVillager(mob);
         if (!mob.jobTarget) pickNextJobPhase(mob, night);
         const t = mob.jobTarget;
         if (!t) return;
@@ -6518,7 +6525,9 @@
             const look = 0.75;
             const ax = mob.pos.x + Math.sin(yaw) * look;
             const az = mob.pos.z + Math.cos(yaw) * look;
-            if (checkSolidCollision(ax, mob.pos.y, az, mob.radius, mob.height, true)) {
+            if (mob.nightStep === 'enter' || mob.nightStep === 'leave') {
+                yaw = Math.atan2(dx, dz);
+            } else if (checkSolidCollision(ax, mob.pos.y, az, mob.radius, mob.height, true)) {
                 const tryY = [yaw + 0.95, yaw - 0.95, yaw + 1.7, yaw - 1.7];
                 let ok = false;
                 for (let i = 0; i < tryY.length; i++) {
@@ -6532,7 +6541,6 @@
                 }
                 if (!ok) {
                     if (mob.nightStep) {
-                        mob.yaw += 1.1;
                         mob.vel.x = 0;
                         mob.vel.z = 0;
                     } else {
@@ -6562,7 +6570,9 @@
                 const inn = specNow.inside || specNow.home;
                 mob.jobTarget = { x: inn[0], z: inn[1] };
                 mob.jobPhase = 'enter';
-                mob.jobTimer = 8;
+                mob.jobTimer = 10;
+                mob.state = 'walk';
+                return;
             } else if (mob.nightStep === 'enter') {
                 const doorX = specNow.door[0] + 0.5, doorZ = specNow.door[1] + 0.5;
                 const ix = (specNow.inside[0] - doorX), iz = (specNow.inside[1] - doorZ);
@@ -8634,9 +8644,18 @@
         const spec = jobSpec(mob);
         if (!spec.door) return;
         setDoorOpen(spec.door[0], VILLAGE_Y + 1, spec.door[1], open, true);
-        mob.doorWait = 0.42;
+        mob.doorWait = 0.28;
         mob.doorPunch = 1;
-        mob.yaw = Math.atan2((spec.door[0] + 0.5) - mob.pos.x, (spec.door[1] + 0.5) - mob.pos.z);
+        const dx = spec.door[0] + 0.5, dz = spec.door[1] + 0.5;
+        mob.yaw = Math.atan2(dx - mob.pos.x, dz - mob.pos.z);
+        if (open) {
+            mob.pos.x = spec.approach[0] * 0.35 + dx * 0.65;
+            mob.pos.z = spec.approach[1] * 0.35 + dz * 0.65;
+            mob.yaw = Math.atan2((spec.inside[0] - dx), (spec.inside[1] - dz));
+            mob.thruDoor = true;
+        } else {
+            mob.thruDoor = false;
+        }
     }
     function toggleGate(x, y, z) {
         const t = getBlock(x, y, z);
@@ -9281,52 +9300,6 @@
     
     
     </script><!--DOWNLOAD-PAD
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
