@@ -6328,7 +6328,7 @@
             home: [9.5, 15.5],
             door: [12, 15],
             approach: [13.5, 15.5],
-            inside: [11.5, 15.5],
+            inside: [10.5, 15.5],
             sites: [[20.5, 20.5], [16.5, 16.5], [24.5, 16.5], [20.5, 12.5], [16.5, 20.5], [24.5, 20.5]],
             lines: ['Проверяю площадь.', 'Голем на месте.', 'Пока ходим — деревня жива.']
         },
@@ -6337,7 +6337,7 @@
             home: [13.5, 27.5],
             door: [13, 24],
             approach: [13.5, 23.5],
-            inside: [13.5, 24.5],
+            inside: [13.5, 26.5],
             sites: [[19.5, 9.5, 3.1416], [19.5, 9.5, 3.1416], [15.5, 6.5, 1.57], [23.5, 6.5, -1.57]],
             lines: ['Грядки сохнут.', 'Воды на ферму.', 'Сорняк опять полез.']
         },
@@ -6346,7 +6346,7 @@
             home: [30.5, 15.5],
             door: [28, 15],
             approach: [27.5, 15.5],
-            inside: [28.5, 15.5],
+            inside: [29.5, 15.5],
             sites: [[25.5, 9.5, 0], [25.5, 9.5, 0], [25.5, 9.5, 0], [24.5, 9.5, 0]],
             lines: ['Наковальня горячая.', 'Голему нужен гвоздь.', 'Уголь кончается.']
         },
@@ -6355,7 +6355,7 @@
             home: [27.5, 21.5],
             door: [27, 24],
             approach: [27.5, 25.5],
-            inside: [27.5, 23.5],
+            inside: [27.5, 22.5],
             sites: [[22.5, 20.5, 0], [22.5, 20.5, 0], [21.5, 20.5, 0], [23.5, 20.5, 0]],
             lines: ['Тут дыра на карте.', 'Остров кончается вон там.', 'Запомню этот поворот.']
         },
@@ -6364,7 +6364,7 @@
             home: [34.5, 20.5],
             door: [31, 20],
             approach: [30.5, 20.5],
-            inside: [31.5, 20.5],
+            inside: [32.5, 20.5],
             sites: [[9.5, 1.5, 3.1416], [9.5, 1.5, 3.1416], [10.5, 1.5, 3.1416], [9.5, 2.5, 3.1416]],
             lines: ['Клюёт… нет, водоросли.', 'Сеть на берег.', 'Море сегодня злое.']
         }
@@ -6531,7 +6531,13 @@
                     }
                 }
                 if (!ok) {
-                    pickNextJobPhase(mob, night);
+                    if (mob.nightStep) {
+                        mob.yaw += 1.1;
+                        mob.vel.x = 0;
+                        mob.vel.z = 0;
+                    } else {
+                        pickNextJobPhase(mob, night);
+                    }
                     return;
                 }
             }
@@ -6556,7 +6562,17 @@
                 const inn = specNow.inside || specNow.home;
                 mob.jobTarget = { x: inn[0], z: inn[1] };
                 mob.jobPhase = 'enter';
+                mob.jobTimer = 8;
             } else if (mob.nightStep === 'enter') {
+                const doorX = specNow.door[0] + 0.5, doorZ = specNow.door[1] + 0.5;
+                const ix = (specNow.inside[0] - doorX), iz = (specNow.inside[1] - doorZ);
+                const ilen = Math.hypot(ix, iz) || 1;
+                const past = ((mob.pos.x - doorX) * ix + (mob.pos.z - doorZ) * iz) / ilen;
+                if (past < 0.85) {
+                    mob.jobTarget = { x: specNow.inside[0], z: specNow.inside[1] };
+                    mob.state = 'walk';
+                    return;
+                }
                 villagerTapDoor(mob, false);
                 mob.nightStep = 'inside';
                 mob.jobTarget = { x: specNow.home[0], z: specNow.home[1] };
@@ -7077,10 +7093,14 @@
             for (let y = 0; y < CHUNK_HEIGHT; y++) {
                 for (let lz = 0; lz < CHUNK_SIZE; lz++) {
                     const block = chunk.getBlock(lx, y, lz);
-                    if (block === BLOCK_EMPTY || block === BLOCK_DOOR_OPEN ||
-                        block === BLOCK_TORCH || block === BLOCK_BED) continue;
-
+                    if (block === BLOCK_EMPTY || block === BLOCK_TORCH || block === BLOCK_BED) continue;
                     const wx = startX + lx, wz = startZ + lz;
+                    if (block === BLOCK_DOOR_OPEN) {
+                        const leaf = 0.10;
+                        solidOffset = appendWoodBox(solidPos, solidNorm, solidUV, solidIdx, solidOffset,
+                            wx + 0.86, y, wz + 0.06, wx + 0.86 + leaf, y + 1, wz + 0.94, 22);
+                        continue;
+                    }
                     const gbio = biomeAt(wx, wz);
 
                     if (isFenceBlock(block)) {
@@ -7234,6 +7254,12 @@
 
         const burst = firstChunkBurst ? 9 : 2;
         let builtCount = 0;
+        for (const chunk of chunks.values()) {
+            if (!chunk.isDirty || !chunk.isGenerated) continue;
+            try { rebuildChunkMesh(chunk); } catch (e) {}
+            builtCount++;
+            if (builtCount >= burst) break;
+        }
         while (chunkBuildQueue.length > 0 && builtCount < burst) {
             const chunk = chunkBuildQueue.shift();
             if (chunks.has(getChunkKey(chunk.cx, chunk.cz))) {
@@ -8589,10 +8615,12 @@
         if (!found) return false;
         const want = open ? BLOCK_DOOR_OPEN : BLOCK_DOOR;
         const cur = getBlock(x, fy, z);
-        if (cur === want) return true;
-        setBlock(x, fy, z, want, true);
-        if (isDoorBlock(getBlock(x, fy + 1, z))) setBlock(x, fy + 1, z, want, true);
-        if (isDoorBlock(getBlock(x, fy - 1, z))) setBlock(x, fy - 1, z, want, true);
+        if (cur === want && getBlock(x, fy + 1, z) !== BLOCK_DOOR && getBlock(x, fy - 1, z) !== BLOCK_DOOR) {
+            return true;
+        }
+        setBlock(x, fy, z, want);
+        if (isDoorBlock(getBlock(x, fy + 1, z))) setBlock(x, fy + 1, z, want);
+        if (isDoorBlock(getBlock(x, fy - 1, z))) setBlock(x, fy - 1, z, want);
         if (!silent) showInvToast(open ? 'Дверь открыта' : 'Дверь закрыта');
         return true;
     }
@@ -9253,65 +9281,6 @@
     
     
     </script><!--DOWNLOAD-PAD
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
