@@ -6321,31 +6321,31 @@
     const VILLAGER_JOBS = {
         ivan: {
             job: 'elder',
-            home: [14.5, 12.5],
+            home: [9.5, 15.5],
             sites: [[20.5, 20.5], [16.5, 16.5], [24.5, 16.5], [20.5, 12.5], [16.5, 20.5], [24.5, 20.5]],
             lines: ['Проверяю площадь.', 'Голем на месте.', 'Пока ходим — деревня жива.']
         },
         masha: {
             job: 'farmer',
-            home: [13.5, 22.5],
+            home: [13.5, 27.5],
             sites: [[19.5, 9.5, 3.1416], [19.5, 9.5, 3.1416], [15.5, 6.5, 1.57], [23.5, 6.5, -1.57]],
             lines: ['Грядки сохнут.', 'Воды на ферму.', 'Сорняк опять полез.']
         },
         boris: {
             job: 'smith',
-            home: [26.5, 15.5],
+            home: [30.5, 15.5],
             sites: [[25.5, 9.5, 0], [25.5, 9.5, 0], [25.5, 9.5, 0], [24.5, 9.5, 0]],
             lines: ['Наковальня горячая.', 'Голему нужен гвоздь.', 'Уголь кончается.']
         },
         anna: {
             job: 'mapper',
-            home: [27.5, 26.5],
+            home: [27.5, 21.5],
             sites: [[22.5, 20.5, 0], [22.5, 20.5, 0], [21.5, 20.5, 0], [23.5, 20.5, 0]],
             lines: ['Тут дыра на карте.', 'Остров кончается вон там.', 'Запомню этот поворот.']
         },
         gleb: {
             job: 'fisher',
-            home: [14.5, 12.5],
+            home: [34.5, 20.5],
             sites: [[9.5, 1.5, 3.1416], [9.5, 1.5, 3.1416], [10.5, 1.5, 3.1416], [9.5, 2.5, 3.1416]],
             lines: ['Клюёт… нет, водоросли.', 'Сеть на берег.', 'Море сегодня злое.']
         }
@@ -6358,7 +6358,7 @@
         const feet = getBlock(bx, VILLAGE_Y + 1, bz);
         const head = getBlock(bx, VILLAGE_Y + 2, bz);
         const ground = getBlock(bx, VILLAGE_Y, bz);
-        if (isFenceBlock(feet) || isFenceBlock(ground) || isGateBlock(feet) || isDoorBlock(feet)) return false;
+        if (isFenceBlock(feet) || isFenceBlock(ground) || isGateBlock(feet) || feet === BLOCK_DOOR) return false;
         if (blocksMob(feet) || blocksMob(head)) return false;
         if (!isSolid(ground)) return false;
         if (checkSolidCollision(x, y, z, r, 1.7, true)) return false;
@@ -6411,6 +6411,15 @@
         }
         if (night) {
             let hx = spec.home[0], hz = spec.home[1];
+            for (let dx = -2; dx <= 2; dx++) {
+                for (let dz = -2; dz <= 2; dz++) {
+                    const tx = Math.floor(hx) + dx, tz = Math.floor(hz) + dz;
+                    if (getBlock(tx, VILLAGE_Y + 1, tz) === BLOCK_DOOR) {
+                        setBlock(tx, VILLAGE_Y + 1, tz, BLOCK_DOOR_OPEN, true);
+                        if (getBlock(tx, VILLAGE_Y + 2, tz) === BLOCK_DOOR) setBlock(tx, VILLAGE_Y + 2, tz, BLOCK_DOOR_OPEN, true);
+                    }
+                }
+            }
             if (!villagerWalkable(hx, hz, 0.34)) { hx = VILLAGE_HUB[0]; hz = VILLAGE_HUB[1]; }
             if (lineBlocked(mob.pos.x, mob.pos.z, hx, hz, mob.radius) &&
                 (Math.hypot(mob.pos.x - VILLAGE_HUB[0], mob.pos.z - VILLAGE_HUB[1]) > 1.6)) {
@@ -6598,7 +6607,7 @@
                 if (wall) {
                     for (let wy = y + 1; wy <= y + 3; wy++) {
                         if (door && wy <= y + 2) {
-                            chunkPut(chunk, wx, wy, wz, BLOCK_DOOR);
+                            chunkPut(chunk, wx, wy, wz, BLOCK_DOOR_OPEN);
                         } else if (win && wy === y + 2) {
                             chunkPut(chunk, wx, wy, wz, BLOCK_GLASS);
                         } else {
@@ -7385,7 +7394,7 @@
     }
 
     function blocksMob(type) {
-        return isSolid(type) || type === BLOCK_DOOR || type === BLOCK_DOOR_OPEN || type === BLOCK_GLASS;
+        return isSolid(type) || type === BLOCK_DOOR || type === BLOCK_GLASS;
     }
     function checkSolidCollision(px, py, pz, r, h, forMob) {
         if (r === undefined) r = player.radius;
@@ -7719,10 +7728,6 @@
             }
         }
 
-        if (closestMob) {
-            return { hit: true, isMob: true, mob: closestMob };
-        }
-
         let x = Math.floor(origin.x), y = Math.floor(origin.y), z = Math.floor(origin.z);
         const stepX = Math.sign(dir.x), stepY = Math.sign(dir.y), stepZ = Math.sign(dir.z);
 
@@ -7740,13 +7745,18 @@
         while (dist < maxDist) {
             const b = getBlock(x, y, z);
             if (b !== BLOCK_EMPTY && b !== BLOCK_WATER) {
-                return {
+                const blockHit = {
                     hit: true,
                     isMob: false,
                     block: { x, y, z },
                     blockType: b,
                     place: { x: x + normal.x, y: y + normal.y, z: z + normal.z }
                 };
+                if (isDoorBlock(b) || isGateBlock(b) || b === BLOCK_BED) return blockHit;
+                if (closestMob && closestMobDist < dist - 0.15) {
+                    return { hit: true, isMob: true, mob: closestMob };
+                }
+                return blockHit;
             }
 
             if (tMaxX < tMaxY) {
@@ -7763,6 +7773,7 @@
                 }
             }
         }
+        if (closestMob) return { hit: true, isMob: true, mob: closestMob };
         return { hit: false };
     }
     function raycastVoxel(maxDist) {
@@ -8538,6 +8549,25 @@
         showInvToast(next === BLOCK_DOOR_OPEN ? 'Дверь открыта' : 'Дверь закрыта');
         return true;
     }
+    function openDoorsNearPlayer() {
+        const px = Math.floor(player.pos.x), py = Math.floor(player.pos.y), pz = Math.floor(player.pos.z);
+        for (let dx = -2; dx <= 2; dx++) {
+            for (let dz = -2; dz <= 2; dz++) {
+                if (dx * dx + dz * dz > 5) continue;
+                for (let dy = 0; dy <= 2; dy++) {
+                    const t = getBlock(px + dx, py + dy, pz + dz);
+                    if (t !== BLOCK_DOOR) continue;
+                    setBlock(px + dx, py + dy, pz + dz, BLOCK_DOOR_OPEN, true);
+                    if (getBlock(px + dx, py + dy + 1, pz + dz) === BLOCK_DOOR) {
+                        setBlock(px + dx, py + dy + 1, pz + dz, BLOCK_DOOR_OPEN, true);
+                    }
+                    if (getBlock(px + dx, py + dy - 1, pz + dz) === BLOCK_DOOR) {
+                        setBlock(px + dx, py + dy - 1, pz + dz, BLOCK_DOOR_OPEN, true);
+                    }
+                }
+            }
+        }
+    }
     function toggleGate(x, y, z) {
         const t = getBlock(x, y, z);
         if (!isGateBlock(t)) return false;
@@ -9091,6 +9121,7 @@
         updateTorchLights(currentTime * 0.001);
         updateMobsManager(dt);
         updateVillagerSocial(dt);
+        openDoorsNearPlayer();
         updateSpeechBubbles();
 
         if (cloudsMesh) {
@@ -9181,79 +9212,6 @@
     
     
     </script><!--DOWNLOAD-PAD
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
