@@ -6336,7 +6336,7 @@
             door: [12, 15],
             approach: [14.4, 15.5],
             inside: [10.4, 15.5],
-            nightPath: [[16.5, 20.5], [14.4, 15.5]],
+            nightPath: [[15.5, 16.5], [14.4, 15.5]],
             sites: [[20.5, 20.5], [16.5, 16.5], [24.5, 16.5], [20.5, 12.5], [16.5, 20.5], [24.5, 20.5]],
             lines: ['Проверяю площадь.', 'Голем на месте.', 'Пока ходим — деревня жива.']
         },
@@ -6356,7 +6356,7 @@
             door: [28, 15],
             approach: [26.4, 15.5],
             inside: [30.1, 15.5],
-            nightPath: [[22.5, 12.5], [22.5, 15.5], [26.4, 15.5]],
+            nightPath: [[23.5, 9.5], [23.5, 15.5], [26.4, 15.5]],
             sites: [[25.5, 9.5, 0], [25.5, 9.5, 0], [25.5, 9.5, 0], [24.5, 9.5, 0]],
             lines: ['Наковальня горячая.', 'Голему нужен гвоздь.', 'Уголь кончается.']
         },
@@ -6374,9 +6374,9 @@
             job: 'fisher',
             home: [33.8, 20.5],
             door: [31, 20],
-            approach: [29.4, 20.5],
+            approach: [30.5, 20.5],
             inside: [33.1, 20.5],
-            nightPath: [[10.5, 8.5], [20.5, 12.5], [26.5, 16.5], [29.4, 20.5]],
+            nightPath: [[10.5, 9.5], [20.5, 12.5], [30.5, 16.5], [30.5, 20.5]],
             sites: [[9.5, 1.5, 3.1416], [9.5, 1.5, 3.1416], [10.5, 1.5, 3.1416], [9.5, 2.5, 3.1416]],
             lines: ['Клюёт… нет, водоросли.', 'Сеть на берег.', 'Море сегодня злое.']
         }
@@ -7136,8 +7136,14 @@
                     const wx = startX + lx, wz = startZ + lz;
                     if (block === BLOCK_DOOR_OPEN) {
                         const leaf = 0.10;
-                        solidOffset = appendWoodBox(solidPos, solidNorm, solidUV, solidIdx, solidOffset,
-                            wx + 0.86, y, wz + 0.06, wx + 0.86 + leaf, y + 1, wz + 0.94, 22);
+                        const wallNS = isOpaque(getBlock(wx, y, wz - 1)) && isOpaque(getBlock(wx, y, wz + 1));
+                        if (wallNS) {
+                            solidOffset = appendWoodBox(solidPos, solidNorm, solidUV, solidIdx, solidOffset,
+                                wx + 0.06, y, wz + 0.86, wx + 0.94, y + 1, wz + 0.86 + leaf, 22);
+                        } else {
+                            solidOffset = appendWoodBox(solidPos, solidNorm, solidUV, solidIdx, solidOffset,
+                                wx + 0.86, y, wz + 0.06, wx + 0.86 + leaf, y + 1, wz + 0.94, 22);
+                        }
                         continue;
                     }
                     const gbio = biomeAt(wx, wz);
@@ -9329,24 +9335,6 @@
     
     
     </script><!--DOWNLOAD-PAD
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
