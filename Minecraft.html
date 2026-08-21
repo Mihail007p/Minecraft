@@ -750,6 +750,37 @@
         #inv-actions button:disabled {
             opacity: 0.35;
         }
+        #trade-overlay {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.55);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 85;
+            pointer-events: auto;
+        }
+        #trade-panel {
+            width: min(340px, 92vw);
+            background: #c6c6c6;
+            border: 3px solid #000;
+            padding: 10px;
+            color: #333;
+        }
+        #trade-panel h2 { font-size: 14px; margin: 0 0 8px; }
+        #trade-panel button {
+            display: block;
+            width: 100%;
+            margin: 4px 0;
+            padding: 9px 8px;
+            border: 2px solid #373737;
+            background: #5a8f3a;
+            color: #fff;
+            font-weight: bold;
+            font-size: 13px;
+        }
+        #trade-panel button.alt { background: #8b8b8b; }
         #inv-toast {
             position: absolute;
             top: 58px;
@@ -915,6 +946,16 @@
             <button id="inv-close" type="button">Закрыть</button>
         </div>
     </div>
+    <div id="trade-overlay">
+        <div id="trade-panel">
+            <h2>Житель</h2>
+            <button type="button" data-trade="iron">8 угля → 1 железо</button>
+            <button type="button" data-trade="food">4 шерсти → 1 жаркое</button>
+            <button type="button" data-trade="gem">6 мяса → 1 изумруд</button>
+            <button type="button" data-trade="pick">1 изумруд → кам. кирка</button>
+            <button type="button" id="trade-close" class="alt">Закрыть</button>
+        </div>
+    </div>
     <div id="inv-toast"></div>
     <div id="inv-cursor-float"></div>
 
@@ -1034,6 +1075,10 @@
     const ITEM_DIAMOND_PICK = 83;
     const ITEM_DIAMOND_SWORD = 84;
     const BLOCK_DEEPSLATE = 85;
+    const BLOCK_SNOW = 86;
+    const BLOCK_CACTUS = 87;
+    const ITEM_MILK = 88;
+    const ITEM_EMERALD = 89;
 
     const BLOCK_NAMES = {
         [BLOCK_GRASS]: 'Трава',
@@ -1120,7 +1165,11 @@
         [ITEM_IRON_SWORD]: 'Жел. меч',
         [ITEM_DIAMOND_PICK]: 'Алм. кирка',
         [ITEM_DIAMOND_SWORD]: 'Алм. меч',
-        [BLOCK_DEEPSLATE]: 'Сланец'
+        [BLOCK_DEEPSLATE]: 'Сланец',
+        [BLOCK_SNOW]: 'Снег',
+        [BLOCK_CACTUS]: 'Кактус',
+        [ITEM_MILK]: 'Молоко',
+        [ITEM_EMERALD]: 'Изумруд'
     };
 
     function isToolItem(type) {
@@ -1137,6 +1186,7 @@
         if (type === ITEM_MEAT) return 4;
         if (type === ITEM_COOKED_MEAT) return 8;
         if (type === ITEM_STEW) return 10;
+        if (type === ITEM_MILK) return 6;
         return 0;
     }
     function isSpawnEgg(type) {
@@ -1156,6 +1206,7 @@
             type === ITEM_BOAT || type === ITEM_GLASS_BOTTLE ||
             type === ITEM_LEATHER || type === ITEM_EGG || isSpawnEgg(type) ||
             type === ITEM_IRON_INGOT || type === ITEM_GOLD_INGOT || type === ITEM_DIAMOND ||
+            type === ITEM_MILK || type === ITEM_EMERALD ||
             isToolItem(type) || isArmorItem(type);
     }
     function canPlaceType(type) {
@@ -1541,6 +1592,22 @@
                 let c = mixHex('#14141c', '#4a4a58', v);
                 if (n01(x, y, 37) > 0.9) c = '#0a0a10';
                 if (n01(x, y, 38) > 0.94) c = '#6a6a78';
+                s(x, y, c);
+            }
+        });
+        MC_TEX.tiles[37] = make(function (s) {
+            for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
+                let c = mixHex('#e8f0f8', '#ffffff', fbm(x, y, 37));
+                if (n01(x, y, 39) > 0.92) c = '#c8d4e0';
+                s(x, y, c);
+            }
+        });
+        MC_TEX.tiles[38] = make(function (s) {
+            for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
+                const rib = (x % 8) < 2;
+                let c = mixHex('#2a6418', '#7cc63a', n01(x, y, 38));
+                if (rib) c = '#1e4a0c';
+                if (y < 3) c = mixHex(c, '#c8f06a', 0.35);
                 s(x, y, c);
             }
         });
@@ -1997,6 +2064,21 @@
         drawPickCols('#b8ffff', '#7fe9ff', '#1a7a9a'); save(83);
         drawSwordCols('#b8ffff', '#7fe9ff', '#1a7a9a'); save(84);
         drawIso(36, 36); save(85);
+        drawIso(37, 37); save(86);
+        drawIso(38, 38); save(87);
+        sprite(function (s) {
+            for (let y = 3; y < 14; y++) for (let x = 5; x < 11; x++) {
+                if (x === 5 || x === 10 || y === 3) s(x, y, '#f4f4f4');
+                else s(x, y, y < 8 ? '#ffffff' : '#e8e8f0');
+            }
+            for (let y = 8; y < 12; y++) for (let x = 6; x < 10; x++) s(x, y, '#f5ead4');
+        }); save(88);
+        sprite(function (s) {
+            s(8, 3, '#7dffa0'); s(7, 4, '#3dcc6a'); s(8, 4, '#b8ffd0'); s(9, 4, '#3dcc6a');
+            s(6, 5, '#1e8a3a'); s(7, 5, '#3dcc6a'); s(8, 5, '#7dffa0'); s(9, 5, '#3dcc6a'); s(10, 5, '#1e8a3a');
+            s(7, 6, '#1e8a3a'); s(8, 6, '#3dcc6a'); s(9, 6, '#1e8a3a');
+            s(8, 7, '#0e5a22');
+        }); save(89);
     })();
 
     // --- 2. ИНВЕНТАРЬ И СОХРАНЕНИЕ ---
@@ -2007,6 +2089,7 @@
     let selectedSlotIndex = 0;
     let inventory = [];
     let invOpen = false;
+    let tradeOpen = false;
     let cursorStack = { type: 0, count: 0 };
     let craft2 = null;
     let craft3 = null;
@@ -2409,7 +2492,8 @@
         66:'#8ec8d8',67:'#8a5a30',68:'#f5ead4',69:'#fff6e4',70:'#f3a8b6',71:'#f4f4f4',
         72:'#8b5a2b',73:'#2a2a2a',74:'#d8c0a0',75:'#f0c040',76:'#5ee7ff',
         77:'#c8c8d0',78:'#f0c040',79:'#7fe9ff',80:'#c8c8d0',81:'#c8c8d0',
-        82:'#c8c8d0',83:'#7fe9ff',84:'#7fe9ff',85:'#2a2a33'
+        82:'#c8c8d0',83:'#7fe9ff',84:'#7fe9ff',85:'#2a2a33',
+        86:'#e8f0f8',87:'#3d7319',88:'#f4f4f4',89:'#3dcc6a'
     };
     const CRAFT_RECIPES = [
         { id: 'planks', name: 'Доски', cat: 'building', shapeless: [[4, 1]], result: { type: 5, count: 4 }, size: 2 },
@@ -3260,6 +3344,10 @@
         if (blockType === BLOCK_GOLD_ORE || blockType === ITEM_GOLD_INGOT) return 34;
         if (blockType === BLOCK_DIAMOND_ORE || blockType === ITEM_DIAMOND) return 35;
         if (blockType === BLOCK_DEEPSLATE) return 36;
+        if (blockType === BLOCK_SNOW) return 37;
+        if (blockType === BLOCK_CACTUS) return 38;
+        if (blockType === ITEM_MILK) return 10;
+        if (blockType === ITEM_EMERALD) return 7;
         return 1;
     }
 
@@ -3847,10 +3935,93 @@
         return group;
     }
 
+    function buildRabbitMesh() {
+        const g = new THREE.Group();
+        const fur = 0xd8c4a0, ear = 0xf0d8c0, pink = 0xf5a9b8;
+        const body = createVoxelBox(0.28, 0.22, 0.38, fur); body.position.set(0, 0.28, 0);
+        const head = createVoxelBox(0.22, 0.20, 0.22, fur); head.position.set(0, 0.46, 0.22);
+        const eL = createVoxelBox(0.06, 0.22, 0.05, ear); eL.position.set(0.07, 0.18, 0);
+        const eR = createVoxelBox(0.06, 0.22, 0.05, ear); eR.position.set(-0.07, 0.18, 0);
+        head.add(eL); head.add(eR);
+        addEyes(head, 0.08, 0.03, 0.12, 0.05, 0.05);
+        const nose = createVoxelBox(0.05, 0.04, 0.04, pink); nose.position.set(0, -0.02, 0.12);
+        head.add(nose);
+        g.add(body); g.add(head);
+        function lg(x, z) {
+            const l = createVoxelBox(0.07, 0.22, 0.07, fur, -0.11); l.position.set(x, 0.22, z); g.add(l); return l;
+        }
+        g.legs = [lg(0.08, 0.1), lg(-0.08, 0.1), lg(0.08, -0.12), lg(-0.08, -0.12)];
+        g.head = head; g.ears = [eL, eR];
+        const tail = createVoxelBox(0.08, 0.08, 0.08, 0xf4f0e8); tail.position.set(0, 0.32, -0.22);
+        g.add(tail); g.tail = tail;
+        return g;
+    }
+    function buildWolfMesh() {
+        const g = new THREE.Group();
+        const fur = 0x9aa3ad, dark = 0x5c6570, cream = 0xe8e0d4;
+        const body = createVoxelBox(0.42, 0.36, 0.72, fur); body.position.set(0, 0.48, 0);
+        const head = createVoxelBox(0.28, 0.26, 0.32, cream); head.position.set(0, 0.62, 0.48);
+        const sn = createVoxelBox(0.16, 0.12, 0.18, cream); sn.position.set(0, -0.04, 0.22);
+        head.add(sn);
+        addEyes(head, 0.1, 0.04, 0.16, 0.07, 0.06);
+        const eL = createVoxelBox(0.08, 0.12, 0.05, dark); eL.position.set(0.12, 0.16, 0);
+        const eR = createVoxelBox(0.08, 0.12, 0.05, dark); eR.position.set(-0.12, 0.16, 0);
+        head.add(eL); head.add(eR);
+        g.add(body); g.add(head);
+        function lg(x, z) {
+            const l = createVoxelBox(0.1, 0.36, 0.1, dark, -0.18); l.position.set(x, 0.36, z); g.add(l); return l;
+        }
+        g.legs = [lg(0.12, 0.22), lg(-0.12, 0.22), lg(0.12, -0.22), lg(-0.12, -0.22)];
+        const tail = createVoxelBox(0.08, 0.08, 0.36, fur); tail.position.set(0, 0.55, -0.48); tail.rotation.x = 0.4;
+        g.add(tail);
+        const collar = createVoxelBox(0.3, 0.06, 0.12, 0xc0392b); collar.position.set(0, 0.58, 0.32); collar.visible = false;
+        g.add(collar); g.collar = collar;
+        g.head = head; g.ears = [eL, eR]; g.tail = tail;
+        return g;
+    }
+    function buildVillagerMesh() {
+        const g = new THREE.Group();
+        const robe = 0x3d6e28, skin = 0xc68642, brown = 0x5a3c18;
+        const body = createVoxelBox(0.42, 0.7, 0.28, robe); body.position.set(0, 0.7, 0);
+        const head = createVoxelBox(0.32, 0.32, 0.32, skin); head.position.set(0, 1.18, 0);
+        const nose = createVoxelBox(0.08, 0.1, 0.14, skin); nose.position.set(0, -0.02, 0.2);
+        const brow = createVoxelBox(0.34, 0.08, 0.34, brown); brow.position.set(0, 0.18, 0);
+        head.add(nose); head.add(brow);
+        addEyes(head, 0.1, 0.04, 0.16, 0.07, 0.07);
+        g.add(body); g.add(head);
+        function arm(x) {
+            const a = createVoxelBox(0.12, 0.4, 0.12, robe, -0.2); a.position.set(x, 0.9, 0); g.add(a); return a;
+        }
+        g.legs = [arm(0.22), arm(-0.22)];
+        g.head = head;
+        return g;
+    }
+    function buildFrogMesh() {
+        const g = new THREE.Group();
+        const gr = 0x4e9a3a, dark = 0x2a6418, eye = 0xf5f0dc;
+        const body = createVoxelBox(0.42, 0.22, 0.36, gr); body.position.set(0, 0.2, 0);
+        const head = createVoxelBox(0.36, 0.2, 0.28, gr); head.position.set(0, 0.32, 0.16);
+        const eL = createVoxelBox(0.1, 0.1, 0.1, eye); eL.position.set(0.14, 0.12, 0.08);
+        const eR = createVoxelBox(0.1, 0.1, 0.1, eye); eR.position.set(-0.14, 0.12, 0.08);
+        head.add(eL); head.add(eR);
+        addEyes(head, 0.14, 0.12, 0.14, 0.05, 0.05);
+        g.add(body); g.add(head);
+        function lg(x, z) {
+            const l = createVoxelBox(0.1, 0.12, 0.16, dark); l.position.set(x, 0.08, z); g.add(l); return l;
+        }
+        g.legs = [lg(0.14, 0.12), lg(-0.14, 0.12), lg(0.14, -0.12), lg(-0.14, -0.12)];
+        g.head = head;
+        g.scale.set(1.15, 1.15, 1.15);
+        return g;
+    }
     function buildMobMesh(type) {
         if (type === 'chicken') return buildChickenMesh();
         if (type === 'pig') return buildPigMesh();
         if (type === 'cow') return buildCowMesh();
+        if (type === 'rabbit') return buildRabbitMesh();
+        if (type === 'wolf') return buildWolfMesh();
+        if (type === 'villager') return buildVillagerMesh();
+        if (type === 'frog') return buildFrogMesh();
         return buildSheepMesh();
     }
 
@@ -3858,7 +4029,11 @@
         chicken: { health: 4, radius: 0.22, height: 0.58, walk: 1.35, panic: 4.4, jump: 4.2 },
         pig: { health: 6, radius: 0.40, height: 0.88, walk: 1.55, panic: 3.8, jump: 7.2 },
         sheep: { health: 8, radius: 0.44, height: 0.98, walk: 1.40, panic: 3.4, jump: 6.8 },
-        cow: { health: 10, radius: 0.50, height: 1.18, walk: 1.20, panic: 3.1, jump: 6.4 }
+        cow: { health: 10, radius: 0.50, height: 1.18, walk: 1.20, panic: 3.1, jump: 6.4 },
+        rabbit: { health: 3, radius: 0.18, height: 0.42, walk: 2.1, panic: 5.2, jump: 5.5 },
+        wolf: { health: 10, radius: 0.36, height: 0.72, walk: 2.0, panic: 4.6, jump: 6.5 },
+        villager: { health: 20, radius: 0.28, height: 1.5, walk: 0.9, panic: 1.6, jump: 5.5 },
+        frog: { health: 4, radius: 0.22, height: 0.38, walk: 1.1, panic: 2.8, jump: 6.0 }
     };
 
     class Mob {
@@ -3884,6 +4059,11 @@
             this.mesh = buildMobMesh(type);
             this.mesh.position.copy(this.pos);
             this.eggTimer = type === 'chicken' ? (12 + Math.random() * 18) : 0;
+            this.tamed = false;
+            this.angry = false;
+            this.sheared = false;
+            this.shearTimer = 0;
+            this.attackCd = 0;
             scene.add(this.mesh);
         }
 
@@ -3894,6 +4074,11 @@
             this.stateTimer = 4.0;
             this.vel.y = 4.0;
             this.yaw = Math.atan2(this.pos.x - player.pos.x, this.pos.z - player.pos.z) + (Math.random() - 0.5) * 0.5;
+            if (this.type === 'wolf' && !this.tamed) {
+                this.angry = true;
+                this.state = 'hunt';
+                this.stateTimer = 12;
+            }
         }
 
         update(dt) {
@@ -3909,7 +4094,21 @@
                 });
             }
 
-            if (this.stateTimer <= 0) {
+            if (this.tamed && this.type === 'wolf') {
+                const d = this.pos.distanceTo(player.pos);
+                if (d > 3.2) {
+                    this.state = 'follow';
+                    this.yaw = Math.atan2(player.pos.x - this.pos.x, player.pos.z - this.pos.z);
+                } else this.state = 'idle';
+                if (d > 28) {
+                    this.pos.x = player.pos.x + (Math.random() - 0.5) * 2;
+                    this.pos.z = player.pos.z + (Math.random() - 0.5) * 2;
+                    this.pos.y = getSurfaceY(Math.floor(this.pos.x), Math.floor(this.pos.z)) + 0.05;
+                }
+            } else if (this.angry && this.type === 'wolf') {
+                this.state = 'hunt';
+                this.yaw = Math.atan2(player.pos.x - this.pos.x, player.pos.z - this.pos.z);
+            } else if (this.stateTimer <= 0) {
                 if (this.state === 'idle') {
                     this.state = 'walk';
                     this.stateTimer = Math.random() * 4 + 2;
@@ -3921,8 +4120,8 @@
             }
 
             let speed = 0;
-            if (this.state === 'walk') speed = this.walkSpeed;
-            else if (this.state === 'panic') speed = this.panicSpeed;
+            if (this.state === 'walk' || this.state === 'follow') speed = this.walkSpeed;
+            else if (this.state === 'panic' || this.state === 'hunt') speed = this.panicSpeed;
 
             this.idleAnim += dt;
             if (speed > 0) {
@@ -4023,13 +4222,27 @@
                 }
             }
 
-            if (this.type === 'chicken' && this.onGround && b !== BLOCK_WATER) {
+            if ((this.type === 'chicken' || this.type === 'rabbit' || this.type === 'frog') && this.onGround && b !== BLOCK_WATER) {
                 if (this.state === 'walk' && Math.sin(this.walkTimer) > 0.97) {
-                    this.vel.y = 1.8; this.onGround = false;
+                    this.vel.y = this.type === 'frog' ? 3.2 : 1.8; this.onGround = false;
                 } else if (this.state === 'panic' && Math.sin(this.walkTimer * 0.7) > 0.85) {
                     this.vel.y = 3.0; this.onGround = false;
                 }
             }
+            if (this.attackCd > 0) this.attackCd -= dt;
+            if (this.type === 'wolf' && this.angry && !this.tamed && this.attackCd <= 0) {
+                const d = this.pos.distanceTo(player.pos);
+                if (d < this.radius + player.radius + 0.45) {
+                    applyDamage(2);
+                    this.attackCd = 1.1;
+                }
+            }
+            if (this.sheared) {
+                this.shearTimer -= dt;
+                if (this.shearTimer <= 0) this.sheared = false;
+                if (this.mesh) this.mesh.scale.y = this.sheared ? 0.72 : 1;
+            }
+            if (this.mesh && this.mesh.collar) this.mesh.collar.visible = !!this.tamed;
 
             const yDelta = this.vel.y * dt;
             const ySteps = Math.max(1, Math.ceil(Math.abs(yDelta) / 0.2));
@@ -4057,6 +4270,9 @@
 
             this.mesh.position.copy(this.pos);
             this.mesh.rotation.y = this.yaw;
+            if (this.type === 'villager' && this.mesh.head) {
+                this.mesh.head.lookAt(player.pos.x, this.pos.y + 1.2, player.pos.z);
+            }
 
             if (this.type === 'chicken' && this.health > 0) {
                 this.eggTimer -= dt;
@@ -4087,34 +4303,57 @@
         return 'cow';
     }
 
-    function animalSurfaceY(wx, wz) {
+    function animalSurfaceY(wx, wz, type) {
         const sy = getSurfaceY(wx, wz);
-        if (sy <= WATER_LEVEL + 1) return -1;
         const ground = getBlock(wx, sy - 1, wz);
         const feet = getBlock(wx, sy, wz);
         const head = getBlock(wx, sy + 1, wz);
-        if (ground !== BLOCK_GRASS) return -1;
-        if (feet === BLOCK_WATER || isOpaque(feet) || isOpaque(head)) return -1;
+        if (isOpaque(feet) || isOpaque(head)) return -1;
+        if (type === 'frog') {
+            if (sy < WATER_LEVEL - 1 || sy > WATER_LEVEL + 3) return -1;
+            if (ground !== BLOCK_GRASS && ground !== BLOCK_SAND && ground !== BLOCK_DIRT) return -1;
+            return sy;
+        }
+        if (sy <= WATER_LEVEL + 1) return -1;
+        if (type === 'rabbit') {
+            if (ground !== BLOCK_SAND && ground !== BLOCK_GRASS) return -1;
+            return sy;
+        }
+        if (type === 'wolf') {
+            if (ground !== BLOCK_GRASS && ground !== BLOCK_SNOW && ground !== BLOCK_DIRT) return -1;
+            return sy;
+        }
+        if (ground !== BLOCK_GRASS && ground !== BLOCK_SNOW) return -1;
+        if (feet === BLOCK_WATER) return -1;
         return sy;
     }
 
+    function faunaForBiome(bio, seed) {
+        if (bio === 'desert') return 'rabbit';
+        if (bio === 'snow') return (seed % 2) ? 'wolf' : 'sheep';
+        if (bio === 'forest') return (seed % 3 === 0) ? 'wolf' : ((seed % 3 === 1) ? 'pig' : 'chicken');
+        if (bio === 'swamp') return 'frog';
+        const p = ['cow', 'sheep', 'pig', 'chicken', 'villager'];
+        return p[seed % p.length];
+    }
+
     function populateChunkFauna(chunk) {
-        if (mobs.length >= 14) return;
+        if (mobs.length >= 16) return;
         const midX = chunk.cx * CHUNK_SIZE + CHUNK_SIZE / 2;
         const midZ = chunk.cz * CHUNK_SIZE + CHUNK_SIZE / 2;
         if (Math.hypot(midX - player.pos.x, midZ - player.pos.z) < 18) return;
         const seed = pseudoHash2D(chunk.cx * 19 + 3, chunk.cz * 31 + 7);
-        if ((seed % 100) > 34) return;
-        const kinds = ['chicken', 'pig', 'sheep', 'cow'];
-        const type = kinds[seed % 4];
-        const want = 2 + (seed % 3);
+        if ((seed % 100) > 40) return;
+        const bio = biomeAt(midX, midZ);
+        const type = faunaForBiome(bio, seed);
+        const want = type === 'villager' ? 1 : (type === 'wolf' ? 2 : 2 + (seed % 3));
         let n = 0;
         for (let i = 0; i < 14 && n < want && mobs.length < 14; i++) {
             const lx = (seed + i * 5) % CHUNK_SIZE;
             const lz = (Math.floor(seed / 3) + i * 11) % CHUNK_SIZE;
             const wx = chunk.cx * CHUNK_SIZE + lx;
             const wz = chunk.cz * CHUNK_SIZE + lz;
-            const sy = animalSurfaceY(wx, wz);
+            const sy = animalSurfaceY(wx, wz, type);
             if (sy < 0) continue;
             mobs.push(new Mob(type, wx + 0.5, sy + 0.05, wz + 0.5));
             n++;
@@ -4129,14 +4368,15 @@
             const spawnAngle = Math.random() * Math.PI * 2;
             const sx = Math.floor(player.pos.x + Math.sin(spawnAngle) * spawnDist);
             const sz = Math.floor(player.pos.z + Math.cos(spawnAngle) * spawnDist);
-            const sy = animalSurfaceY(sx, sz);
+            const bio = biomeAt(sx, sz);
+            const type = faunaForBiome(bio, (sx * 13 + sz) >>> 0);
+            const sy = animalSurfaceY(sx, sz, type);
             if (sy > 0) {
-                const type = pickMobType();
-                const pack = 1 + (Math.random() < 0.55 ? 1 : 0) + (Math.random() < 0.25 ? 1 : 0);
-                for (let k = 0; k < pack && mobs.length < 14; k++) {
+                const pack = type === 'villager' ? 1 : 1 + (Math.random() < 0.5 ? 1 : 0);
+                for (let k = 0; k < pack && mobs.length < 16; k++) {
                     const ox = sx + (k === 0 ? 0 : (k % 2 ? 1 : -1));
                     const oz = sz + (k === 0 ? 0 : (k > 1 ? 1 : 0));
-                    const y2 = animalSurfaceY(ox, oz);
+                    const y2 = animalSurfaceY(ox, oz, type);
                     if (y2 > 0) mobs.push(new Mob(type, ox + 0.5, y2 + 0.05, oz + 0.5));
                 }
             }
@@ -4168,13 +4408,23 @@
                     spawnBlockDrop(x, y, z, ITEM_WOOL);
                     spawnBlockDrop(x, y, z, ITEM_MEAT);
                     if (Math.random() < 0.28) spawnBlockDrop(x, y, z, ITEM_SPAWN_SHEEP);
+                } else if (mob.type === 'rabbit') {
+                    spawnBlockDrop(x, y, z, ITEM_MEAT);
+                    spawnBlockDrop(x, y, z, ITEM_LEATHER);
+                } else if (mob.type === 'wolf') {
+                    spawnBlockDrop(x, y, z, ITEM_MEAT);
+                    if (Math.random() < 0.5) spawnBlockDrop(x, y, z, ITEM_LEATHER);
+                } else if (mob.type === 'villager') {
+                    if (Math.random() < 0.4) spawnBlockDrop(x, y, z, ITEM_EMERALD);
+                } else if (mob.type === 'frog') {
+                    spawnBlockDrop(x, y, z, ITEM_MEAT);
                 }
                 mob.dispose();
                 mobs.splice(i, 1);
                 continue;
             }
 
-            if (mob.pos.distanceTo(player.pos) > 96) {
+            if (!mob.tamed && mob.pos.distanceTo(player.pos) > 96) {
                 mob.dispose();
                 mobs.splice(i, 1);
             }
@@ -4359,6 +4609,23 @@
         if (chunk) chunk.isDirty = true;
     }
 
+    function biomeAt(wx, wz) {
+        const temp = fbm(wx * 0.0026, wz * 0.0026);
+        const wet = fbm(wx * 0.003 + 80, wz * 0.003 + 80);
+        if (temp > 0.24 && wet < -0.1) return 'desert';
+        if (temp < -0.24) return 'snow';
+        if (wet > 0.3 && temp > -0.08) return 'swamp';
+        if (wet > 0.06) return 'forest';
+        return 'plains';
+    }
+    function biomeTitle(id) {
+        if (id === 'desert') return 'Пустыня';
+        if (id === 'snow') return 'Снега';
+        if (id === 'swamp') return 'Болото';
+        if (id === 'forest') return 'Лес';
+        return 'Равнины';
+    }
+
     function generateChunkTerrain(chunk) {
         const startX = chunk.cx * CHUNK_SIZE;
         const startZ = chunk.cz * CHUNK_SIZE;
@@ -4368,24 +4635,41 @@
             for (let lz = 0; lz < CHUNK_SIZE; lz++) {
                 const wx = startX + lx;
                 const wz = startZ + lz;
+                const bio = biomeAt(wx, wz);
 
                 const n1 = fbm(wx * 0.007, wz * 0.007) * 26.0;
                 const n2 = perlin2D(wx * 0.028, wz * 0.028) * 10.0;
                 const n3 = perlin2D(wx * 0.07, wz * 0.07) * 3.5;
                 let h = Math.floor(WATER_LEVEL + 2 + n1 + n2 + n3);
-                h = Math.max(WATER_LEVEL - 12, Math.min(CHUNK_HEIGHT - 10, h));
+                if (bio === 'desert') h = Math.floor(WATER_LEVEL + 4 + n1 * 0.35 + n3 * 0.4);
+                if (bio === 'swamp') h = Math.floor(WATER_LEVEL - 1 + n1 * 0.25 + n3 * 0.5);
+                if (bio === 'snow') h = Math.floor(WATER_LEVEL + 6 + n1 * 0.85 + n2 * 0.5);
+                h = Math.max(2, Math.min(CHUNK_HEIGHT - 10, h));
                 heights[lx + lz * CHUNK_SIZE] = h;
+
+                const shore = h <= WATER_LEVEL + 1;
+                let top = BLOCK_GRASS, fill = BLOCK_DIRT;
+                if (bio === 'desert' || shore) { top = BLOCK_SAND; fill = BLOCK_SAND; }
+                else if (bio === 'snow' && !shore) { top = BLOCK_SNOW; fill = BLOCK_DIRT; }
+                else if (bio === 'swamp' && !shore) { top = BLOCK_GRASS; fill = BLOCK_DIRT; }
 
                 for (let y = 0; y < CHUNK_HEIGHT; y++) {
                     if (y === 0) chunk.setBlock(lx, y, lz, BLOCK_STONE);
                     else if (y < h - 3) chunk.setBlock(lx, y, lz, (y < 16) ? BLOCK_DEEPSLATE : BLOCK_STONE);
-                    else if (y < h) chunk.setBlock(lx, y, lz, (h <= WATER_LEVEL + 1) ? BLOCK_SAND : BLOCK_DIRT);
-                    else if (y === h) chunk.setBlock(lx, y, lz, (h <= WATER_LEVEL + 1) ? BLOCK_SAND : BLOCK_GRASS);
+                    else if (y < h) chunk.setBlock(lx, y, lz, fill);
+                    else if (y === h) chunk.setBlock(lx, y, lz, top);
                     else if (y > h && y <= WATER_LEVEL) chunk.setBlock(lx, y, lz, BLOCK_WATER);
                 }
 
-                if (h > WATER_LEVEL + 1 && (pseudoHash2D(wx, wz) % 1000) < 16 && lx >= 2 && lx <= CHUNK_SIZE - 3 && lz >= 2 && lz <= CHUNK_SIZE - 3) {
-                    const trunkHeight = 5;
+                const treeRoll = pseudoHash2D(wx, wz) % 1000;
+                const canTree = lx >= 2 && lx <= CHUNK_SIZE - 3 && lz >= 2 && lz <= CHUNK_SIZE - 3 && h > WATER_LEVEL + 1;
+                let treeChance = 0;
+                if (bio === 'forest') treeChance = 48;
+                else if (bio === 'plains') treeChance = 12;
+                else if (bio === 'snow') treeChance = 10;
+                else if (bio === 'swamp') treeChance = 8;
+                if (canTree && treeRoll < treeChance) {
+                    const trunkHeight = bio === 'snow' ? 6 : 5;
                     for (let th = 1; th <= trunkHeight; th++) chunk.setBlock(lx, h + th, lz, BLOCK_WOOD);
                     for (let ox = -2; ox <= 2; ox++) {
                         for (let oz = -2; oz <= 2; oz++) {
@@ -4396,6 +4680,11 @@
                                 }
                             }
                         }
+                    }
+                } else if (bio === 'desert' && h > WATER_LEVEL && treeRoll < 22 && chunk.getBlock(lx, h, lz) === BLOCK_SAND) {
+                    const ch = 2 + (treeRoll % 3);
+                    for (let th = 1; th <= ch; th++) {
+                        if (h + th < CHUNK_HEIGHT) chunk.setBlock(lx, h + th, lz, BLOCK_CACTUS);
                     }
                 }
             }
@@ -5076,7 +5365,7 @@
     }
 
     function isHudTouch(touch) {
-        if (invOpen) return true;
+        if (invOpen || tradeOpen) return true;
         if (touchHitsRect(touch, document.getElementById('hotbar'), 12)) return true;
         if (touchHitsRect(touch, document.getElementById('btn-fullscreen'), 8)) return true;
         if (touchHitsRect(touch, document.getElementById('btn-inventory'), 8)) return true;
@@ -5086,7 +5375,7 @@
         if (!t || !t.closest) return false;
         return !!(t.closest('#hotbar') || t.closest('.slot') || t.closest('.action-btn') ||
                   t.closest('#respawn-btn') || t.closest('#btn-fullscreen') || t.closest('#btn-inventory') ||
-                  t.closest('#inv-overlay') || t.closest('#death-screen'));
+                  t.closest('#inv-overlay') || t.closest('#trade-overlay') || t.closest('#death-screen'));
     }
 
     window.addEventListener('touchstart', (e) => {
@@ -5221,7 +5510,8 @@
     function mineSeconds(block, tool) {
         let base = 0.7;
         if (block === BLOCK_LEAVES || block === BLOCK_SAND || block === ITEM_WOOL || block === BLOCK_CARPET) base = 0.4;
-        else if (block === BLOCK_DIRT || block === BLOCK_GRASS) base = 0.55;
+        else if (block === BLOCK_DIRT || block === BLOCK_GRASS || block === BLOCK_SNOW) base = 0.55;
+        else if (block === BLOCK_CACTUS) base = 0.5;
         else if (block === BLOCK_WOOD || block === BLOCK_PLANKS || block === BLOCK_CRAFT ||
             block === BLOCK_CHEST || block === BLOCK_BARREL || block === BLOCK_DOOR) base = 1.15;
         else if (block === BLOCK_STONE || block === BLOCK_SANDSTONE || block === BLOCK_STONE_BRICK) base = 2.6;
@@ -5276,7 +5566,7 @@
     function updateMining(dt) {
         const bar = document.getElementById('mine-bar');
         const fill = document.getElementById('mine-bar-fill');
-        if (player.isDead || invOpen) {
+        if (player.isDead || invOpen || tradeOpen) {
             if (mining || minePending) stopMining();
             return;
         }
@@ -5318,12 +5608,78 @@
         }
     }
 
+    function setTradeOpen(on) {
+        tradeOpen = on;
+        const el = document.getElementById('trade-overlay');
+        if (el) el.style.display = on ? 'flex' : 'none';
+    }
+    function doVillagerTrade(id) {
+        const recipes = {
+            iron: { need: ITEM_CHARCOAL, n: 8, give: ITEM_IRON_INGOT, g: 1 },
+            food: { need: ITEM_WOOL, n: 4, give: ITEM_COOKED_MEAT, g: 1 },
+            gem: { need: ITEM_MEAT, n: 6, give: ITEM_EMERALD, g: 1 },
+            pick: { need: ITEM_EMERALD, n: 1, give: ITEM_STONE_PICK, g: 1 }
+        };
+        const rec = recipes[id];
+        if (!rec) return;
+        if (countInvType(rec.need) < rec.n) {
+            showInvToast('Мало ресурсов');
+            return;
+        }
+        for (let i = 0; i < rec.n; i++) takeOneFromInv(rec.need);
+        if (!addItemToInventory(rec.give, rec.g)) dropExtras(rec.give, rec.g);
+        saveInventory();
+        refreshInventoryUI();
+        showInvToast('Обмен: ' + (BLOCK_NAMES[rec.give] || ''));
+    }
+    function interactMob(mob) {
+        const tool = heldType();
+        if (mob.type === 'sheep' && !isSwordItem(tool)) {
+            if (mob.sheared) { showInvToast('Шерсть ещё растёт'); return true; }
+            mob.sheared = true;
+            mob.shearTimer = 75;
+            spawnBlockDrop(mob.pos.x - 0.5, mob.pos.y, mob.pos.z - 0.5, ITEM_WOOL);
+            spawnBlockDrop(mob.pos.x - 0.5, mob.pos.y, mob.pos.z - 0.5, ITEM_WOOL);
+            showInvToast('Остригли овцу');
+            return true;
+        }
+        if (mob.type === 'cow' && tool === ITEM_GLASS_BOTTLE) {
+            consumeSelectedOne();
+            if (!addItemToInventory(ITEM_MILK, 1)) dropExtras(ITEM_MILK, 1);
+            showInvToast('Молоко');
+            return true;
+        }
+        if (mob.type === 'wolf' && (tool === ITEM_MEAT || tool === ITEM_COOKED_MEAT) && !mob.tamed) {
+            consumeSelectedOne();
+            mob.tamed = true;
+            mob.angry = false;
+            mob.health = mob.maxHealth;
+            if (mob.mesh.collar) mob.mesh.collar.visible = true;
+            showInvToast('Волк приручён');
+            return true;
+        }
+        if (mob.type === 'villager' && !isSwordItem(tool)) {
+            setTradeOpen(true);
+            return true;
+        }
+        if (mob.type === 'frog' && !isSwordItem(tool)) {
+            mob.vel.y = 5;
+            showInvToast('Ква!');
+            return true;
+        }
+        return false;
+    }
     function tryMeleeAt(clientX, clientY) {
-        if (player.isDead || invOpen) return;
-        triggerHandPunch();
+        if (player.isDead || invOpen || tradeOpen) return;
         const hit = raycastFromScreen(clientX, clientY, 5.2);
         if (hit.hit && hit.isMob) {
-            hit.mob.takeDamage(swordDamage(heldType()));
+            const tool = heldType();
+            if (!isSwordItem(tool) && interactMob(hit.mob)) {
+                triggerHandPunch();
+                return;
+            }
+            triggerHandPunch();
+            hit.mob.takeDamage(swordDamage(tool));
         }
     }
 
@@ -5482,6 +5838,23 @@
     btnInventory.addEventListener('click', onInvButton);
     document.getElementById('inv-close').addEventListener('touchstart', (e) => { e.preventDefault(); setInventoryOpen(false); }, { passive: false });
     document.getElementById('inv-close').addEventListener('click', () => setInventoryOpen(false));
+    (function bindTrade() {
+        const ov = document.getElementById('trade-overlay');
+        if (!ov) return;
+        ov.addEventListener('touchstart', function (e) { e.stopPropagation(); }, { passive: true });
+        ov.addEventListener('click', function (e) {
+            const btn = e.target && e.target.closest && e.target.closest('[data-trade]');
+            if (btn) doVillagerTrade(btn.getAttribute('data-trade'));
+            if (e.target === ov || (e.target && e.target.id === 'trade-close')) setTradeOpen(false);
+        });
+        ov.querySelectorAll('button').forEach(function (b) {
+            b.addEventListener('touchstart', function (e) {
+                e.preventDefault(); e.stopPropagation();
+                if (b.id === 'trade-close') setTradeOpen(false);
+                else if (b.getAttribute('data-trade')) doVillagerTrade(b.getAttribute('data-trade'));
+            }, { passive: false });
+        });
+    })();
     document.getElementById('tab-inv').addEventListener('click', function (e) { e.preventDefault(); setInvTab('inv'); });
     document.getElementById('tab-inv').addEventListener('touchstart', function (e) { e.preventDefault(); e.stopPropagation(); setInvTab('inv'); }, { passive: false });
     document.getElementById('tab-craft').addEventListener('click', function (e) { e.preventDefault(); setInvTab('craft'); });
@@ -5746,7 +6119,7 @@
         frameCount++;
         fpsTimer += dt;
         if (fpsTimer >= 1.0) {
-            statsEl.innerText = `FPS: ${frameCount} | Mobs: ${mobs.length}`;
+            statsEl.innerText = `FPS: ${frameCount} | ${biomeTitle(biomeAt(Math.floor(player.pos.x), Math.floor(player.pos.z)))} | Mobs: ${mobs.length}`;
             frameCount = 0;
             fpsTimer = 0;
         }
@@ -23789,769 +24162,5 @@ Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-
+Minecraft dow
 -->
