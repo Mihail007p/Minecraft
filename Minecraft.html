@@ -1077,6 +1077,7 @@
     const BLOCK_SANDSTONE = 32;
     const BLOCK_GLASS = 33;
     const BLOCK_DOOR = 34;
+    const BLOCK_DOOR_OPEN = 99;
     const BLOCK_LADDER = 35;
     const BLOCK_FENCE = 36;
     const BLOCK_GATE = 37;
@@ -1177,6 +1178,7 @@
         [BLOCK_SANDSTONE]: 'Песчаник',
         [BLOCK_GLASS]: 'Стекло',
         [BLOCK_DOOR]: 'Дверь',
+        [BLOCK_DOOR_OPEN]: 'Дверь',
         [BLOCK_LADDER]: 'Лестница',
         [BLOCK_FENCE]: 'Забор',
         [BLOCK_GATE]: 'Калитка',
@@ -1286,7 +1288,7 @@
     }
     function isOpaque(type) {
         return type !== BLOCK_EMPTY && type !== BLOCK_WATER && type !== ITEM_WOOL &&
-            type !== BLOCK_DOOR && type !== BLOCK_GLASS && type !== BLOCK_TORCH &&
+            type !== BLOCK_DOOR_OPEN && type !== BLOCK_GLASS && type !== BLOCK_TORCH &&
             !isNonBlockItem(type);
     }
 
@@ -1816,6 +1818,18 @@
             }
         });
 
+        MC_TEX.tiles[56] = make(function (s) {
+            for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
+                if (x < 9) {
+                    let c = plankCol(x + 4, y);
+                    if (x < 2 || x > 7) c = '#3a2410';
+                    s(x, y, c);
+                } else {
+                    s(x, y, (x + y) % 5 === 0 ? '#16324a' : '#1c3a52');
+                }
+            }
+            for (let y = 12; y <= 16; y++) s(6, y, '#c4a040');
+        });
         MC_TEX.get = function (id, x, y) {
             const t = MC_TEX.tiles[id];
             if (!t) return '#7a7a7a';
@@ -2699,7 +2713,7 @@
         82:'#c8c8d0',83:'#7fe9ff',84:'#7fe9ff',85:'#2a2a33',
         86:'#e8f0f8',87:'#3d7319',88:'#f4f4f4',89:'#3dcc6a',
         90:'#b8e4f4',91:'#4a3218',92:'#b4a486',93:'#f0c040',
-        94:'#c4a0b4',95:'#c45a28',96:'#f0a030',97:'#e0d0b0',98:'#e05040'
+        94:'#c4a0b4',95:'#c45a28',96:'#f0a030',97:'#e0d0b0',98:'#e05040',99:'#8a6230'
     };
     const CRAFT_RECIPES = [
         { id: 'planks', name: 'Доски', cat: 'building', shapeless: [[4, 1]], result: { type: 5, count: 4 }, size: 2 },
@@ -3535,6 +3549,7 @@
         if (blockType === BLOCK_SANDSTONE || blockType === BLOCK_CUT_SANDSTONE) return 20;
         if (blockType === BLOCK_GLASS || blockType === ITEM_GLASS_BOTTLE) return 21;
         if (blockType === BLOCK_DOOR) return 22;
+        if (blockType === BLOCK_DOOR_OPEN) return 56;
         if (blockType === BLOCK_LADDER) return 23;
         if (blockType === BLOCK_FENCE || blockType === BLOCK_GATE) return 24;
         if (blockType === BLOCK_BED) return 25;
@@ -5232,6 +5247,7 @@
         if (blockType === BLOCK_GRASS) dropType = BLOCK_DIRT;
         if (blockType === BLOCK_COAL_ORE) dropType = ITEM_CHARCOAL;
         if (blockType === BLOCK_DIAMOND_ORE) dropType = ITEM_DIAMOND;
+        if (blockType === BLOCK_DOOR_OPEN) dropType = BLOCK_DOOR;
 
         const mesh = createMiniDropMesh(dropType);
         mesh.position.set(x + 0.5, y + 0.5, z + 0.5);
@@ -7001,6 +7017,19 @@
         }
         return false;
     }
+    function isDoorBlock(t) {
+        return t === BLOCK_DOOR || t === BLOCK_DOOR_OPEN;
+    }
+    function toggleDoor(x, y, z) {
+        const t = getBlock(x, y, z);
+        if (!isDoorBlock(t)) return false;
+        const next = (t === BLOCK_DOOR) ? BLOCK_DOOR_OPEN : BLOCK_DOOR;
+        setBlock(x, y, z, next);
+        if (isDoorBlock(getBlock(x, y + 1, z))) setBlock(x, y + 1, z, next);
+        if (isDoorBlock(getBlock(x, y - 1, z))) setBlock(x, y - 1, z, next);
+        showInvToast(next === BLOCK_DOOR_OPEN ? 'Дверь открыта' : 'Дверь закрыта');
+        return true;
+    }
     function tryMeleeAt(clientX, clientY) {
         if (player.isDead || invOpen || tradeOpen) return;
         const hit = raycastFromScreen(clientX, clientY, 5.2);
@@ -7012,6 +7041,13 @@
             }
             triggerHandPunch();
             hit.mob.takeDamage(swordDamage(tool));
+            return;
+        }
+        if (hit.hit && !hit.isMob && hit.block) {
+            if (isDoorBlock(getBlock(hit.block.x, hit.block.y, hit.block.z))) {
+                toggleDoor(hit.block.x, hit.block.y, hit.block.z);
+                triggerHandPunch();
+            }
         }
     }
 
@@ -7099,6 +7135,11 @@
         }
 
         const hit = raycastVoxel();
+        if (hit.hit && !hit.isMob && hit.block && isDoorBlock(getBlock(hit.block.x, hit.block.y, hit.block.z))) {
+            toggleDoor(hit.block.x, hit.block.y, hit.block.z);
+            triggerHandPunch();
+            return;
+        }
         if (hit.hit && !hit.isMob) {
             const p = hit.place;
             const pr = player.radius, ph = player.height;
@@ -7110,6 +7151,9 @@
 
             if (!intersectPlayer) {
                 setBlock(p.x, p.y, p.z, currentSlot.type);
+                if (currentSlot.type === BLOCK_DOOR && getBlock(p.x, p.y + 1, p.z) === BLOCK_EMPTY) {
+                    setBlock(p.x, p.y + 1, p.z, BLOCK_DOOR);
+                }
                 consumeSelectedOne();
             }
         }
@@ -7544,90 +7588,8 @@
     
     
     
+    
     </script><!--DOWNLOAD-PAD
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
