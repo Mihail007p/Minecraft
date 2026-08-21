@@ -5082,10 +5082,11 @@
                 updateJoystick(touch.clientX, touch.clientY);
             } else if (touch.identifier === lookTouchId) {
                 const holdDist = Math.hypot(touch.clientX - lookTap.x, touch.clientY - lookTap.y);
-                if (miningHold && holdDist < 26) {
+                const stillLimit = miningHold ? 40 : 18;
+                if ((minePending || miningHold) && holdDist < stillLimit) {
                     continue;
                 }
-                if (miningHold) {
+                if (minePending || miningHold) {
                     lookTap.moved = true;
                     stopMining();
                     lastLookPos = { x: touch.clientX, y: touch.clientY };
@@ -5098,7 +5099,7 @@
                 player.yaw -= dx * 0.005;
                 player.pitch -= dy * 0.005;
                 player.pitch = Math.max(-Math.PI / 2 + 0.05, Math.min(Math.PI / 2 - 0.05, player.pitch));
-                if (holdDist > 18) lookTap.moved = true;
+                if (holdDist > 16) lookTap.moved = true;
             }
         }
     }, { passive: false });
@@ -5119,9 +5120,9 @@
             if (touch.identifier === lookTouchId) {
                 const dtap = Date.now() - lookTap.t;
                 const dist = Math.hypot(touch.clientX - lookTap.x, touch.clientY - lookTap.y);
-                const mined = mining && mining.t > 0.22;
+                const mined = mining && mining.t > 0.18;
                 stopMining();
-                if (!lookTap.moved && !mined && dtap < 340 && dist < 24) {
+                if (!lookTap.moved && !mined && dtap < 320 && dist < 22) {
                     tryMeleeAttack(touch.clientX, touch.clientY);
                 }
                 lookTouchId = null;
@@ -5211,9 +5212,12 @@
 
     let miningHold = false;
     let mining = null;
+    let minePending = null;
+    const MINE_ARM_DELAY = 0.55;
     function stopMining() {
         miningHold = false;
         mining = null;
+        minePending = null;
         hideCrack();
         const bar = document.getElementById('mine-bar');
         if (bar) bar.style.display = 'none';
@@ -5223,18 +5227,34 @@
         const hit = raycastFromScreen(clientX, clientY, 6.5);
         if (!hit.hit || hit.isMob || !hit.block || hit.block.y <= 0) return;
         if (hit.blockType === BLOCK_WATER) return;
-        miningHold = true;
-        mining = { x: hit.block.x, y: hit.block.y, z: hit.block.z, t: 0, type: hit.blockType };
+        miningHold = false;
+        mining = null;
+        minePending = {
+            x: hit.block.x, y: hit.block.y, z: hit.block.z,
+            type: hit.blockType, wait: 0
+        };
+        hideCrack();
+        const bar = document.getElementById('mine-bar');
+        if (bar) bar.style.display = 'none';
     }
     function updateMining(dt) {
         const bar = document.getElementById('mine-bar');
         const fill = document.getElementById('mine-bar-fill');
-        if (!miningHold || player.isDead || invOpen) {
-            if (mining) stopMining();
-            miningHold = false;
+        if (player.isDead || invOpen) {
+            if (mining || minePending) stopMining();
             return;
         }
-        if (!mining) return;
+        if (minePending && !mining) {
+            minePending.wait += dt;
+            if (minePending.wait >= MINE_ARM_DELAY) {
+                miningHold = true;
+                mining = { x: minePending.x, y: minePending.y, z: minePending.z, t: 0, type: minePending.type };
+                minePending = null;
+            } else {
+                return;
+            }
+        }
+        if (!miningHold || !mining) return;
         const cur = getBlock(mining.x, mining.y, mining.z);
         if (cur === BLOCK_EMPTY || cur !== mining.type || mining.y <= 0) {
             stopMining();
