@@ -6337,6 +6337,7 @@
             approach: [14.4, 15.5],
             inside: [10.4, 15.5],
             nightPath: [[15.5, 16.5], [14.4, 15.5]],
+            workPath: [[15.5, 16.5], [20.5, 20.5]],
             sites: [[20.5, 20.5], [16.5, 16.5], [24.5, 16.5], [20.5, 12.5], [16.5, 20.5], [24.5, 20.5]],
             lines: ['Проверяю площадь.', 'Голем на месте.', 'Пока ходим — деревня жива.']
         },
@@ -6347,6 +6348,7 @@
             approach: [13.5, 22.4],
             inside: [13.5, 26.6],
             nightPath: [[13.5, 22.4]],
+            workPath: [[13.5, 22.4], [19.5, 9.5]],
             sites: [[19.5, 9.5, 3.1416], [19.5, 9.5, 3.1416], [15.5, 6.5, 1.57], [23.5, 6.5, -1.57]],
             lines: ['Грядки сохнут.', 'Воды на ферму.', 'Сорняк опять полез.']
         },
@@ -6356,7 +6358,8 @@
             door: [28, 15],
             approach: [26.4, 15.5],
             inside: [30.1, 15.5],
-            nightPath: [[23.5, 9.5], [23.5, 15.5], [26.4, 15.5]],
+            nightPath: [[21.5, 9.5], [21.5, 15.5], [26.4, 15.5]],
+            workPath: [[21.5, 15.5], [21.5, 9.5], [25.5, 9.5]],
             sites: [[25.5, 9.5, 0], [25.5, 9.5, 0], [25.5, 9.5, 0], [24.5, 9.5, 0]],
             lines: ['Наковальня горячая.', 'Голему нужен гвоздь.', 'Уголь кончается.']
         },
@@ -6367,6 +6370,7 @@
             approach: [27.5, 26.4],
             inside: [27.5, 21.9],
             nightPath: [[22.5, 26.5], [27.5, 26.4]],
+            workPath: [[22.5, 26.5], [22.5, 20.5]],
             sites: [[22.5, 20.5, 0], [22.5, 20.5, 0], [21.5, 20.5, 0], [23.5, 20.5, 0]],
             lines: ['Тут дыра на карте.', 'Остров кончается вон там.', 'Запомню этот поворот.']
         },
@@ -6377,6 +6381,7 @@
             approach: [30.5, 20.5],
             inside: [33.1, 20.5],
             nightPath: [[10.5, 9.5], [20.5, 12.5], [30.5, 16.5], [30.5, 20.5]],
+            workPath: [[30.5, 16.5], [20.5, 12.5], [10.5, 9.5], [9.5, 1.5]],
             sites: [[9.5, 1.5, 3.1416], [9.5, 1.5, 3.1416], [10.5, 1.5, 3.1416], [9.5, 2.5, 3.1416]],
             lines: ['Клюёт… нет, водоросли.', 'Сеть на берег.', 'Море сегодня злое.']
         }
@@ -6486,6 +6491,19 @@
         }
         setTarget(chosen[0], chosen[1], 'goto', chosen[2]);
     }
+    function startWorkWalk(mob) {
+        const spec = jobSpec(mob);
+        if (spec.workPath && spec.workPath.length) {
+            mob.workWay = spec.workPath.slice();
+            const p = mob.workWay.shift();
+            mob.jobTarget = { x: p[0], z: p[1] };
+            mob.jobPhase = 'workpath';
+            mob.nightStep = null;
+            mob.thruDoor = false;
+            return;
+        }
+        pickNextJobPhase(mob, false);
+    }
     function assignVillagerJob(mob) {
         const spec = jobSpec(mob);
         mob.vilJob = spec.job;
@@ -6514,7 +6532,9 @@
             return;
         }
         const specNow = jobSpec(mob);
-        if (night && specNow.door && !mob.nightStep) startNightWalk(mob);
+        if (night && specNow.door && (!mob.nightStep || mob.nightStep === 'workpath')) {
+            startNightWalk(mob);
+        }
         if (!night && (mob.nightStep === 'inside' || mob.nightStep === 'enter' || mob.nightStep === 'path')) {
             villagerTapDoor(mob, true);
             mob.nightStep = 'leave';
@@ -6554,10 +6574,15 @@
                     }
                 }
                 if (!ok) {
-                    if (mob.nightStep) {
-                        mob.vel.x = 0;
-                        mob.vel.z = 0;
-                    } else {
+                    if (mob.nightStep === 'path' && mob.nightWay && mob.nightWay.length) {
+                        const p = mob.nightWay.shift();
+                        mob.jobTarget = { x: p[0], z: p[1] };
+                    } else if (mob.nightStep === 'path' && specNow.approach) {
+                        mob.jobTarget = { x: specNow.approach[0], z: specNow.approach[1] };
+                    } else if (mob.jobPhase === 'workpath' && mob.workWay && mob.workWay.length) {
+                        const p = mob.workWay.shift();
+                        mob.jobTarget = { x: p[0], z: p[1] };
+                    } else if (!mob.nightStep) {
                         pickNextJobPhase(mob, night);
                     }
                     return;
@@ -6577,6 +6602,15 @@
                 while (dy > Math.PI) dy -= Math.PI * 2;
                 while (dy < -Math.PI) dy += Math.PI * 2;
                 mob.yaw += dy * Math.min(1, dt * 3);
+            }
+            if (mob.jobPhase === 'workpath') {
+                if (mob.workWay && mob.workWay.length) {
+                    const p = mob.workWay.shift();
+                    mob.jobTarget = { x: p[0], z: p[1] };
+                    mob.state = 'walk';
+                    return;
+                }
+                mob.jobPhase = 'goto';
             }
             if (mob.nightStep === 'path') {
                 if (mob.nightWay && mob.nightWay.length) {
@@ -6620,7 +6654,7 @@
             } else if (mob.nightStep === 'leave') {
                 villagerTapDoor(mob, false);
                 mob.nightStep = null;
-                pickNextJobPhase(mob, false);
+                startWorkWalk(mob);
             } else if (mob.nightStep === 'inside') {
                 mob.state = 'work';
             } else if (mob.jobTimer <= 0) {
@@ -9335,74 +9369,6 @@
     
     
     </script><!--DOWNLOAD-PAD
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
