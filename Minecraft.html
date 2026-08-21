@@ -1286,6 +1286,7 @@
     }
     function isOpaque(type) {
         return type !== BLOCK_EMPTY && type !== BLOCK_WATER && type !== ITEM_WOOL &&
+            type !== BLOCK_DOOR && type !== BLOCK_GLASS && type !== BLOCK_TORCH &&
             !isNonBlockItem(type);
     }
 
@@ -1560,10 +1561,15 @@
         });
         MC_TEX.tiles[22] = make(function (s) {
             for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
-                const edge = x < 2 || x > 29;
-                s(x, y, edge ? '#5a3c18' : plankCol(x, y));
+                let c = plankCol(x, y);
+                if (x < 3 || x > 28 || y < 2 || y > 29) c = '#3a2410';
+                if (x === 10 || x === 11 || x === 21 || x === 22) c = '#4a3018';
+                if (y === 15 || y === 16) c = '#2a1a0c';
+                s(x, y, c);
             }
-            s(24, 16, '#3d2814'); s(25, 16, '#2a1a0c'); s(24, 17, '#2a1a0c'); s(25, 17, '#1a0e06');
+            for (let y = 12; y <= 19; y++) for (let x = 23; x <= 27; x++) s(x, y, '#c4a040');
+            s(24, 15, '#5a3a10'); s(25, 15, '#3a2808');
+            s(24, 16, '#f0d060'); s(25, 16, '#c4a040');
         });
         MC_TEX.tiles[23] = make(function (s) {
             for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) s(x, y, '#2a1a0c');
@@ -4587,8 +4593,10 @@
         function lg(x) {
             const l = createVoxelBox(0.24, 0.8, 0.24, dark, -0.4); l.position.set(x, 0.8, 0); g.add(l); return l;
         }
-        g.legs = [lg(0.22), lg(-0.22), arm(0.55), arm(-0.55)];
+        g.legs = [lg(0.22), lg(-0.22)];
+        g.arms = [arm(0.55), arm(-0.55)];
         g.head = head;
+        g.biped = true;
         return g;
     }
 
@@ -4612,7 +4620,7 @@
         mooshroom: { health: 10, radius: 0.5, height: 1.18, walk: 1.15, panic: 3.0, jump: 6.2 },
         llama: { health: 12, radius: 0.38, height: 1.55, walk: 1.7, panic: 4.0, jump: 6.4 },
         squid: { health: 6, radius: 0.28, height: 0.7, walk: 1.2, panic: 2.4, jump: 2.0 },
-        golem: { health: 40, radius: 0.48, height: 2.1, walk: 0.85, panic: 2.2, jump: 5.0 }
+        golem: { health: 40, radius: 0.34, height: 2.05, walk: 1.05, panic: 2.2, jump: 4.2 }
     };
 
     class Mob {
@@ -4735,6 +4743,36 @@
                 else if (this.state === 'panic' || this.state === 'hunt') speed = this.panicSpeed;
             }
 
+            if (this.type === 'golem' && !this.angry) {
+                if (this.homeX === undefined) { this.homeX = this.pos.x; this.homeZ = this.pos.z; }
+                const hdx = this.homeX - this.pos.x, hdz = this.homeZ - this.pos.z;
+                if (hdx * hdx + hdz * hdz > 64) {
+                    this.yaw = Math.atan2(hdx, hdz);
+                    this.state = 'walk';
+                    this.stateTimer = 2.5;
+                }
+                const ax = this.pos.x + Math.sin(this.yaw) * 1.35;
+                const az = this.pos.z + Math.cos(this.yaw) * 1.35;
+                const ay = Math.floor(this.pos.y + 0.05);
+                if (isOpaque(getBlock(Math.floor(ax), ay, Math.floor(az))) ||
+                    isOpaque(getBlock(Math.floor(ax), ay + 1, Math.floor(az)))) {
+                    this.yaw += 0.8 + Math.random() * 1.6;
+                    this.vel.x = 0;
+                    this.vel.z = 0;
+                }
+                if (!this._lp) this._lp = this.pos.clone();
+                const moved = Math.hypot(this.pos.x - this._lp.x, this.pos.z - this._lp.z);
+                this.stuckT = (this.stuckT || 0) + ((this.state === 'walk' && moved < 0.03) ? dt : -this.stuckT);
+                if (this.stuckT < 0) this.stuckT = 0;
+                if (this.stuckT > 0.55) {
+                    this.yaw += Math.PI * (0.4 + Math.random() * 0.8);
+                    this.stuckT = 0;
+                    this.vel.x = 0;
+                    this.vel.z = 0;
+                }
+                this._lp.copy(this.pos);
+            }
+
             this.idleAnim += dt;
             if (!this.ridden) {
                 if (speed > 0) {
@@ -4850,7 +4888,11 @@
             }
 
             if ((colX || colZ) && this.onGround) {
-                if (!checkSolidCollision(this.pos.x, this.pos.y + 1.15, this.pos.z, this.radius, this.height)) {
+                if (this.type === 'golem') {
+                    this.yaw += 0.9 + Math.random() * 1.3;
+                    this.vel.x = 0;
+                    this.vel.z = 0;
+                } else if (!checkSolidCollision(this.pos.x, this.pos.y + 1.15, this.pos.z, this.radius, this.height)) {
                     this.vel.y = this.jumpVel;
                     this.onGround = false;
                 } else {
@@ -5556,39 +5598,49 @@
                 const wall = (lx === -2 || lx === 2 || lz === 0 || lz === 6);
                 const corner = (lx === -2 || lx === 2) && (lz === 0 || lz === 6);
                 const door = (lx === 0 && lz === 0);
-                const win = wall && !corner && !door && (lz === 3 || (lz === 0 && Math.abs(lx) === 1));
+                const win = wall && !corner && !door && ((lz === 3 && Math.abs(lx) === 2) || (lz === 0 && Math.abs(lx) === 1));
                 for (let yy = y - 3; yy < y; yy++) chunkPut(chunk, wx, yy, wz, BLOCK_DIRT);
-                chunkPut(chunk, wx, y, wz, BLOCK_STONE_BRICK);
-                villageAir(chunk, wx, y + 1, y + 6, wz);
+                chunkPut(chunk, wx, y, wz, wall ? BLOCK_STONE_BRICK : BLOCK_PLANKS);
+                villageAir(chunk, wx, y + 1, y + 7, wz);
                 if (wall) {
                     for (let wy = y + 1; wy <= y + 3; wy++) {
                         if (door && wy <= y + 2) {
-                            chunkPut(chunk, wx, wy, wz, wy === y + 1 ? BLOCK_DOOR : BLOCK_EMPTY);
+                            chunkPut(chunk, wx, wy, wz, BLOCK_DOOR);
                         } else if (win && wy === y + 2) {
                             chunkPut(chunk, wx, wy, wz, BLOCK_GLASS);
                         } else {
                             chunkPut(chunk, wx, wy, wz, corner ? BLOCK_WOOD : BLOCK_PLANKS);
                         }
                     }
+                    chunkPut(chunk, wx, y + 4, wz, corner ? BLOCK_WOOD : BLOCK_PLANKS);
                 } else {
                     if (lx === -1 && lz === 5) chunkPut(chunk, wx, y + 1, wz, BLOCK_BED);
                     if (lx === 1 && lz === 5) chunkPut(chunk, wx, y + 1, wz, BLOCK_CHEST);
                     if (lx === 1 && lz === 1) chunkPut(chunk, wx, y + 1, wz, BLOCK_CRAFT);
-                    if (lx === 0 && lz === 4) chunkPut(chunk, wx, y + 3, wz, BLOCK_TORCH);
+                    if (lx === 0 && lz === 3) chunkPut(chunk, wx, y + 3, wz, BLOCK_TORCH);
+                    chunkPut(chunk, wx, y + 4, wz, BLOCK_PLANKS);
                 }
-                chunkPut(chunk, wx, y + 4, wz, BLOCK_PLANKS);
             }
         }
         for (let lx = -3; lx <= 3; lx++) {
             for (let lz = -1; lz <= 7; lz++) {
-                if (lx >= -2 && lx <= 2 && lz >= 0 && lz <= 6) continue;
                 const r = rotXZ(lx, lz, rot);
-                chunkPut(chunk, ox + r[0], y + 4, oz + r[1], BLOCK_WOOD);
+                const inner = (lx >= -2 && lx <= 2 && lz >= 0 && lz <= 6);
+                if (!inner) chunkPut(chunk, ox + r[0], y + 4, oz + r[1], BLOCK_WOOD);
             }
         }
-        const porch = rotXZ(0, -1, rot);
-        chunkPut(chunk, ox + porch[0], y + 1, oz + porch[1], BLOCK_FENCE);
-        chunkPut(chunk, ox + porch[0], y + 2, oz + porch[1], BLOCK_TORCH);
+        for (let lx = -1; lx <= 1; lx++) {
+            for (let lz = 1; lz <= 5; lz++) {
+                const r = rotXZ(lx, lz, rot);
+                chunkPut(chunk, ox + r[0], y + 5, oz + r[1], BLOCK_WOOD);
+            }
+        }
+        const lampL = rotXZ(-3, -1, rot);
+        const lampR = rotXZ(3, -1, rot);
+        chunkPut(chunk, ox + lampL[0], y + 1, oz + lampL[1], BLOCK_FENCE);
+        chunkPut(chunk, ox + lampL[0], y + 2, oz + lampL[1], BLOCK_TORCH);
+        chunkPut(chunk, ox + lampR[0], y + 1, oz + lampR[1], BLOCK_FENCE);
+        chunkPut(chunk, ox + lampR[0], y + 2, oz + lampR[1], BLOCK_TORCH);
     }
     function paintFarm(chunk, ox, oz, y) {
         for (let dx = -3; dx <= 3; dx++) {
@@ -7491,120 +7543,8 @@
     
     
     
+    
     </script><!--DOWNLOAD-PAD
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
