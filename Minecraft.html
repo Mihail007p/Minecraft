@@ -5386,14 +5386,19 @@
 
     const fallingBlocks = [];
     const fallingTrees = [];
+    const fallGeoCache = {};
     function createFallingBlockMesh(blockType) {
-        const geo = new THREE.BoxGeometry(0.92, 0.92, 0.92);
-        const uvs = [];
-        for (let f = 0; f < 6; f++) {
-            const tile = getTileUV(getBlockFaceTile(blockType, f));
-            uvs.push(tile.u0, tile.v0, tile.u0, tile.v1, tile.u1, tile.v1, tile.u1, tile.v0);
+        let geo = fallGeoCache[blockType];
+        if (!geo) {
+            geo = new THREE.BoxGeometry(0.92, 0.92, 0.92);
+            const uvs = [];
+            for (let f = 0; f < 6; f++) {
+                const tile = getTileUV(getBlockFaceTile(blockType, f));
+                uvs.push(tile.u0, tile.v0, tile.u0, tile.v1, tile.u1, tile.v1, tile.u1, tile.v0);
+            }
+            geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+            fallGeoCache[blockType] = geo;
         }
-        geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
         return new THREE.Mesh(geo, terrainMaterial);
     }
     function treeLooksLikeHouse(x, y, z) {
@@ -5462,8 +5467,21 @@
         const group = new THREE.Group();
         group.position.copy(hinge);
         const parts = [];
+        const dirty = [];
+        function touch(ch) {
+            if (!ch) return;
+            for (let i = 0; i < dirty.length; i++) if (dirty[i] === ch) return;
+            dirty.push(ch);
+        }
         function addPart(x, y, z, type) {
-            setBlock(x, y, z, BLOCK_EMPTY);
+            touch(setBlock(x, y, z, BLOCK_EMPTY, true));
+            const cx = Math.floor(x / CHUNK_SIZE), cz = Math.floor(z / CHUNK_SIZE);
+            const lx = (x % CHUNK_SIZE + CHUNK_SIZE) % CHUNK_SIZE;
+            const lz = (z % CHUNK_SIZE + CHUNK_SIZE) % CHUNK_SIZE;
+            if (lx === 0) touch(chunks.get(getChunkKey(cx - 1, cz)));
+            if (lx === CHUNK_SIZE - 1) touch(chunks.get(getChunkKey(cx + 1, cz)));
+            if (lz === 0) touch(chunks.get(getChunkKey(cx, cz - 1)));
+            if (lz === CHUNK_SIZE - 1) touch(chunks.get(getChunkKey(cx, cz + 1)));
             const mesh = createFallingBlockMesh(type);
             mesh.position.set(x + 0.5 - hinge.x, y + 0.5 - hinge.y, z + 0.5 - hinge.z);
             group.add(mesh);
@@ -5477,6 +5495,7 @@
             const b = part.leafs[i];
             addPart(b[0], b[1], b[2], BLOCK_LEAVES);
         }
+        for (let i = 0; i < dirty.length; i++) rebuildChunkMesh(dirty[i]);
         scene.add(group);
         fallingTrees.push({
             group: group,
@@ -5499,7 +5518,6 @@
             p.mesh.getWorldPosition(wp);
             const drop = (p.type === BLOCK_LEAVES && Math.random() < 0.5) ? null : p.type;
             if (drop) spawnBlockDrop(Math.floor(wp.x), Math.max(0, Math.floor(wp.y)), Math.floor(wp.z), drop);
-            if (p.mesh.geometry) p.mesh.geometry.dispose();
         }
         scene.remove(ft.group);
         const dx = player.pos.x - ft.hinge.x, dz = player.pos.z - ft.hinge.z;
@@ -5682,12 +5700,12 @@
         return chunk.getBlock(lx, wy, lz);
     }
 
-    function setBlock(wx, wy, wz, type) {
-        if (wy < 0 || wy >= CHUNK_HEIGHT) return;
+    function setBlock(wx, wy, wz, type, silent) {
+        if (wy < 0 || wy >= CHUNK_HEIGHT) return null;
         const cx = Math.floor(wx / CHUNK_SIZE);
         const cz = Math.floor(wz / CHUNK_SIZE);
         const chunk = chunks.get(getChunkKey(cx, cz));
-        if (!chunk) return;
+        if (!chunk) return null;
 
         const lx = (wx % CHUNK_SIZE + CHUNK_SIZE) % CHUNK_SIZE;
         const lz = (wz % CHUNK_SIZE + CHUNK_SIZE) % CHUNK_SIZE;
@@ -5699,7 +5717,8 @@
         if (lz === 0) markChunkDirty(cx, cz - 1);
         if (lz === CHUNK_SIZE - 1) markChunkDirty(cx, cz + 1);
 
-        rebuildChunkMesh(chunk);
+        if (!silent) rebuildChunkMesh(chunk);
+        return chunk;
     }
 
     function markChunkDirty(cx, cz) {
@@ -8240,48 +8259,8 @@
     
     
     
+    
     </script><!--DOWNLOAD-PAD
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
