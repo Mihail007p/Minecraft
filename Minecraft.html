@@ -4772,10 +4772,11 @@
                 else if (this.state === 'panic' || this.state === 'hunt') speed = this.panicSpeed;
             }
 
-            if (this.type === 'golem' && !this.angry) {
+            if ((this.type === 'golem' || this.type === 'villager') && !this.angry) {
                 if (this.homeX === undefined) { this.homeX = this.pos.x; this.homeZ = this.pos.z; }
                 const hdx = this.homeX - this.pos.x, hdz = this.homeZ - this.pos.z;
-                if (hdx * hdx + hdz * hdz > 64) {
+                const homeR = this.type === 'villager' ? 5.5 : 8;
+                if (hdx * hdx + hdz * hdz > homeR * homeR) {
                     this.yaw = Math.atan2(hdx, hdz);
                     this.state = 'walk';
                     this.stateTimer = 2.5;
@@ -4783,8 +4784,8 @@
                 const ax = this.pos.x + Math.sin(this.yaw) * 1.35;
                 const az = this.pos.z + Math.cos(this.yaw) * 1.35;
                 const ay = Math.floor(this.pos.y + 0.05);
-                if (isSolid(getBlock(Math.floor(ax), ay, Math.floor(az))) ||
-                    isSolid(getBlock(Math.floor(ax), ay + 1, Math.floor(az)))) {
+                if (blocksMob(getBlock(Math.floor(ax), ay, Math.floor(az))) ||
+                    blocksMob(getBlock(Math.floor(ax), ay + 1, Math.floor(az)))) {
                     this.yaw += 0.8 + Math.random() * 1.6;
                     this.vel.x = 0;
                     this.vel.z = 0;
@@ -4906,22 +4907,22 @@
 
             let colX = false, colZ = false;
             this.pos.x += this.vel.x * dt;
-            if (checkSolidCollision(this.pos.x, this.pos.y, this.pos.z, this.radius, this.height)) {
+            if (checkSolidCollision(this.pos.x, this.pos.y, this.pos.z, this.radius, this.height, true)) {
                 this.pos.x -= this.vel.x * dt;
                 colX = true;
             }
             this.pos.z += this.vel.z * dt;
-            if (checkSolidCollision(this.pos.x, this.pos.y, this.pos.z, this.radius, this.height)) {
+            if (checkSolidCollision(this.pos.x, this.pos.y, this.pos.z, this.radius, this.height, true)) {
                 this.pos.z -= this.vel.z * dt;
                 colZ = true;
             }
 
             if ((colX || colZ) && this.onGround) {
-                if (this.type === 'golem') {
+                if (this.type === 'golem' || this.type === 'villager') {
                     this.yaw += 0.9 + Math.random() * 1.3;
                     this.vel.x = 0;
                     this.vel.z = 0;
-                } else if (!checkSolidCollision(this.pos.x, this.pos.y + 1.15, this.pos.z, this.radius, this.height)) {
+                } else if (!checkSolidCollision(this.pos.x, this.pos.y + 1.15, this.pos.z, this.radius, this.height, true)) {
                     this.vel.y = this.jumpVel;
                     this.onGround = false;
                 } else {
@@ -4967,7 +4968,7 @@
             let yHit = false;
             for (let s = 0; s < ySteps; s++) {
                 this.pos.y += yStep;
-                if (checkSolidCollision(this.pos.x, this.pos.y, this.pos.z, this.radius, this.height) || this.pos.y < 0.02) {
+                if (checkSolidCollision(this.pos.x, this.pos.y, this.pos.z, this.radius, this.height, true) || this.pos.y < 0.02) {
                     this.pos.y -= yStep;
                     yHit = true;
                     break;
@@ -6218,19 +6219,28 @@
     }
     function seedVillageMobs() {
         const spots = [
-            [28.5, 14.5], [12.5, 14.5], [27.5, 25.5], [13.5, 25.5], [31.5, 20.5]
+            [20.5, 12.5], [17.5, 16.5], [23.5, 16.5], [20.5, 19.5], [18.5, 13.5]
         ];
         for (let i = 0; i < spots.length; i++) {
             if (mobs.length >= 20) break;
             const x = spots[i][0], z = spots[i][1];
-            mobs.push(new Mob('villager', x, VILLAGE_Y + 1.05, z));
+            const m = new Mob('villager', x, VILLAGE_Y + 1.05, z);
+            m.homeX = VILLAGE_OX + 0.5;
+            m.homeZ = VILLAGE_OZ + 0.5;
+            mobs.push(m);
         }
         if (mobs.length < 20) {
-            mobs.push(new Mob('golem', VILLAGE_OX + 0.5, VILLAGE_Y + 1.05, VILLAGE_OZ + 2.5));
+            const g = new Mob('golem', VILLAGE_OX + 0.5, VILLAGE_Y + 1.05, VILLAGE_OZ + 3.5);
+            g.homeX = VILLAGE_OX + 0.5;
+            g.homeZ = VILLAGE_OZ + 0.5;
+            mobs.push(g);
         }
     }
 
-    function checkSolidCollision(px, py, pz, r, h) {
+    function blocksMob(type) {
+        return isSolid(type) || type === BLOCK_DOOR || type === BLOCK_DOOR_OPEN || type === BLOCK_GLASS;
+    }
+    function checkSolidCollision(px, py, pz, r, h, forMob) {
         if (r === undefined) r = player.radius;
         if (h === undefined) h = player.height;
         if (py < 0.02) return true;
@@ -6241,7 +6251,8 @@
         for (let x = minX; x <= maxX; x++) {
             for (let y = minY; y <= maxY; y++) {
                 for (let z = minZ; z <= maxZ; z++) {
-                    if (isSolid(getBlock(x, y, z))) return true;
+                    const t = getBlock(x, y, z);
+                    if (forMob ? blocksMob(t) : isSolid(t)) return true;
                 }
             }
         }
@@ -7636,32 +7647,8 @@
     
     
     
+    
     </script><!--DOWNLOAD-PAD
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
