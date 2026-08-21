@@ -1291,6 +1291,12 @@
             type !== BLOCK_DOOR_OPEN && type !== BLOCK_GLASS && type !== BLOCK_TORCH &&
             !isNonBlockItem(type);
     }
+    function isSolid(type) {
+        if (type === BLOCK_EMPTY || type === BLOCK_WATER || type === BLOCK_DOOR_OPEN ||
+            type === BLOCK_TORCH || type === ITEM_WOOL) return false;
+        if (isNonBlockItem(type)) return false;
+        return true;
+    }
 
     const MC_TEX = { tiles: new Array(64) };
     (function buildMcTextures() {
@@ -3634,6 +3640,14 @@
         depthWrite: false,
         side: THREE.DoubleSide
     });
+    const glassMaterial = new THREE.MeshLambertMaterial({
+        map: atlasTexture,
+        color: 0xd8f4ff,
+        transparent: true,
+        opacity: 0.28,
+        depthWrite: false,
+        side: THREE.DoubleSide
+    });
 
     // Солнце и Луна — без тумана, всегда лицом к камере
     const celestialGroup = new THREE.Group();
@@ -4769,8 +4783,8 @@
                 const ax = this.pos.x + Math.sin(this.yaw) * 1.35;
                 const az = this.pos.z + Math.cos(this.yaw) * 1.35;
                 const ay = Math.floor(this.pos.y + 0.05);
-                if (isOpaque(getBlock(Math.floor(ax), ay, Math.floor(az))) ||
-                    isOpaque(getBlock(Math.floor(ax), ay + 1, Math.floor(az)))) {
+                if (isSolid(getBlock(Math.floor(ax), ay, Math.floor(az))) ||
+                    isSolid(getBlock(Math.floor(ax), ay + 1, Math.floor(az)))) {
                     this.yaw += 0.8 + Math.random() * 1.6;
                     this.vel.x = 0;
                     this.vel.z = 0;
@@ -5046,7 +5060,7 @@
             if (isOpaque(getBlock(wx, WATER_LEVEL - 2, wz))) return -1;
             return WATER_LEVEL - 2;
         }
-        if (isOpaque(feet) || isOpaque(head)) return -1;
+        if (isSolid(feet) || isSolid(head)) return -1;
         if (type === 'frog') {
             if (sy < WATER_LEVEL - 1 || sy > WATER_LEVEL + 3) return -1;
             if (ground !== BLOCK_GRASS && ground !== BLOCK_SAND && ground !== BLOCK_DIRT && ground !== BLOCK_CLAY) return -1;
@@ -5284,7 +5298,7 @@
                 const by = Math.floor(item.pos.y - 0.14);
                 const bz = Math.floor(item.pos.z);
 
-                if (isOpaque(getBlock(bx, by, bz))) {
+                if (isSolid(getBlock(bx, by, bz))) {
                     item.pos.y = by + 1.0 + 0.14;
                     item.vel.set(0, 0, 0);
                     item.onGround = true;
@@ -5293,7 +5307,7 @@
                 const bx = Math.floor(item.pos.x);
                 const by = Math.floor(item.pos.y - 0.2);
                 const bz = Math.floor(item.pos.z);
-                if (!isOpaque(getBlock(bx, by, bz))) {
+                if (!isSolid(getBlock(bx, by, bz))) {
                     item.onGround = false;
                 }
             }
@@ -5336,6 +5350,7 @@
             this.blocks = new Uint8Array(CHUNK_SIZE * CHUNK_HEIGHT * CHUNK_SIZE);
             this.solidMesh = null;
             this.waterMesh = null;
+            this.glassMesh = null;
             this.isGenerated = false;
             this.isDirty = true;
         }
@@ -5361,6 +5376,11 @@
                 scene.remove(this.waterMesh);
                 this.waterMesh.geometry.dispose();
                 this.waterMesh = null;
+            }
+            if (this.glassMesh) {
+                scene.remove(this.glassMesh);
+                this.glassMesh.geometry.dispose();
+                this.glassMesh = null;
             }
         }
     }
@@ -5852,6 +5872,8 @@
         let solidOffset = 0;
         const waterPos = [], waterNorm = [], waterUV = [], waterIdx = [];
         let waterOffset = 0;
+        const glassPos = [], glassNorm = [], glassUV = [], glassIdx = [];
+        let glassOffset = 0;
 
         const startX = chunk.cx * CHUNK_SIZE;
         const startZ = chunk.cz * CHUNK_SIZE;
@@ -5869,12 +5891,26 @@
             for (let y = 0; y < CHUNK_HEIGHT; y++) {
                 for (let lz = 0; lz < CHUNK_SIZE; lz++) {
                     const block = chunk.getBlock(lx, y, lz);
-                    if (block === BLOCK_EMPTY) continue;
+                    if (block === BLOCK_EMPTY || block === BLOCK_DOOR_OPEN) continue;
 
                     const wx = startX + lx, wz = startZ + lz;
                     const gbio = biomeAt(wx, wz);
 
-                    if (block === BLOCK_WATER) {
+                    if (block === BLOCK_GLASS) {
+                        const gTile = getTileUV(21);
+                        for (let f = 0; f < 6; f++) {
+                            const nx = wx + faces[f].dir[0], ny = y + faces[f].dir[1], nz = wz + faces[f].dir[2];
+                            const nb = getBlock(nx, ny, nz);
+                            if (nb === BLOCK_GLASS || isOpaque(nb)) continue;
+                            for (let c = 0; c < 4; c++) {
+                                glassPos.push(wx + faces[f].corners[c][0], y + faces[f].corners[c][1], wz + faces[f].corners[c][2]);
+                                glassNorm.push(faces[f].norm[0], faces[f].norm[1], faces[f].norm[2]);
+                            }
+                            glassUV.push(gTile.u0, gTile.v0, gTile.u0, gTile.v1, gTile.u1, gTile.v1, gTile.u1, gTile.v0);
+                            glassIdx.push(glassOffset, glassOffset + 1, glassOffset + 2, glassOffset, glassOffset + 2, glassOffset + 3);
+                            glassOffset += 4;
+                        }
+                    } else if (block === BLOCK_WATER) {
                         const waterTile = getTileUV(11); // Классический тайл воды
 
                         for (let f = 0; f < 6; f++) {
@@ -5952,6 +5988,16 @@
             waterGeo.setIndex(waterIdx);
             chunk.waterMesh = new THREE.Mesh(waterGeo, classicWaterMaterial);
             scene.add(chunk.waterMesh);
+        }
+
+        if (glassPos.length > 0) {
+            const glassGeo = new THREE.BufferGeometry();
+            glassGeo.setAttribute('position', new THREE.Float32BufferAttribute(glassPos, 3));
+            glassGeo.setAttribute('normal', new THREE.Float32BufferAttribute(glassNorm, 3));
+            glassGeo.setAttribute('uv', new THREE.Float32BufferAttribute(glassUV, 2));
+            glassGeo.setIndex(glassIdx);
+            chunk.glassMesh = new THREE.Mesh(glassGeo, glassMaterial);
+            scene.add(chunk.glassMesh);
         }
 
         chunk.isDirty = false;
@@ -6114,7 +6160,7 @@
             const below = getBlock(wx, y, wz);
             const here = getBlock(wx, y + 1, wz);
             const head = getBlock(wx, y + 2, wz);
-            if (isOpaque(below) && !isOpaque(here) && !isOpaque(head)) {
+            if (isSolid(below) && !isSolid(here) && !isSolid(head)) {
                 return y + 1;
             }
         }
@@ -6195,7 +6241,7 @@
         for (let x = minX; x <= maxX; x++) {
             for (let y = minY; y <= maxY; y++) {
                 for (let z = minZ; z <= maxZ; z++) {
-                    if (isOpaque(getBlock(x, y, z))) return true;
+                    if (isSolid(getBlock(x, y, z))) return true;
                 }
             }
         }
@@ -6316,7 +6362,7 @@
             const wx = Math.floor(player.pos.x), wz = Math.floor(player.pos.z);
             const here = getBlock(wx, WATER_LEVEL, wz);
             const land = getBlock(wx, WATER_LEVEL + 1, wz);
-            if (isOpaque(land) || (here !== BLOCK_WATER && isOpaque(here))) {
+            if (isSolid(land) || (here !== BLOCK_WATER && isSolid(here))) {
                 player.boating = false;
             }
         }
@@ -7079,7 +7125,7 @@
             z = player.pos.z - Math.cos(player.yaw) * 2.2;
             y = getSurfaceY(Math.floor(x), Math.floor(z));
         }
-        if (isOpaque(getBlock(Math.floor(x), Math.floor(y), Math.floor(z)))) {
+        if (isSolid(getBlock(Math.floor(x), Math.floor(y), Math.floor(z)))) {
             y = getSurfaceY(Math.floor(x), Math.floor(z));
         }
         mobs.push(new Mob(type, x, y + 0.05, z));
@@ -7589,108 +7635,8 @@
     
     
     
+    
     </script><!--DOWNLOAD-PAD
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
