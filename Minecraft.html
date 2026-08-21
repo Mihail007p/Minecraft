@@ -4962,7 +4962,7 @@
         cow: { health: 10, radius: 0.50, height: 1.18, walk: 1.20, panic: 3.1, jump: 6.4 },
         rabbit: { health: 3, radius: 0.18, height: 0.42, walk: 2.1, panic: 5.2, jump: 5.5 },
         wolf: { health: 10, radius: 0.36, height: 0.72, walk: 2.0, panic: 4.6, jump: 6.5 },
-        villager: { health: 20, radius: 0.28, height: 1.82, walk: 0.95, panic: 1.8, jump: 5.5 },
+        villager: { health: 20, radius: 0.34, height: 1.82, walk: 0.95, panic: 1.8, jump: 5.5 },
         frog: { health: 4, radius: 0.22, height: 0.38, walk: 1.1, panic: 2.8, jump: 6.0 },
         horse: { health: 15, radius: 0.42, height: 1.45, walk: 2.4, panic: 5.5, jump: 7.2 },
         camel: { health: 16, radius: 0.46, height: 1.7, walk: 1.8, panic: 3.8, jump: 6.0 },
@@ -6239,35 +6239,73 @@
     const VILLAGER_JOBS = {
         ivan: {
             job: 'elder',
-            home: [13.5, 15.5],
-            sites: [[20.5, 18.8], [16.5, 16.5], [24.5, 16.5], [20.5, 12.4], [16.5, 20.5], [24.5, 20.5]],
+            home: [14.5, 12.5],
+            sites: [[20.5, 20.5], [16.5, 16.5], [24.5, 16.5], [20.5, 12.5], [16.5, 20.5], [24.5, 20.5]],
             lines: ['Проверяю площадь.', 'Голем на месте.', 'Пока ходим — деревня жива.']
         },
         masha: {
             job: 'farmer',
-            home: [13.5, 23.5],
-            sites: [[19.5, 8.6], [16.6, 6.5], [22.4, 6.5], [19.5, 3.6], [20.5, 14.6]],
+            home: [13.5, 22.5],
+            sites: [[19.5, 9.5], [15.5, 6.5], [23.5, 6.5], [19.5, 3.5], [20.5, 12.5]],
             lines: ['Грядки сохнут.', 'Воды на ферму.', 'Сорняк опять полез.']
         },
         boris: {
             job: 'smith',
-            home: [27.5, 15.5],
-            sites: [[27.6, 13.4], [30.4, 14.5], [26.4, 14.2], [31.2, 18.4]],
+            home: [26.5, 15.5],
+            sites: [[26.5, 13.5], [26.5, 16.5], [24.5, 14.5], [26.5, 18.5]],
             lines: ['Наковальня горячая.', 'Голему нужен гвоздь.', 'Уголь кончается.']
         },
         anna: {
             job: 'mapper',
-            home: [27.5, 25.4],
-            sites: [[24.5, 20.5], [14.5, 20.5], [20.5, 22.6], [32.2, 16.5], [8.6, 16.5], [20.5, 10.4]],
+            home: [27.5, 26.5],
+            sites: [[23.5, 20.5], [14.5, 20.5], [20.5, 22.5], [20.5, 10.5], [14.5, 16.5], [24.5, 12.5]],
             lines: ['Тут дыра на карте.', 'Остров кончается вон там.', 'Запомню этот поворот.']
         },
         gleb: {
             job: 'fisher',
-            home: [30.5, 20.4],
-            sites: [[16.5, 3.6], [20.5, 3.4], [12.5, 3.8], [8.6, 6.5], [10.5, 4.2]],
+            home: [29.5, 16.5],
+            sites: [[19.5, 3.5], [14.5, 3.5], [10.5, 3.5], [8.5, 10.5], [14.5, 10.5]],
             lines: ['Клюёт… нет, водоросли.', 'Сеть на берег.', 'Море сегодня злое.']
         }
     };
+    const VILLAGE_HUB = [20.5, 12.5];
+    function villagerWalkable(x, z, r) {
+        if (r === undefined) r = 0.36;
+        const y = VILLAGE_Y + 1.05;
+        const bx = Math.floor(x), bz = Math.floor(z);
+        const feet = getBlock(bx, VILLAGE_Y + 1, bz);
+        const head = getBlock(bx, VILLAGE_Y + 2, bz);
+        const ground = getBlock(bx, VILLAGE_Y, bz);
+        if (isFenceBlock(feet) || isFenceBlock(ground) || isGateBlock(feet) || isDoorBlock(feet)) return false;
+        if (blocksMob(feet) || blocksMob(head)) return false;
+        if (!isSolid(ground)) return false;
+        if (checkSolidCollision(x, y, z, r, 1.7, true)) return false;
+        return true;
+    }
+    function unstickVillager(mob) {
+        if (!checkSolidCollision(mob.pos.x, mob.pos.y, mob.pos.z, mob.radius, mob.height, true)) return;
+        const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]];
+        for (let d = 0.4; d <= 2.4; d += 0.4) {
+            for (let i = 0; i < dirs.length; i++) {
+                const nx = mob.pos.x + dirs[i][0] * d, nz = mob.pos.z + dirs[i][1] * d;
+                if (!checkSolidCollision(nx, mob.pos.y, nz, mob.radius, mob.height, true) && villagerWalkable(nx, nz, mob.radius)) {
+                    mob.pos.x = nx;
+                    mob.pos.z = nz;
+                    return;
+                }
+            }
+        }
+    }
+    function lineBlocked(x0, z0, x1, z1, r) {
+        const len = Math.hypot(x1 - x0, z1 - z0);
+        const steps = Math.max(2, Math.ceil(len / 0.55));
+        const y = VILLAGE_Y + 1.05;
+        for (let i = 1; i < steps; i++) {
+            const t = i / steps;
+            if (checkSolidCollision(x0 + (x1 - x0) * t, y, z0 + (z1 - z0) * t, r || 0.34, 1.7, true)) return true;
+        }
+        return false;
+    }
     function jobSpec(mob) {
         if (mob.vilId && VILLAGER_JOBS[mob.vilId]) return VILLAGER_JOBS[mob.vilId];
         if (mob._wanderJob) return mob._wanderJob;
@@ -6283,22 +6321,44 @@
     }
     function pickNextJobPhase(mob, night) {
         const spec = jobSpec(mob);
+        function setTarget(x, z, phase) {
+            mob.jobPhase = phase || 'goto';
+            mob.jobTarget = { x: x, z: z };
+            mob.jobFace = Math.random() * Math.PI * 2;
+            mob.jobTimer = 5 + Math.random() * 8;
+        }
         if (night) {
-            mob.jobPhase = 'home';
-            mob.jobTarget = { x: spec.home[0], z: spec.home[1] };
+            let hx = spec.home[0], hz = spec.home[1];
+            if (!villagerWalkable(hx, hz, 0.34)) { hx = VILLAGE_HUB[0]; hz = VILLAGE_HUB[1]; }
+            if (lineBlocked(mob.pos.x, mob.pos.z, hx, hz, mob.radius) &&
+                (Math.hypot(mob.pos.x - VILLAGE_HUB[0], mob.pos.z - VILLAGE_HUB[1]) > 1.6)) {
+                setTarget(VILLAGE_HUB[0], VILLAGE_HUB[1], 'hub');
+            } else {
+                setTarget(hx, hz, 'home');
+            }
             mob.jobTimer = 10 + Math.random() * 8;
             if (Math.random() < 0.4) villagerSay(mob, 'Пора по домам.', 2.2);
             return;
         }
-        const sites = spec.sites;
-        const s = sites[Math.floor(Math.random() * sites.length)];
-        mob.jobPhase = 'goto';
-        mob.jobTarget = {
-            x: s[0] + (Math.random() - 0.5) * 0.35,
-            z: s[1] + (Math.random() - 0.5) * 0.35
-        };
-        mob.jobFace = Math.random() * Math.PI * 2;
-        mob.jobTimer = 5 + Math.random() * 8;
+        const sites = spec.sites.slice();
+        for (let n = sites.length - 1; n > 0; n--) {
+            const j = Math.floor(Math.random() * (n + 1));
+            const tmp = sites[n]; sites[n] = sites[j]; sites[j] = tmp;
+        }
+        let chosen = null;
+        for (let i = 0; i < sites.length; i++) {
+            const x = sites[i][0], z = sites[i][1];
+            if (!villagerWalkable(x, z, 0.34)) continue;
+            chosen = [x, z];
+            if (!lineBlocked(mob.pos.x, mob.pos.z, x, z, mob.radius)) break;
+        }
+        if (!chosen) chosen = VILLAGE_HUB.slice();
+        if (lineBlocked(mob.pos.x, mob.pos.z, chosen[0], chosen[1], mob.radius) &&
+            Math.hypot(mob.pos.x - VILLAGE_HUB[0], mob.pos.z - VILLAGE_HUB[1]) > 1.8) {
+            setTarget(VILLAGE_HUB[0], VILLAGE_HUB[1], 'hub');
+            return;
+        }
+        setTarget(chosen[0], chosen[1], 'goto');
     }
     function assignVillagerJob(mob) {
         const spec = jobSpec(mob);
@@ -6323,13 +6383,39 @@
         if (night && mob.jobPhase !== 'home') pickNextJobPhase(mob, true);
         if (!night && mob.jobPhase === 'home' && (mob.jobTimer || 0) <= 0) pickNextJobPhase(mob, false);
         mob.jobTimer = (mob.jobTimer || 0) - dt;
+        unstickVillager(mob);
         if (!mob.jobTarget) pickNextJobPhase(mob, night);
         const t = mob.jobTarget;
         if (!t) return;
+        if (!villagerWalkable(t.x, t.z, 0.3)) {
+            pickNextJobPhase(mob, night);
+            return;
+        }
         const dx = t.x - mob.pos.x, dz = t.z - mob.pos.z;
         const dist = Math.hypot(dx, dz);
         if (dist > 0.9) {
-            mob.yaw = Math.atan2(dx, dz);
+            let yaw = Math.atan2(dx, dz);
+            const look = 0.75;
+            const ax = mob.pos.x + Math.sin(yaw) * look;
+            const az = mob.pos.z + Math.cos(yaw) * look;
+            if (checkSolidCollision(ax, mob.pos.y, az, mob.radius, mob.height, true)) {
+                const tryY = [yaw + 0.95, yaw - 0.95, yaw + 1.7, yaw - 1.7];
+                let ok = false;
+                for (let i = 0; i < tryY.length; i++) {
+                    const tx = mob.pos.x + Math.sin(tryY[i]) * look;
+                    const tz = mob.pos.z + Math.cos(tryY[i]) * look;
+                    if (!checkSolidCollision(tx, mob.pos.y, tz, mob.radius, mob.height, true)) {
+                        yaw = tryY[i];
+                        ok = true;
+                        break;
+                    }
+                }
+                if (!ok) {
+                    pickNextJobPhase(mob, night);
+                    return;
+                }
+            }
+            mob.yaw = yaw;
             mob.state = 'walk';
             mob.stateTimer = 1.2;
             if (mob.jobTimer < 0.4) mob.jobTimer = 2.5;
@@ -7106,11 +7192,11 @@
     }
     function seedVillageMobs() {
         const spots = [
-            ['ivan', 20.5, 18.8],
-            ['masha', 19.5, 8.5],
-            ['boris', 27.5, 14.2],
-            ['anna', 24.5, 20.5],
-            ['gleb', 16.5, 4.2]
+            ['ivan', 20.5, 20.5],
+            ['masha', 19.5, 9.5],
+            ['boris', 26.5, 14.5],
+            ['anna', 23.5, 20.5],
+            ['gleb', 14.5, 3.5]
         ];
         for (let i = 0; i < spots.length; i++) {
             if (mobs.length >= 20) break;
@@ -8928,174 +9014,6 @@
     
     
     </script><!--DOWNLOAD-PAD
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
