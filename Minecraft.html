@@ -1188,6 +1188,7 @@
     const BLOCK_LADDER = 35;
     const BLOCK_FENCE = 36;
     const BLOCK_GATE = 37;
+    const BLOCK_GATE_OPEN = 100;
     const BLOCK_BED = 38;
     const BLOCK_CARPET = 39;
     const BLOCK_TRAPDOOR = 40;
@@ -1289,6 +1290,7 @@
         [BLOCK_LADDER]: 'Лестница',
         [BLOCK_FENCE]: 'Забор',
         [BLOCK_GATE]: 'Калитка',
+        [BLOCK_GATE_OPEN]: 'Калитка',
         [BLOCK_BED]: 'Кровать',
         [BLOCK_CARPET]: 'Ковёр',
         [BLOCK_TRAPDOOR]: 'Люк',
@@ -1393,15 +1395,19 @@
     function canPlaceType(type) {
         return type !== BLOCK_EMPTY && type !== BLOCK_WATER && !isNonBlockItem(type);
     }
+    function isFenceBlock(type) {
+        return type === BLOCK_FENCE || type === BLOCK_GATE || type === BLOCK_GATE_OPEN;
+    }
     function isOpaque(type) {
         return type !== BLOCK_EMPTY && type !== BLOCK_WATER && type !== ITEM_WOOL &&
             type !== BLOCK_DOOR_OPEN && type !== BLOCK_GLASS && type !== BLOCK_TORCH &&
-            type !== BLOCK_BED &&
+            type !== BLOCK_BED && !isFenceBlock(type) &&
             !isNonBlockItem(type);
     }
     function isSolid(type) {
         if (type === BLOCK_EMPTY || type === BLOCK_WATER || type === BLOCK_DOOR_OPEN ||
-            type === BLOCK_TORCH || type === BLOCK_BED || type === ITEM_WOOL) return false;
+            type === BLOCK_TORCH || type === BLOCK_BED || type === ITEM_WOOL ||
+            type === BLOCK_GATE_OPEN) return false;
         if (isNonBlockItem(type)) return false;
         return true;
     }
@@ -1699,15 +1705,7 @@
             }
         });
         MC_TEX.tiles[24] = make(function (s) {
-            for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) s(x, y, '#2a1a0c');
-            for (let y = 0; y < 32; y++) {
-                s(6, y, '#6b4423'); s(7, y, '#c4a06a'); s(8, y, '#8a6230');
-                s(23, y, '#8a6230'); s(24, y, '#c4a06a'); s(25, y, '#6b4423');
-            }
-            for (let x = 6; x < 26; x++) {
-                s(x, 8, '#c4a06a'); s(x, 9, '#8a6230');
-                s(x, 20, '#c4a06a'); s(x, 21, '#8a6230');
-            }
+            for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) s(x, y, plankCol(x, y));
         });
         MC_TEX.tiles[25] = make(function (s) {
             for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) s(x, y, '#5a3c18');
@@ -2188,8 +2186,34 @@
         drawIso(21, 21); save(33);
         drawIso(22, 22); save(34);
         drawIso(23, 23); save(35);
-        drawIso(24, 24); save(36);
-        drawIso(24, 6); save(37);
+        sprite(function (s) {
+            const A = woodA(), B = woodB(), C = woodC();
+            function post(x0) {
+                for (let y = 1; y < 15; y++) {
+                    s(x0, y, C); s(x0 + 1, y, (y % 3) ? A : B); s(x0 + 2, y, B);
+                }
+            }
+            post(2); post(11);
+            for (let x = 2; x < 14; x++) {
+                s(x, 4, A); s(x, 5, B);
+                s(x, 9, A); s(x, 10, B);
+            }
+            s(2, 4, C); s(13, 4, C); s(2, 9, C); s(13, 9, C);
+        }); save(36);
+        sprite(function (s) {
+            const A = woodA(), B = woodB(), C = woodC();
+            for (let y = 2; y < 14; y++) {
+                s(2, y, C); s(3, y, A); s(4, y, B);
+                s(11, y, B); s(12, y, A); s(13, y, C);
+            }
+            for (let x = 2; x < 14; x++) {
+                s(x, 3, A); s(x, 4, B);
+                s(x, 7, A); s(x, 8, B);
+                s(x, 11, A); s(x, 12, B);
+            }
+            for (let y = 5; y < 11; y++) s(7, y, C);
+            s(7, 7, A); s(8, 8, B);
+        }); save(37);
         drawIso(25, 25); save(38);
         drawIso(10, 10); save(39);
         drawIso(26, 26); save(40);
@@ -3151,7 +3175,8 @@
         if (type === ITEM_STICK) return 1;
         if (type === BLOCK_WOOD || type === BLOCK_PLANKS || type === BLOCK_CRAFT ||
             type === BLOCK_CHEST || type === BLOCK_BARREL || type === BLOCK_DOOR ||
-            type === BLOCK_FENCE || type === BLOCK_GATE || type === BLOCK_TRAPDOOR ||
+            type === BLOCK_FENCE || type === BLOCK_GATE || type === BLOCK_GATE_OPEN ||
+            type === BLOCK_TRAPDOOR ||
             type === BLOCK_SIGN || type === BLOCK_LADDER || type === ITEM_BOAT ||
             type === ITEM_BOWL || type === BLOCK_LOOM || type === BLOCK_SMITHING ||
             type === BLOCK_BED) return 2;
@@ -3671,7 +3696,7 @@
         if (blockType === BLOCK_DOOR) return 22;
         if (blockType === BLOCK_DOOR_OPEN) return 56;
         if (blockType === BLOCK_LADDER) return 23;
-        if (blockType === BLOCK_FENCE || blockType === BLOCK_GATE) return 24;
+        if (blockType === BLOCK_FENCE || blockType === BLOCK_GATE || blockType === BLOCK_GATE_OPEN) return 6;
         if (blockType === BLOCK_BED) return 25;
         if (blockType === BLOCK_TRAPDOOR) return 26;
         if (blockType === BLOCK_SIGN || blockType === BLOCK_PLATE || blockType === BLOCK_BUTTON) return 6;
@@ -4098,6 +4123,16 @@
             g.add(hnd); g.add(head);
             g.position.set(0.08, -0.06, 0.14);
             g.rotation.set(0.4, 0.5, -0.9);
+        } else if (type === BLOCK_FENCE || type === BLOCK_GATE || type === BLOCK_GATE_OPEN) {
+            const post = createVoxelBox(0.08, 0.36, 0.08, wood);
+            post.position.set(0, -0.10, 0);
+            const railA = createVoxelBox(0.32, 0.05, 0.05, 0xc4a06a);
+            railA.position.set(0, -0.04, 0);
+            const railB = createVoxelBox(0.32, 0.05, 0.05, 0x8a6230);
+            railB.position.set(0, -0.16, 0);
+            g.add(post); g.add(railA); g.add(railB);
+            g.position.set(0.08, -0.06, 0.16);
+            g.rotation.set(0.2, 0.6, -0.4);
         } else if (type && type !== BLOCK_EMPTY && !isNonBlockItem(type)) {
             const cube = createMiniDropMesh(type);
             cube.scale.set(0.42, 0.42, 0.42);
@@ -6321,6 +6356,97 @@
         chunk.isGenerated = true;
     }
 
+
+    function fenceConnects(type) {
+        if (isFenceBlock(type)) return true;
+        if (type === BLOCK_EMPTY || type === BLOCK_WATER || type === BLOCK_GLASS ||
+            type === BLOCK_LEAVES || type === BLOCK_TORCH || type === BLOCK_BED ||
+            type === BLOCK_DOOR || type === BLOCK_DOOR_OPEN || type === BLOCK_LADDER ||
+            isNonBlockItem(type)) return false;
+        return isOpaque(type);
+    }
+    function appendWoodBox(pos, norm, uv, idx, offset, x0, y0, z0, x1, y1, z1, tileId) {
+        const faces = [
+            { n: [1, 0, 0], c: [[x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [x1, y0, z1]] },
+            { n: [-1, 0, 0], c: [[x0, y0, z1], [x0, y1, z1], [x0, y1, z0], [x0, y0, z0]] },
+            { n: [0, 1, 0], c: [[x0, y1, z1], [x1, y1, z1], [x1, y1, z0], [x0, y1, z0]] },
+            { n: [0, -1, 0], c: [[x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1]] },
+            { n: [0, 0, 1], c: [[x1, y0, z1], [x1, y1, z1], [x0, y1, z1], [x0, y0, z1]] },
+            { n: [0, 0, -1], c: [[x0, y0, z0], [x0, y1, z0], [x1, y1, z0], [x1, y0, z0]] }
+        ];
+        const tile = getTileUV(tileId);
+        for (let f = 0; f < 6; f++) {
+            for (let c = 0; c < 4; c++) {
+                pos.push(faces[f].c[c][0], faces[f].c[c][1], faces[f].c[c][2]);
+                norm.push(faces[f].n[0], faces[f].n[1], faces[f].n[2]);
+            }
+            uv.push(tile.u0, tile.v0, tile.u0, tile.v1, tile.u1, tile.v1, tile.u1, tile.v0);
+            idx.push(offset, offset + 1, offset + 2, offset, offset + 2, offset + 3);
+            offset += 4;
+        }
+        return offset;
+    }
+    function appendFenceRails(pos, norm, uv, idx, offset, wx, y, wz, dirX, dirZ, reach) {
+        const cx = wx + 0.5, cz = wz + 0.5;
+        const half = 0.0625;
+        if (dirX) {
+            const x0 = dirX > 0 ? wx + 0.625 : wx + 0.375 - reach;
+            const x1 = dirX > 0 ? wx + 0.625 + reach : wx + 0.375;
+            offset = appendWoodBox(pos, norm, uv, idx, offset, x0, y + 0.375, cz - half, x1, y + 0.5625, cz + half, 6);
+            offset = appendWoodBox(pos, norm, uv, idx, offset, x0, y + 0.75, cz - half, x1, y + 0.9375, cz + half, 6);
+        } else {
+            const z0 = dirZ > 0 ? wz + 0.625 : wz + 0.375 - reach;
+            const z1 = dirZ > 0 ? wz + 0.625 + reach : wz + 0.375;
+            offset = appendWoodBox(pos, norm, uv, idx, offset, cx - half, y + 0.375, z0, cx + half, y + 0.5625, z1, 6);
+            offset = appendWoodBox(pos, norm, uv, idx, offset, cx - half, y + 0.75, z0, cx + half, y + 0.9375, z1, 6);
+        }
+        return offset;
+    }
+    function emitFenceGeometry(wx, y, wz, block, pos, norm, uv, idx, offset) {
+        const tE = getBlock(wx + 1, y, wz), tW = getBlock(wx - 1, y, wz);
+        const tS = getBlock(wx, y, wz + 1), tN = getBlock(wx, y, wz - 1);
+        const cE = fenceConnects(tE), cW = fenceConnects(tW);
+        const cS = fenceConnects(tS), cN = fenceConnects(tN);
+        if (block === BLOCK_FENCE) {
+            offset = appendWoodBox(pos, norm, uv, idx, offset,
+                wx + 0.375, y, wz + 0.375, wx + 0.625, y + 1, wz + 0.625, 4);
+            if (cE) offset = appendFenceRails(pos, norm, uv, idx, offset, wx, y, wz, 1, 0, isFenceBlock(tE) ? 0.75 : 0.375);
+            if (cW && !isFenceBlock(tW)) offset = appendFenceRails(pos, norm, uv, idx, offset, wx, y, wz, -1, 0, 0.375);
+            if (cS) offset = appendFenceRails(pos, norm, uv, idx, offset, wx, y, wz, 0, 1, isFenceBlock(tS) ? 0.75 : 0.375);
+            if (cN && !isFenceBlock(tN)) offset = appendFenceRails(pos, norm, uv, idx, offset, wx, y, wz, 0, -1, 0.375);
+            return offset;
+        }
+        const alongX = (cE || cW) && !(cS || cN) ? true : (cS || cN) && !(cE || cW) ? false : (cE || cW);
+        const open = block === BLOCK_GATE_OPEN;
+        if (alongX) {
+            offset = appendWoodBox(pos, norm, uv, idx, offset, wx + 0.06, y, wz + 0.40, wx + 0.18, y + 1.0, wz + 0.60, 4);
+            offset = appendWoodBox(pos, norm, uv, idx, offset, wx + 0.82, y, wz + 0.40, wx + 0.94, y + 1.0, wz + 0.60, 4);
+            if (open) {
+                offset = appendWoodBox(pos, norm, uv, idx, offset, wx + 0.06, y + 0.18, wz + 0.18, wx + 0.18, y + 0.34, wz + 0.92, 6);
+                offset = appendWoodBox(pos, norm, uv, idx, offset, wx + 0.06, y + 0.44, wz + 0.18, wx + 0.18, y + 0.60, wz + 0.92, 6);
+                offset = appendWoodBox(pos, norm, uv, idx, offset, wx + 0.06, y + 0.70, wz + 0.18, wx + 0.18, y + 0.86, wz + 0.92, 6);
+            } else {
+                offset = appendWoodBox(pos, norm, uv, idx, offset, wx + 0.18, y + 0.18, wz + 0.42, wx + 0.82, y + 0.34, wz + 0.58, 6);
+                offset = appendWoodBox(pos, norm, uv, idx, offset, wx + 0.18, y + 0.44, wz + 0.42, wx + 0.82, y + 0.60, wz + 0.58, 6);
+                offset = appendWoodBox(pos, norm, uv, idx, offset, wx + 0.18, y + 0.70, wz + 0.42, wx + 0.82, y + 0.86, wz + 0.58, 6);
+                offset = appendWoodBox(pos, norm, uv, idx, offset, wx + 0.46, y + 0.18, wz + 0.40, wx + 0.54, y + 0.86, wz + 0.60, 4);
+            }
+        } else {
+            offset = appendWoodBox(pos, norm, uv, idx, offset, wx + 0.40, y, wz + 0.06, wx + 0.60, y + 1.0, wz + 0.18, 4);
+            offset = appendWoodBox(pos, norm, uv, idx, offset, wx + 0.40, y, wz + 0.82, wx + 0.60, y + 1.0, wz + 0.94, 4);
+            if (open) {
+                offset = appendWoodBox(pos, norm, uv, idx, offset, wx + 0.18, y + 0.18, wz + 0.06, wx + 0.92, y + 0.34, wz + 0.18, 6);
+                offset = appendWoodBox(pos, norm, uv, idx, offset, wx + 0.18, y + 0.44, wz + 0.06, wx + 0.92, y + 0.60, wz + 0.18, 6);
+                offset = appendWoodBox(pos, norm, uv, idx, offset, wx + 0.18, y + 0.70, wz + 0.06, wx + 0.92, y + 0.86, wz + 0.18, 6);
+            } else {
+                offset = appendWoodBox(pos, norm, uv, idx, offset, wx + 0.42, y + 0.18, wz + 0.18, wx + 0.58, y + 0.34, wz + 0.82, 6);
+                offset = appendWoodBox(pos, norm, uv, idx, offset, wx + 0.42, y + 0.44, wz + 0.18, wx + 0.58, y + 0.60, wz + 0.82, 6);
+                offset = appendWoodBox(pos, norm, uv, idx, offset, wx + 0.42, y + 0.70, wz + 0.18, wx + 0.58, y + 0.86, wz + 0.82, 6);
+                offset = appendWoodBox(pos, norm, uv, idx, offset, wx + 0.40, y + 0.18, wz + 0.46, wx + 0.60, y + 0.86, wz + 0.54, 4);
+            }
+        }
+        return offset;
+    }
     function rebuildChunkMesh(chunk) {
         const solidPos = [], solidNorm = [], solidUV = [], solidIdx = [];
         let solidOffset = 0;
@@ -6350,6 +6476,11 @@
 
                     const wx = startX + lx, wz = startZ + lz;
                     const gbio = biomeAt(wx, wz);
+
+                    if (isFenceBlock(block)) {
+                        solidOffset = emitFenceGeometry(wx, y, wz, block, solidPos, solidNorm, solidUV, solidIdx, solidOffset);
+                        continue;
+                    }
 
                     if (block === BLOCK_GLASS) {
                         const gTile = getTileUV(21);
@@ -7350,7 +7481,10 @@
                 if (mining.type === BLOCK_WOOD) {
                     fellTree(mining.x, mining.y, mining.z);
                 } else {
-                    spawnBlockDrop(mining.x, mining.y, mining.z, mining.type);
+                    let drop = mining.type;
+                    if (drop === BLOCK_GATE_OPEN) drop = BLOCK_GATE;
+                    if (drop === BLOCK_DOOR_OPEN) drop = BLOCK_DOOR;
+                    spawnBlockDrop(mining.x, mining.y, mining.z, drop);
                     setBlock(mining.x, mining.y, mining.z, BLOCK_EMPTY);
                 }
             } else {
@@ -7834,6 +7968,9 @@
     function isDoorBlock(t) {
         return t === BLOCK_DOOR || t === BLOCK_DOOR_OPEN;
     }
+    function isGateBlock(t) {
+        return t === BLOCK_GATE || t === BLOCK_GATE_OPEN;
+    }
     function toggleDoor(x, y, z) {
         const t = getBlock(x, y, z);
         if (!isDoorBlock(t)) return false;
@@ -7842,6 +7979,14 @@
         if (isDoorBlock(getBlock(x, y + 1, z))) setBlock(x, y + 1, z, next);
         if (isDoorBlock(getBlock(x, y - 1, z))) setBlock(x, y - 1, z, next);
         showInvToast(next === BLOCK_DOOR_OPEN ? 'Дверь открыта' : 'Дверь закрыта');
+        return true;
+    }
+    function toggleGate(x, y, z) {
+        const t = getBlock(x, y, z);
+        if (!isGateBlock(t)) return false;
+        const next = (t === BLOCK_GATE) ? BLOCK_GATE_OPEN : BLOCK_GATE;
+        setBlock(x, y, z, next);
+        showInvToast(next === BLOCK_GATE_OPEN ? 'Калитка открыта' : 'Калитка закрыта');
         return true;
     }
     function tryMeleeAt(clientX, clientY) {
@@ -7861,6 +8006,11 @@
             const bt = getBlock(hit.block.x, hit.block.y, hit.block.z);
             if (isDoorBlock(bt)) {
                 toggleDoor(hit.block.x, hit.block.y, hit.block.z);
+                triggerHandPunch();
+                return;
+            }
+            if (isGateBlock(bt)) {
+                toggleGate(hit.block.x, hit.block.y, hit.block.z);
                 triggerHandPunch();
                 return;
             }
@@ -7969,6 +8119,11 @@
         const hit = raycastVoxel();
         if (hit.hit && !hit.isMob && hit.block && isDoorBlock(getBlock(hit.block.x, hit.block.y, hit.block.z))) {
             toggleDoor(hit.block.x, hit.block.y, hit.block.z);
+            triggerHandPunch();
+            return;
+        }
+        if (hit.hit && !hit.isMob && hit.block && isGateBlock(getBlock(hit.block.x, hit.block.y, hit.block.z))) {
+            toggleGate(hit.block.x, hit.block.y, hit.block.z);
             triggerHandPunch();
             return;
         }
@@ -8469,391 +8624,6 @@
     
     
     </script><!--DOWNLOAD-PAD
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
