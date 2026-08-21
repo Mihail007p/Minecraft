@@ -1029,10 +1029,11 @@
     <script>
     window.addEventListener('error', function (e) {
         const el = document.getElementById('boot-error');
-        if (el) {
-            el.style.display = 'block';
-            el.textContent = 'Ошибка: ' + (e.message || e);
-        }
+        if (!el || el.dataset.shown === '1') return;
+        el.dataset.shown = '1';
+        el.style.display = 'block';
+        el.textContent = 'Ошибка: ' + (e.message || e);
+        setTimeout(function () { el.style.display = 'none'; }, 7000);
     });
 
     // --- 1. ПАРАМЕТРЫ МИРА И БЛОКОВ ---
@@ -3966,6 +3967,7 @@
         if (fpPunch > 0) fpPunch = Math.max(0, fpPunch - dt * 5.2);
         const punch = Math.sin(fpPunch * Math.PI) * 1.25;
         const air = player.onGround ? 0 : -0.05;
+        if (!fpArm.arm || !fpArm.forearm || !fpArm.hand) return;
         fpArm.arm.rotation.x = swing - punch;
         fpArm.arm.rotation.z = sway;
         fpArm.arm.position.set(sway * 0.15, bob + air, punch * -0.12);
@@ -4565,7 +4567,6 @@
         g.legs = [ten(0.12, 0.12), ten(-0.12, 0.12), ten(0.12, -0.12), ten(-0.12, -0.12),
                   ten(0.16, 0), ten(-0.16, 0)];
         g.head = head;
-        g.wings = [];
         return g;
     }
     function buildGolemMesh() {
@@ -4678,7 +4679,7 @@
 
             if (this.onShoulder) {
                 this.idleAnim += dt;
-                if (this.mesh.wings) {
+                if (this.mesh.wings && this.mesh.wings[0] && this.mesh.wings[1]) {
                     const flap = Math.sin(this.idleAnim * 10) * 0.55;
                     this.mesh.wings[0].rotation.z = 0.25 + flap;
                     this.mesh.wings[1].rotation.z = -0.25 - flap;
@@ -4760,7 +4761,7 @@
                         this.mesh.head.rotation.y = 0;
                     }
                 }
-                if (this.mesh.wings) {
+                if (this.mesh.wings && this.mesh.wings[0] && this.mesh.wings[1]) {
                     let flap = 0;
                     if (this.state === 'panic') flap = Math.sin(this.walkTimer * 3.6) * 0.9;
                     else if (this.state === 'walk') flap = Math.sin(this.walkTimer * 1.3) * 0.25;
@@ -4814,7 +4815,7 @@
                 if (this.mesh.tail) {
                     this.mesh.tail.rotation.y = Math.sin(this.idleAnim * (this.state === 'panic' ? 10 : 3.5)) * 0.45;
                 }
-                if (this.mesh.ears && this.mesh.ears.length >= 2) {
+                if (this.mesh.ears && this.mesh.ears[0] && this.mesh.ears[1]) {
                     const e = Math.sin(this.idleAnim * 2.8) * 0.10;
                     this.mesh.ears[0].rotation.z = (this.mesh.ears[0].rotation.z * 0.8) + (-0.28 + e) * 0.2;
                     this.mesh.ears[1].rotation.z = (this.mesh.ears[1].rotation.z * 0.8) + (0.28 - e) * 0.2;
@@ -4827,7 +4828,7 @@
                 this.vel.y += (hy - this.pos.y) * 3.2 * dt;
                 this.vel.y += Math.sin(this.idleAnim * 3.4) * 2.4 * dt;
                 this.vel.y *= 0.92;
-                if (this.mesh.wings) {
+                if (this.mesh.wings && this.mesh.wings[0] && this.mesh.wings[1]) {
                     const flap = Math.sin(this.idleAnim * 14) * 0.6;
                     this.mesh.wings[0].rotation.z = 0.2 + flap;
                     this.mesh.wings[1].rotation.z = -0.2 - flap;
@@ -5087,7 +5088,7 @@
 
         for (let i = mobs.length - 1; i >= 0; i--) {
             const mob = mobs[i];
-            mob.update(dt);
+            try { mob.update(dt); } catch (err) { console.error(err); }
 
             if (mob.health <= 0) {
                 const x = mob.pos.x - 0.5, y = mob.pos.y, z = mob.pos.z - 0.5;
@@ -7273,22 +7274,8 @@
     
     
     
+    
     </script><!--DOWNLOAD-PAD
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
