@@ -946,8 +946,8 @@
     <script>
     // --- 1. ПАРАМЕТРЫ МИРА И БЛОКОВ ---
     const CHUNK_SIZE = 16;
-    const CHUNK_HEIGHT = 24;
-    const WATER_LEVEL = 7;
+    const CHUNK_HEIGHT = 128;
+    const WATER_LEVEL = 63;
     const RENDER_DISTANCE = 2;
 
     const BLOCK_EMPTY  = 0;
@@ -1035,6 +1035,7 @@
     const ITEM_IRON_SWORD = 82;
     const ITEM_DIAMOND_PICK = 83;
     const ITEM_DIAMOND_SWORD = 84;
+    const BLOCK_DEEPSLATE = 85;
 
     const BLOCK_NAMES = {
         [BLOCK_GRASS]: 'Трава',
@@ -1120,7 +1121,8 @@
         [ITEM_IRON_AXE]: 'Жел. топор',
         [ITEM_IRON_SWORD]: 'Жел. меч',
         [ITEM_DIAMOND_PICK]: 'Алм. кирка',
-        [ITEM_DIAMOND_SWORD]: 'Алм. меч'
+        [ITEM_DIAMOND_SWORD]: 'Алм. меч',
+        [BLOCK_DEEPSLATE]: 'Сланец'
     };
 
     function isToolItem(type) {
@@ -1166,7 +1168,7 @@
             !isNonBlockItem(type);
     }
 
-    const MC_TEX = { tiles: new Array(40) };
+    const MC_TEX = { tiles: new Array(48) };
     (function buildMcTextures() {
         function hash(x, y, s) {
             let n = Math.imul(x * 374761393 + y * 668265263 + s * 1274126177, 1597334677);
@@ -1535,6 +1537,15 @@
         MC_TEX.tiles[33] = oreTile(33, '#d8c0a0');
         MC_TEX.tiles[34] = oreTile(34, '#f0c040');
         MC_TEX.tiles[35] = oreTile(35, '#5ee7ff');
+        MC_TEX.tiles[36] = make(function (s) {
+            for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
+                const v = fbm(x, y, 36);
+                let c = mixHex('#14141c', '#4a4a58', v);
+                if (n01(x, y, 37) > 0.9) c = '#0a0a10';
+                if (n01(x, y, 38) > 0.94) c = '#6a6a78';
+                s(x, y, c);
+            }
+        });
 
         MC_TEX.get = function (id, x, y) {
             const t = MC_TEX.tiles[id];
@@ -1987,6 +1998,7 @@
         drawSwordCols('#e8e8f0', '#b0b0bc', '#6a6a78'); save(82);
         drawPickCols('#b8ffff', '#7fe9ff', '#1a7a9a'); save(83);
         drawSwordCols('#b8ffff', '#7fe9ff', '#1a7a9a'); save(84);
+        drawIso(36, 36); save(85);
     })();
 
     // --- 2. ИНВЕНТАРЬ И СОХРАНЕНИЕ ---
@@ -2399,7 +2411,7 @@
         66:'#8ec8d8',67:'#8a5a30',68:'#f5ead4',69:'#fff6e4',70:'#f3a8b6',71:'#f4f4f4',
         72:'#8b5a2b',73:'#2a2a2a',74:'#d8c0a0',75:'#f0c040',76:'#5ee7ff',
         77:'#c8c8d0',78:'#f0c040',79:'#7fe9ff',80:'#c8c8d0',81:'#c8c8d0',
-        82:'#c8c8d0',83:'#7fe9ff',84:'#7fe9ff'
+        82:'#c8c8d0',83:'#7fe9ff',84:'#7fe9ff',85:'#2a2a33'
     };
     const CRAFT_RECIPES = [
         { id: 'planks', name: 'Доски', cat: 'building', shapeless: [[4, 1]], result: { type: 5, count: 4 }, size: 2 },
@@ -3183,7 +3195,7 @@
         canvas.width = 128; canvas.height = 512;
         const ctx = canvas.getContext('2d');
         ctx.imageSmoothingEnabled = false;
-        for (let id = 0; id < 40; id++) {
+        for (let id = 0; id < 48; id++) {
             const tile = MC_TEX.tiles[id];
             if (!tile) continue;
             const ox = (id % 4) * 32, oy = Math.floor(id / 4) * 32;
@@ -3249,6 +3261,7 @@
         if (blockType === BLOCK_IRON_ORE || blockType === ITEM_IRON_INGOT) return 33;
         if (blockType === BLOCK_GOLD_ORE || blockType === ITEM_GOLD_INGOT) return 34;
         if (blockType === BLOCK_DIAMOND_ORE || blockType === ITEM_DIAMOND) return 35;
+        if (blockType === BLOCK_DEEPSLATE) return 36;
         return 1;
     }
 
@@ -3259,9 +3272,9 @@
     renderer.setSize(window.innerWidth, window.innerHeight);
 
     const scene = new THREE.Scene();
-    scene.fog = new THREE.Fog(0x78B5E8, 32, 60);
+    scene.fog = new THREE.Fog(0x78B5E8, 42, 88);
 
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 120);
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 180);
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
     scene.add(ambientLight);
     
@@ -3393,7 +3406,7 @@
 
     // 3D Облака
     let cloudsMesh = null;
-    const CLOUD_ALTITUDE = 23.0;
+    const CLOUD_ALTITUDE = 112.0;
     const CLOUD_MAP_SIZE = 20;
     const CLOUD_CELL_SIZE = 4.0;
     const CLOUD_HEIGHT = 1.6;
@@ -3531,7 +3544,94 @@
         root.arm = arm;
         root.forearm = forearm;
         root.hand = hand;
+        root.held = null;
+        root.heldType = -999;
         return root;
+    }
+
+    function isSwordItem(type) {
+        return type === ITEM_WOOD_SWORD || type === ITEM_STONE_SWORD ||
+            type === ITEM_IRON_SWORD || type === ITEM_DIAMOND_SWORD;
+    }
+    function isPickItem(type) {
+        return type === ITEM_WOOD_PICK || type === ITEM_STONE_PICK ||
+            type === ITEM_IRON_PICK || type === ITEM_DIAMOND_PICK;
+    }
+    function toolMetalColor(type) {
+        if (type === ITEM_DIAMOND_PICK || type === ITEM_DIAMOND_SWORD) return 0x7fe9ff;
+        if (type === ITEM_IRON_PICK || type === ITEM_IRON_AXE || type === ITEM_IRON_SWORD) return 0xc8c8d4;
+        if (type === ITEM_STONE_PICK || type === ITEM_STONE_AXE || type === ITEM_STONE_SWORD) return 0x8a8a8a;
+        return 0xc4a06a;
+    }
+    function disposeHeld(obj) {
+        if (!obj) return;
+        obj.traverse(function (ch) {
+            if (ch.isMesh) {
+                if (ch.geometry) ch.geometry.dispose();
+                if (ch.material && ch.material !== terrainMaterial) ch.material.dispose();
+            }
+        });
+    }
+    function buildHeldMesh(type) {
+        const g = new THREE.Group();
+        const wood = 0x8a6230;
+        if (isSwordItem(type)) {
+            const metal = toolMetalColor(type);
+            const hnd = createVoxelBox(0.05, 0.16, 0.05, wood);
+            hnd.position.set(0, 0.02, 0);
+            const guard = createVoxelBox(0.16, 0.04, 0.05, metal);
+            guard.position.set(0, -0.08, 0);
+            const blade = createVoxelBox(0.045, 0.42, 0.09, metal);
+            blade.position.set(0, -0.30, 0);
+            const tip = createVoxelBox(0.03, 0.08, 0.06, metal);
+            tip.position.set(0, -0.54, 0);
+            g.add(hnd); g.add(guard); g.add(blade); g.add(tip);
+            g.position.set(0.10, -0.08, 0.16);
+            g.rotation.set(0.15, 0.85, -1.25);
+        } else if (isPickItem(type) || isAxeTool(type)) {
+            const metal = toolMetalColor(type);
+            const hnd = createVoxelBox(0.045, 0.42, 0.045, wood, -0.21);
+            const head = createVoxelBox(isAxeTool(type) ? 0.08 : 0.22, 0.08, isAxeTool(type) ? 0.16 : 0.08, metal);
+            head.position.set(0, -0.42, 0);
+            g.add(hnd); g.add(head);
+            g.position.set(0.08, -0.06, 0.14);
+            g.rotation.set(0.4, 0.5, -0.9);
+        } else if (type && type !== BLOCK_EMPTY && !isNonBlockItem(type)) {
+            const cube = createMiniDropMesh(type);
+            cube.scale.set(0.42, 0.42, 0.42);
+            cube.position.set(0.08, -0.10, 0.16);
+            g.add(cube);
+        } else if (type && type !== BLOCK_EMPTY) {
+            const cube = createMiniDropMesh(type);
+            cube.scale.set(0.32, 0.32, 0.32);
+            cube.position.set(0.07, -0.08, 0.14);
+            g.add(cube);
+        } else {
+            return null;
+        }
+        g.traverse(function (o) {
+            if (o.isMesh) {
+                o.frustumCulled = false;
+                if (o.material) { o.material.fog = false; o.renderOrder = 22; }
+            }
+        });
+        return g;
+    }
+    function syncHeldItem() {
+        if (!fpArm) return;
+        const type = (typeof heldType === 'function') ? heldType() : 0;
+        if (type === fpArm.heldType) return;
+        if (fpArm.held) {
+            fpArm.hand.remove(fpArm.held);
+            disposeHeld(fpArm.held);
+            fpArm.held = null;
+        }
+        fpArm.heldType = type;
+        const mesh = buildHeldMesh(type);
+        if (mesh) {
+            fpArm.hand.add(mesh);
+            fpArm.held = mesh;
+        }
     }
 
     function updateFirstPersonArm(dt) {
@@ -3556,6 +3656,11 @@
         fpArm.forearm.rotation.x = -0.12 - punch * 0.4;
         fpArm.hand.rotation.x = punch * 0.25;
         fpArm.hand.rotation.z = sway * 0.4;
+        if (fpArm.held) {
+            fpArm.held.rotation.x = punch * 0.5;
+            fpArm.held.position.z = (isSwordItem(fpArm.heldType) ? 0.16 : 0.14) - punch * 0.08;
+        }
+        syncHeldItem();
     }
 
     function addEyes(head, x, y, z, w, h) {
@@ -4231,22 +4336,23 @@
                 const wx = startX + lx;
                 const wz = startZ + lz;
 
-                const n1 = fbm(wx * 0.015, wz * 0.015) * 8.0;
-                const n2 = perlin2D(wx * 0.05, wz * 0.05) * 3.0;
-                let h = Math.floor(8 + n1 + n2);
-                h = Math.max(2, Math.min(CHUNK_HEIGHT - 4, h));
+                const n1 = fbm(wx * 0.007, wz * 0.007) * 26.0;
+                const n2 = perlin2D(wx * 0.028, wz * 0.028) * 10.0;
+                const n3 = perlin2D(wx * 0.07, wz * 0.07) * 3.5;
+                let h = Math.floor(WATER_LEVEL + 2 + n1 + n2 + n3);
+                h = Math.max(WATER_LEVEL - 12, Math.min(CHUNK_HEIGHT - 10, h));
                 heights[lx + lz * CHUNK_SIZE] = h;
 
                 for (let y = 0; y < CHUNK_HEIGHT; y++) {
                     if (y === 0) chunk.setBlock(lx, y, lz, BLOCK_STONE);
-                    else if (y < h - 2) chunk.setBlock(lx, y, lz, BLOCK_STONE);
+                    else if (y < h - 3) chunk.setBlock(lx, y, lz, (y < 16) ? BLOCK_DEEPSLATE : BLOCK_STONE);
                     else if (y < h) chunk.setBlock(lx, y, lz, (h <= WATER_LEVEL + 1) ? BLOCK_SAND : BLOCK_DIRT);
                     else if (y === h) chunk.setBlock(lx, y, lz, (h <= WATER_LEVEL + 1) ? BLOCK_SAND : BLOCK_GRASS);
                     else if (y > h && y <= WATER_LEVEL) chunk.setBlock(lx, y, lz, BLOCK_WATER);
                 }
 
-                if (h > WATER_LEVEL + 1 && (pseudoHash2D(wx, wz) % 1000) < 18 && lx >= 2 && lx <= CHUNK_SIZE - 3 && lz >= 2 && lz <= CHUNK_SIZE - 3) {
-                    const trunkHeight = 4;
+                if (h > WATER_LEVEL + 1 && (pseudoHash2D(wx, wz) % 1000) < 16 && lx >= 2 && lx <= CHUNK_SIZE - 3 && lz >= 2 && lz <= CHUNK_SIZE - 3) {
+                    const trunkHeight = 5;
                     for (let th = 1; th <= trunkHeight; th++) chunk.setBlock(lx, h + th, lz, BLOCK_WOOD);
                     for (let ox = -2; ox <= 2; ox++) {
                         for (let oz = -2; oz <= 2; oz++) {
@@ -4268,20 +4374,22 @@
                 const wz = startZ + lz;
                 const h = heights[lx + lz * CHUNK_SIZE];
                 for (let y = 1; y < h; y++) {
-                    if (chunk.getBlock(lx, y, lz) !== BLOCK_STONE) continue;
-                    const caveA = perlin2D(wx * 0.055, wz * 0.055 + y * 0.13);
-                    const caveB = perlin2D(wx * 0.11 + 30.2, wz * 0.11 + y * 0.09);
-                    const tunnel = Math.abs(caveA) < 0.12 && caveB > 0.05;
-                    const pocket = caveA > 0.56 && caveB > 0.12;
-                    if ((tunnel || pocket) && y < h - 1) {
+                    const b = chunk.getBlock(lx, y, lz);
+                    if (b !== BLOCK_STONE && b !== BLOCK_DEEPSLATE) continue;
+                    const caveA = perlin2D(wx * 0.04, wz * 0.04 + y * 0.045);
+                    const caveB = perlin2D(wx * 0.09 + 18.7, wz * 0.09 + y * 0.07);
+                    const caveC = perlin2D(wx * 0.02 + y * 0.03, wz * 0.02);
+                    const tunnel = Math.abs(caveA) < (y < 40 ? 0.14 : 0.10) && caveB > 0.02;
+                    const cheese = caveC > 0.48 && caveB > 0.08 && y < h - 3;
+                    if ((tunnel || cheese) && y < h - 1) {
                         chunk.setBlock(lx, y, lz, BLOCK_EMPTY);
                         continue;
                     }
                     const r = pseudoHash2D(wx * 131 + y * 17, wz * 197 + y * 23) % 1000;
-                    if (y <= 4 && r < 10) chunk.setBlock(lx, y, lz, BLOCK_DIAMOND_ORE);
-                    else if (y <= 7 && r < 22) chunk.setBlock(lx, y, lz, BLOCK_GOLD_ORE);
-                    else if (y <= 12 && r < 48) chunk.setBlock(lx, y, lz, BLOCK_IRON_ORE);
-                    else if (y <= h - 2 && r < 95) chunk.setBlock(lx, y, lz, BLOCK_COAL_ORE);
+                    if (y <= 20 && r < (y <= 8 ? 18 : 8)) chunk.setBlock(lx, y, lz, BLOCK_DIAMOND_ORE);
+                    else if (y <= 32 && r < 20) chunk.setBlock(lx, y, lz, BLOCK_GOLD_ORE);
+                    else if (y <= 72 && r < 42) chunk.setBlock(lx, y, lz, BLOCK_IRON_ORE);
+                    else if (y >= 16 && y <= 96 && r < 88) chunk.setBlock(lx, y, lz, BLOCK_COAL_ORE);
                 }
             }
         }
@@ -4427,9 +4535,68 @@
     highlightBox.visible = false;
     scene.add(highlightBox);
 
+    const crackCanvas = document.createElement('canvas');
+    crackCanvas.width = 32; crackCanvas.height = 32;
+    const crackCtx = crackCanvas.getContext('2d');
+    const crackTex = new THREE.CanvasTexture(crackCanvas);
+    crackTex.magFilter = THREE.NearestFilter;
+    crackTex.minFilter = THREE.NearestFilter;
+    crackTex.generateMipmaps = false;
+    const crackMat = new THREE.MeshBasicMaterial({
+        map: crackTex,
+        transparent: true,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        polygonOffset: true,
+        polygonOffsetFactor: -2,
+        polygonOffsetUnits: -2,
+        fog: false
+    });
+    const crackMesh = new THREE.Mesh(new THREE.BoxGeometry(1.02, 1.02, 1.02), crackMat);
+    crackMesh.visible = false;
+    crackMesh.renderOrder = 6;
+    scene.add(crackMesh);
+    let crackStage = -1;
+    function drawCrackStage(stage) {
+        stage = Math.max(0, Math.min(9, stage | 0));
+        if (stage === crackStage) return;
+        crackStage = stage;
+        const g = crackCtx;
+        g.clearRect(0, 0, 32, 32);
+        g.strokeStyle = 'rgba(0,0,0,' + (0.55 + stage * 0.04) + ')';
+        g.lineWidth = stage > 4 ? 2 : 1;
+        g.lineCap = 'square';
+        const lines = 4 + stage * 2;
+        for (let i = 0; i < lines; i++) {
+            const s = (stage + 1) * 17 + i * 31;
+            const x0 = (s * 13) % 32, y0 = (s * 7) % 32;
+            const x1 = (s * 29) % 32, y1 = (s * 11) % 32;
+            g.beginPath();
+            g.moveTo(x0, y0);
+            g.lineTo((x0 + x1) >> 1, (y0 + y1) >> 1);
+            g.lineTo(x1, y1);
+            g.stroke();
+        }
+        if (stage >= 6) {
+            g.fillStyle = 'rgba(0,0,0,0.28)';
+            g.fillRect(10, 8, 4, 5);
+            g.fillRect(18, 16, 5, 4);
+        }
+        crackTex.needsUpdate = true;
+    }
+    function showCrack(x, y, z, progress) {
+        crackMesh.position.set(x + 0.5, y + 0.5, z + 0.5);
+        crackMesh.visible = true;
+        drawCrackStage(Math.min(9, Math.floor(progress * 10)));
+    }
+    function hideCrack() {
+        crackMesh.visible = false;
+        crackStage = -1;
+    }
+
     // --- 9. ИГРОК И ВЫЖИВАНИЕ ---
     const player = {
-        pos: new THREE.Vector3(0.5, 16, 0.5),
+        pos: new THREE.Vector3(0.5, 72, 0.5),
         vel: new THREE.Vector3(),
         yaw: 0,
         pitch: 0,
@@ -4445,7 +4612,7 @@
         maxOxygen: 20,
         oxygen: 20,
         drownTimer: 0,
-        highestFallY: 16,
+        highestFallY: 72,
         isDead: false,
         spawnProtect: 0
     };
@@ -4846,6 +5013,7 @@
     const joystickKnob = document.getElementById('joystick-knob');
     let joystickTouchId = null, joystickCenter = { x: 0, y: 0 }, moveInput = { x: 0, y: 0 };
     let lookTouchId = null, lastLookPos = { x: 0, y: 0 };
+    let lookTap = { x: 0, y: 0, t: 0, moved: false };
 
     function touchHitsRect(touch, el, pad) {
         if (!el) return false;
@@ -4882,6 +5050,7 @@
             } else if (touch.clientX >= window.innerWidth * 0.45 && lookTouchId === null) {
                 lookTouchId = touch.identifier;
                 lastLookPos = { x: touch.clientX, y: touch.clientY };
+                lookTap = { x: touch.clientX, y: touch.clientY, t: Date.now(), moved: false };
             }
         }
     }, { passive: false });
@@ -4899,6 +5068,7 @@
                 player.yaw -= dx * 0.005;
                 player.pitch -= dy * 0.005;
                 player.pitch = Math.max(-Math.PI / 2 + 0.05, Math.min(Math.PI / 2 - 0.05, player.pitch));
+                if (Math.hypot(touch.clientX - lookTap.x, touch.clientY - lookTap.y) > 18) lookTap.moved = true;
             }
         }
     }, { passive: false });
@@ -4909,11 +5079,24 @@
         joystickKnob.style.transform = `translate(0px, 0px)`;
     }
 
+    function tryMeleeAttack() {
+        if (player.isDead || invOpen) return;
+        triggerHandPunch();
+        const hit = raycastVoxel(4.8);
+        if (hit.hit && hit.isMob) {
+            hit.mob.takeDamage(swordDamage(heldType()));
+        }
+    }
     function onTouchRelease(e) {
         for (let i = 0; i < e.changedTouches.length; i++) {
             const touch = e.changedTouches[i];
             if (touch.identifier === joystickTouchId) resetJoystick();
-            if (touch.identifier === lookTouchId) lookTouchId = null;
+            if (touch.identifier === lookTouchId) {
+                const dtap = Date.now() - lookTap.t;
+                const dist = Math.hypot(touch.clientX - lookTap.x, touch.clientY - lookTap.y);
+                if (!lookTap.moved && dtap < 340 && dist < 24) tryMeleeAttack();
+                lookTouchId = null;
+            }
         }
     }
     window.addEventListener('touchend', onTouchRelease);
@@ -4953,7 +5136,8 @@
     function requiredPick(block) {
         if (block === BLOCK_STONE || block === BLOCK_COAL_ORE || block === BLOCK_STONE_BRICK ||
             block === BLOCK_SMOOTH_STONE || block === BLOCK_FURNACE || block === BLOCK_WALL ||
-            block === BLOCK_SANDSTONE || block === BLOCK_CUT_SANDSTONE) return 1;
+            block === BLOCK_SANDSTONE || block === BLOCK_CUT_SANDSTONE ||
+            block === BLOCK_DEEPSLATE) return 1;
         if (block === BLOCK_IRON_ORE) return 2;
         if (block === BLOCK_GOLD_ORE || block === BLOCK_DIAMOND_ORE) return 3;
         return 0;
@@ -4969,25 +5153,26 @@
         return 2;
     }
     function mineSeconds(block, tool) {
-        let base = 0.32;
-        if (block === BLOCK_LEAVES || block === BLOCK_SAND || block === ITEM_WOOL || block === BLOCK_CARPET) base = 0.16;
-        else if (block === BLOCK_DIRT || block === BLOCK_GRASS) base = 0.18;
+        let base = 0.7;
+        if (block === BLOCK_LEAVES || block === BLOCK_SAND || block === ITEM_WOOL || block === BLOCK_CARPET) base = 0.4;
+        else if (block === BLOCK_DIRT || block === BLOCK_GRASS) base = 0.55;
         else if (block === BLOCK_WOOD || block === BLOCK_PLANKS || block === BLOCK_CRAFT ||
-            block === BLOCK_CHEST || block === BLOCK_BARREL || block === BLOCK_DOOR) base = 0.5;
-        else if (block === BLOCK_STONE || block === BLOCK_SANDSTONE || block === BLOCK_STONE_BRICK) base = 1.15;
-        else if (block === BLOCK_COAL_ORE) base = 1.2;
-        else if (block === BLOCK_IRON_ORE) base = 1.4;
-        else if (block === BLOCK_GOLD_ORE) base = 1.5;
-        else if (block === BLOCK_DIAMOND_ORE) base = 1.8;
-        else if (block === BLOCK_GLASS) base = 0.22;
-        if (isAxeTool(tool) && (block === BLOCK_WOOD || block === BLOCK_PLANKS || block === BLOCK_LEAVES || block === BLOCK_CRAFT)) base *= 0.38;
+            block === BLOCK_CHEST || block === BLOCK_BARREL || block === BLOCK_DOOR) base = 1.15;
+        else if (block === BLOCK_STONE || block === BLOCK_SANDSTONE || block === BLOCK_STONE_BRICK) base = 2.6;
+        else if (block === BLOCK_DEEPSLATE) base = 3.4;
+        else if (block === BLOCK_COAL_ORE) base = 2.8;
+        else if (block === BLOCK_IRON_ORE) base = 3.1;
+        else if (block === BLOCK_GOLD_ORE) base = 3.2;
+        else if (block === BLOCK_DIAMOND_ORE) base = 3.6;
+        else if (block === BLOCK_GLASS) base = 0.45;
+        if (isAxeTool(tool) && (block === BLOCK_WOOD || block === BLOCK_PLANKS || block === BLOCK_LEAVES || block === BLOCK_CRAFT)) base *= 0.36;
         const need = requiredPick(block);
         const tier = pickTier(tool);
         if (need > 0) {
-            if (tier < need) return base * 4.5;
-            base *= [1, 0.7, 0.5, 0.36, 0.22][tier];
+            if (tier < need) return base * 2.6;
+            base *= [1, 0.62, 0.45, 0.34, 0.24][tier];
         }
-        return Math.max(0.12, base);
+        return Math.max(0.28, base);
     }
     function canHarvest(block, tool) {
         const need = requiredPick(block);
@@ -5000,6 +5185,7 @@
     function stopMining() {
         miningHold = false;
         mining = null;
+        hideCrack();
         const bar = document.getElementById('mine-bar');
         if (bar) bar.style.display = 'none';
     }
@@ -5014,6 +5200,7 @@
         const hit = raycastVoxel();
         if (!hit.hit || hit.isMob || !hit.block || hit.block.y <= 0) {
             mining = null;
+            hideCrack();
             if (bar) bar.style.display = 'none';
             return;
         }
@@ -5025,11 +5212,13 @@
         }
         const prev = mining.t;
         mining.t += dt;
+        const prog = Math.min(1, mining.t / need);
         if (bar && fill) {
             bar.style.display = 'block';
-            fill.style.width = Math.min(100, (mining.t / need) * 100) + '%';
+            fill.style.width = (prog * 100) + '%';
         }
-        if (Math.floor(mining.t * 5) !== Math.floor(prev * 5)) triggerHandPunch();
+        showCrack(mining.x, mining.y, mining.z, prog);
+        if (Math.floor(mining.t * 3.2) !== Math.floor(prev * 3.2)) triggerHandPunch();
         if (mining.t >= need) {
             if (canHarvest(mining.type, tool)) {
                 spawnBlockDrop(mining.x, mining.y, mining.z, mining.type);
@@ -5038,6 +5227,7 @@
             }
             setBlock(mining.x, mining.y, mining.z, BLOCK_EMPTY);
             mining = null;
+            hideCrack();
             if (bar) bar.style.display = 'none';
         }
     }
