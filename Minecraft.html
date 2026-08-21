@@ -198,7 +198,6 @@
             transform: scale(0.92);
         }
         #btn-jump { background: rgba(52, 152, 219, 0.55); }
-        #btn-break { background: rgba(231, 76, 60, 0.55); }
         #btn-place { background: rgba(46, 204, 113, 0.55); }
 
         #hotbar {
@@ -932,7 +931,6 @@
         <div class="btn-group">
             <div id="btn-jump" class="action-btn">Прыжок</div>
             <div id="btn-place" class="action-btn">Блок</div>
-            <div id="btn-break" class="action-btn">Ломать</div>
         </div>
 
         <div id="hotbar"></div>
@@ -4936,14 +4934,26 @@
     }
 
     // --- 11. 3D DDA RAYCASTING И ТАРГЕТ МОБОВ ---
-    function raycastVoxel(maxDist = 5.5) {
-        const origin = new THREE.Vector3(player.pos.x, player.pos.y + player.eyeHeight, player.pos.z);
-        const dir = new THREE.Vector3(
+    function getEyeOrigin() {
+        return new THREE.Vector3(player.pos.x, player.pos.y + player.eyeHeight, player.pos.z);
+    }
+    function getLookDir() {
+        return new THREE.Vector3(
             -Math.sin(player.yaw) * Math.cos(player.pitch),
             Math.sin(player.pitch),
             -Math.cos(player.yaw) * Math.cos(player.pitch)
         ).normalize();
-
+    }
+    function screenToWorldDir(clientX, clientY) {
+        const rect = canvas.getBoundingClientRect();
+        const ndcX = ((clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1;
+        const ndcY = -((clientY - rect.top) / Math.max(1, rect.height)) * 2 + 1;
+        const origin = getEyeOrigin();
+        const target = new THREE.Vector3(ndcX, ndcY, 1).unproject(camera);
+        return target.sub(origin).normalize();
+    }
+    function raycastWorld(origin, dir, maxDist) {
+        maxDist = maxDist == null ? 5.5 : maxDist;
         let closestMob = null;
         let closestMobDist = maxDist;
 
@@ -4981,7 +4991,7 @@
 
         while (dist < maxDist) {
             const b = getBlock(x, y, z);
-            if (b !== BLOCK_EMPTY) {
+            if (b !== BLOCK_EMPTY && b !== BLOCK_WATER) {
                 return {
                     hit: true,
                     isMob: false,
@@ -5007,8 +5017,14 @@
         }
         return { hit: false };
     }
+    function raycastVoxel(maxDist) {
+        return raycastWorld(getEyeOrigin(), getLookDir(), maxDist);
+    }
+    function raycastFromScreen(clientX, clientY, maxDist) {
+        return raycastWorld(getEyeOrigin(), screenToWorldDir(clientX, clientY), maxDist == null ? 6.2 : maxDist);
+    }
 
-    // --- 12. СЕНСОРНОЕ УПРАВЛЕНИЕ ---
+        // --- 12. СЕНСОРНОЕ УПРАВЛЕНИЕ ---
     const joystickZone = document.getElementById('joystick-zone');
     const joystickKnob = document.getElementById('joystick-knob');
     let joystickTouchId = null, joystickCenter = { x: 0, y: 0 }, moveInput = { x: 0, y: 0 };
@@ -5042,15 +5058,19 @@
             const touch = e.changedTouches[i];
             if (isHudTouch(touch)) continue;
 
-            if (touch.clientX < window.innerWidth * 0.45 && joystickTouchId === null) {
+            if (joystickTouchId === null && touchHitsRect(touch, joystickZone, 28)) {
                 joystickTouchId = touch.identifier;
                 const rect = joystickZone.getBoundingClientRect();
                 joystickCenter = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
                 updateJoystick(touch.clientX, touch.clientY);
-            } else if (touch.clientX >= window.innerWidth * 0.45 && lookTouchId === null) {
+                continue;
+            }
+            if (lookTouchId === null) {
+                e.preventDefault();
                 lookTouchId = touch.identifier;
                 lastLookPos = { x: touch.clientX, y: touch.clientY };
                 lookTap = { x: touch.clientX, y: touch.clientY, t: Date.now(), moved: false };
+                beginTouchMine(touch.clientX, touch.clientY);
             }
         }
     }, { passive: false });
@@ -5061,6 +5081,16 @@
             if (touch.identifier === joystickTouchId) {
                 updateJoystick(touch.clientX, touch.clientY);
             } else if (touch.identifier === lookTouchId) {
+                const holdDist = Math.hypot(touch.clientX - lookTap.x, touch.clientY - lookTap.y);
+                if (miningHold && holdDist < 26) {
+                    continue;
+                }
+                if (miningHold) {
+                    lookTap.moved = true;
+                    stopMining();
+                    lastLookPos = { x: touch.clientX, y: touch.clientY };
+                    continue;
+                }
                 const dx = touch.clientX - lastLookPos.x;
                 const dy = touch.clientY - lastLookPos.y;
                 lastLookPos = { x: touch.clientX, y: touch.clientY };
@@ -5068,7 +5098,7 @@
                 player.yaw -= dx * 0.005;
                 player.pitch -= dy * 0.005;
                 player.pitch = Math.max(-Math.PI / 2 + 0.05, Math.min(Math.PI / 2 - 0.05, player.pitch));
-                if (Math.hypot(touch.clientX - lookTap.x, touch.clientY - lookTap.y) > 18) lookTap.moved = true;
+                if (holdDist > 18) lookTap.moved = true;
             }
         }
     }, { passive: false });
@@ -5079,13 +5109,8 @@
         joystickKnob.style.transform = `translate(0px, 0px)`;
     }
 
-    function tryMeleeAttack() {
-        if (player.isDead || invOpen) return;
-        triggerHandPunch();
-        const hit = raycastVoxel(4.8);
-        if (hit.hit && hit.isMob) {
-            hit.mob.takeDamage(swordDamage(heldType()));
-        }
+    function tryMeleeAttack(clientX, clientY) {
+        tryMeleeAt(clientX, clientY);
     }
     function onTouchRelease(e) {
         for (let i = 0; i < e.changedTouches.length; i++) {
@@ -5094,7 +5119,11 @@
             if (touch.identifier === lookTouchId) {
                 const dtap = Date.now() - lookTap.t;
                 const dist = Math.hypot(touch.clientX - lookTap.x, touch.clientY - lookTap.y);
-                if (!lookTap.moved && dtap < 340 && dist < 24) tryMeleeAttack();
+                const mined = mining && mining.t > 0.22;
+                stopMining();
+                if (!lookTap.moved && !mined && dtap < 340 && dist < 24) {
+                    tryMeleeAttack(touch.clientX, touch.clientY);
+                }
                 lookTouchId = null;
             }
         }
@@ -5189,6 +5218,14 @@
         const bar = document.getElementById('mine-bar');
         if (bar) bar.style.display = 'none';
     }
+    function beginTouchMine(clientX, clientY) {
+        if (player.isDead || invOpen) return;
+        const hit = raycastFromScreen(clientX, clientY, 6.5);
+        if (!hit.hit || hit.isMob || !hit.block || hit.block.y <= 0) return;
+        if (hit.blockType === BLOCK_WATER) return;
+        miningHold = true;
+        mining = { x: hit.block.x, y: hit.block.y, z: hit.block.z, t: 0, type: hit.blockType };
+    }
     function updateMining(dt) {
         const bar = document.getElementById('mine-bar');
         const fill = document.getElementById('mine-bar-fill');
@@ -5197,19 +5234,14 @@
             miningHold = false;
             return;
         }
-        const hit = raycastVoxel();
-        if (!hit.hit || hit.isMob || !hit.block || hit.block.y <= 0) {
-            mining = null;
-            hideCrack();
-            if (bar) bar.style.display = 'none';
+        if (!mining) return;
+        const cur = getBlock(mining.x, mining.y, mining.z);
+        if (cur === BLOCK_EMPTY || cur !== mining.type || mining.y <= 0) {
+            stopMining();
             return;
         }
         const tool = heldType();
-        const need = mineSeconds(hit.blockType, tool);
-        const b = hit.block;
-        if (!mining || mining.x !== b.x || mining.y !== b.y || mining.z !== b.z) {
-            mining = { x: b.x, y: b.y, z: b.z, t: 0, type: hit.blockType };
-        }
+        const need = mineSeconds(mining.type, tool);
         const prev = mining.t;
         mining.t += dt;
         const prog = Math.min(1, mining.t / need);
@@ -5226,24 +5258,18 @@
                 showInvToast('Нужна кирка');
             }
             setBlock(mining.x, mining.y, mining.z, BLOCK_EMPTY);
-            mining = null;
-            hideCrack();
-            if (bar) bar.style.display = 'none';
+            stopMining();
         }
     }
 
-    document.getElementById('btn-break').addEventListener('touchstart', (e) => {
-        e.preventDefault();
+    function tryMeleeAt(clientX, clientY) {
+        if (player.isDead || invOpen) return;
         triggerHandPunch();
-        const hit = raycastVoxel();
+        const hit = raycastFromScreen(clientX, clientY, 5.2);
         if (hit.hit && hit.isMob) {
             hit.mob.takeDamage(swordDamage(heldType()));
-            return;
         }
-        miningHold = true;
-    });
-    document.getElementById('btn-break').addEventListener('touchend', function (e) { e.preventDefault(); stopMining(); });
-    document.getElementById('btn-break').addEventListener('touchcancel', function () { stopMining(); });
+    }
 
     function consumeSelectedOne() {
         const currentSlot = inventory[selectedSlotIndex];
@@ -5725,12 +5751,17 @@
         updateMining(dt);
         updateInfiniteChunks(player.pos.x, player.pos.z);
 
-        const hit = raycastVoxel();
-        if (hit.hit && !hit.isMob) {
-            highlightBox.position.set(hit.block.x + 0.5, hit.block.y + 0.5, hit.block.z + 0.5);
+        if (miningHold && mining) {
+            highlightBox.position.set(mining.x + 0.5, mining.y + 0.5, mining.z + 0.5);
             highlightBox.visible = true;
         } else {
-            highlightBox.visible = false;
+            const hit = raycastVoxel();
+            if (hit.hit && !hit.isMob) {
+                highlightBox.position.set(hit.block.x + 0.5, hit.block.y + 0.5, hit.block.z + 0.5);
+                highlightBox.visible = true;
+            } else {
+                highlightBox.visible = false;
+            }
         }
 
         renderer.render(scene, camera);
