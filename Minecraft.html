@@ -5294,7 +5294,11 @@
                         this.mesh.torso.rotation.z = Math.sin(this.walkTimer) * amp * 0.08;
                         this.mesh.torso.rotation.x = 0;
                     }
-                    if (this.type === 'villager' && this.state === 'work' && this.mesh.arms && this.mesh.arms.length >= 2) {
+                    if (this.type === 'villager' && this.doorPunch > 0) {
+                        this.doorPunch = Math.max(0, this.doorPunch - dt * 3.2);
+                        const p = Math.sin(this.doorPunch * Math.PI);
+                        if (this.mesh.arms && this.mesh.arms[0]) this.mesh.arms[0].rotation.x = -p * 1.4;
+                    } else if (this.type === 'villager' && this.state === 'work' && this.mesh.arms && this.mesh.arms.length >= 2) {
                         const job = this.vilJob;
                         if (job === 'smith') {
                             const hit = Math.max(0, Math.sin(this.idleAnim * 9));
@@ -6322,30 +6326,45 @@
         ivan: {
             job: 'elder',
             home: [9.5, 15.5],
+            door: [12, 15],
+            approach: [13.5, 15.5],
+            inside: [11.5, 15.5],
             sites: [[20.5, 20.5], [16.5, 16.5], [24.5, 16.5], [20.5, 12.5], [16.5, 20.5], [24.5, 20.5]],
             lines: ['Проверяю площадь.', 'Голем на месте.', 'Пока ходим — деревня жива.']
         },
         masha: {
             job: 'farmer',
             home: [13.5, 27.5],
+            door: [13, 24],
+            approach: [13.5, 23.5],
+            inside: [13.5, 24.5],
             sites: [[19.5, 9.5, 3.1416], [19.5, 9.5, 3.1416], [15.5, 6.5, 1.57], [23.5, 6.5, -1.57]],
             lines: ['Грядки сохнут.', 'Воды на ферму.', 'Сорняк опять полез.']
         },
         boris: {
             job: 'smith',
             home: [30.5, 15.5],
+            door: [28, 15],
+            approach: [27.5, 15.5],
+            inside: [28.5, 15.5],
             sites: [[25.5, 9.5, 0], [25.5, 9.5, 0], [25.5, 9.5, 0], [24.5, 9.5, 0]],
             lines: ['Наковальня горячая.', 'Голему нужен гвоздь.', 'Уголь кончается.']
         },
         anna: {
             job: 'mapper',
             home: [27.5, 21.5],
+            door: [27, 24],
+            approach: [27.5, 25.5],
+            inside: [27.5, 23.5],
             sites: [[22.5, 20.5, 0], [22.5, 20.5, 0], [21.5, 20.5, 0], [23.5, 20.5, 0]],
             lines: ['Тут дыра на карте.', 'Остров кончается вон там.', 'Запомню этот поворот.']
         },
         gleb: {
             job: 'fisher',
             home: [34.5, 20.5],
+            door: [31, 20],
+            approach: [30.5, 20.5],
+            inside: [31.5, 20.5],
             sites: [[9.5, 1.5, 3.1416], [9.5, 1.5, 3.1416], [10.5, 1.5, 3.1416], [9.5, 2.5, 3.1416]],
             lines: ['Клюёт… нет, водоросли.', 'Сеть на берег.', 'Море сегодня злое.']
         }
@@ -6410,24 +6429,10 @@
             mob.jobTimer = 5 + Math.random() * 8;
         }
         if (night) {
-            let hx = spec.home[0], hz = spec.home[1];
-            for (let dx = -2; dx <= 2; dx++) {
-                for (let dz = -2; dz <= 2; dz++) {
-                    const tx = Math.floor(hx) + dx, tz = Math.floor(hz) + dz;
-                    if (getBlock(tx, VILLAGE_Y + 1, tz) === BLOCK_DOOR) {
-                        setBlock(tx, VILLAGE_Y + 1, tz, BLOCK_DOOR_OPEN, true);
-                        if (getBlock(tx, VILLAGE_Y + 2, tz) === BLOCK_DOOR) setBlock(tx, VILLAGE_Y + 2, tz, BLOCK_DOOR_OPEN, true);
-                    }
-                }
-            }
-            if (!villagerWalkable(hx, hz, 0.34)) { hx = VILLAGE_HUB[0]; hz = VILLAGE_HUB[1]; }
-            if (lineBlocked(mob.pos.x, mob.pos.z, hx, hz, mob.radius) &&
-                (Math.hypot(mob.pos.x - VILLAGE_HUB[0], mob.pos.z - VILLAGE_HUB[1]) > 1.6)) {
-                setTarget(VILLAGE_HUB[0], VILLAGE_HUB[1], 'hub');
-            } else {
-                setTarget(hx, hz, 'home');
-            }
-            mob.jobTimer = 10 + Math.random() * 8;
+            if (spec.approach) setTarget(spec.approach[0], spec.approach[1], 'toDoor');
+            else setTarget(spec.home[0], spec.home[1], 'home');
+            mob.nightStep = spec.door ? 'toDoor' : 'inside';
+            mob.jobTimer = 20;
             if (Math.random() < 0.4) villagerSay(mob, 'Пора по домам.', 2.2);
             return;
         }
@@ -6476,14 +6481,33 @@
             }
             return;
         }
-        if (night && mob.jobPhase !== 'home') pickNextJobPhase(mob, true);
-        if (!night && mob.jobPhase === 'home' && (mob.jobTimer || 0) <= 0) pickNextJobPhase(mob, false);
+        if (mob.doorWait > 0) {
+            mob.doorWait -= dt;
+            mob.state = 'work';
+            mob.vel.x = 0;
+            mob.vel.z = 0;
+            return;
+        }
+        const specNow = jobSpec(mob);
+        if (night && specNow.door && mob.nightStep !== 'inside' && mob.nightStep !== 'toDoor' && mob.nightStep !== 'enter') {
+            mob.nightStep = 'toDoor';
+            mob.jobTarget = { x: specNow.approach[0], z: specNow.approach[1] };
+            mob.jobPhase = 'toDoor';
+            if (Math.random() < 0.45) villagerSay(mob, 'Пора по домам.', 2.2);
+        }
+        if (!night && (mob.nightStep === 'inside' || mob.nightStep === 'enter')) {
+            villagerTapDoor(mob, true);
+            mob.nightStep = 'leave';
+            mob.jobTarget = { x: specNow.approach[0], z: specNow.approach[1] };
+            mob.jobPhase = 'leave';
+            return;
+        }
         mob.jobTimer = (mob.jobTimer || 0) - dt;
         unstickVillager(mob);
         if (!mob.jobTarget) pickNextJobPhase(mob, night);
         const t = mob.jobTarget;
         if (!t) return;
-        if (!villagerWalkable(t.x, t.z, 0.3)) {
+        if (!mob.nightStep && !villagerWalkable(t.x, t.z, 0.3)) {
             pickNextJobPhase(mob, night);
             return;
         }
@@ -6526,7 +6550,25 @@
                 while (dy < -Math.PI) dy += Math.PI * 2;
                 mob.yaw += dy * Math.min(1, dt * 3);
             }
-            if (mob.jobTimer <= 0) {
+            if (mob.nightStep === 'toDoor') {
+                villagerTapDoor(mob, true);
+                mob.nightStep = 'enter';
+                const inn = specNow.inside || specNow.home;
+                mob.jobTarget = { x: inn[0], z: inn[1] };
+                mob.jobPhase = 'enter';
+            } else if (mob.nightStep === 'enter') {
+                villagerTapDoor(mob, false);
+                mob.nightStep = 'inside';
+                mob.jobTarget = { x: specNow.home[0], z: specNow.home[1] };
+                mob.jobPhase = 'home';
+                mob.jobTimer = 30;
+            } else if (mob.nightStep === 'leave') {
+                villagerTapDoor(mob, false);
+                mob.nightStep = null;
+                pickNextJobPhase(mob, false);
+            } else if (mob.nightStep === 'inside') {
+                mob.state = 'work';
+            } else if (mob.jobTimer <= 0) {
                 const spec = jobSpec(mob);
                 if (spec.lines && Math.random() < 0.45) {
                     villagerSay(mob, spec.lines[Math.floor(Math.random() * spec.lines.length)], 2.3);
@@ -6607,7 +6649,7 @@
                 if (wall) {
                     for (let wy = y + 1; wy <= y + 3; wy++) {
                         if (door && wy <= y + 2) {
-                            chunkPut(chunk, wx, wy, wz, BLOCK_DOOR_OPEN);
+                            chunkPut(chunk, wx, wy, wz, BLOCK_DOOR);
                         } else if (win && wy === y + 2) {
                             chunkPut(chunk, wx, wy, wz, BLOCK_GLASS);
                         } else {
@@ -8539,34 +8581,34 @@
     function isGateBlock(t) {
         return t === BLOCK_GATE || t === BLOCK_GATE_OPEN;
     }
-    function toggleDoor(x, y, z) {
-        const t = getBlock(x, y, z);
-        if (!isDoorBlock(t)) return false;
-        const next = (t === BLOCK_DOOR) ? BLOCK_DOOR_OPEN : BLOCK_DOOR;
-        setBlock(x, y, z, next);
-        if (isDoorBlock(getBlock(x, y + 1, z))) setBlock(x, y + 1, z, next);
-        if (isDoorBlock(getBlock(x, y - 1, z))) setBlock(x, y - 1, z, next);
-        showInvToast(next === BLOCK_DOOR_OPEN ? 'Дверь открыта' : 'Дверь закрыта');
+    function setDoorOpen(x, y, z, open, silent) {
+        let found = false, fy = y;
+        for (let dy = -1; dy <= 2; dy++) {
+            if (isDoorBlock(getBlock(x, y + dy, z))) { found = true; fy = y + dy; break; }
+        }
+        if (!found) return false;
+        const want = open ? BLOCK_DOOR_OPEN : BLOCK_DOOR;
+        const cur = getBlock(x, fy, z);
+        if (cur === want) return true;
+        setBlock(x, fy, z, want, true);
+        if (isDoorBlock(getBlock(x, fy + 1, z))) setBlock(x, fy + 1, z, want, true);
+        if (isDoorBlock(getBlock(x, fy - 1, z))) setBlock(x, fy - 1, z, want, true);
+        if (!silent) showInvToast(open ? 'Дверь открыта' : 'Дверь закрыта');
         return true;
     }
-    function openDoorsNearPlayer() {
-        const px = Math.floor(player.pos.x), py = Math.floor(player.pos.y), pz = Math.floor(player.pos.z);
-        for (let dx = -2; dx <= 2; dx++) {
-            for (let dz = -2; dz <= 2; dz++) {
-                if (dx * dx + dz * dz > 5) continue;
-                for (let dy = 0; dy <= 2; dy++) {
-                    const t = getBlock(px + dx, py + dy, pz + dz);
-                    if (t !== BLOCK_DOOR) continue;
-                    setBlock(px + dx, py + dy, pz + dz, BLOCK_DOOR_OPEN, true);
-                    if (getBlock(px + dx, py + dy + 1, pz + dz) === BLOCK_DOOR) {
-                        setBlock(px + dx, py + dy + 1, pz + dz, BLOCK_DOOR_OPEN, true);
-                    }
-                    if (getBlock(px + dx, py + dy - 1, pz + dz) === BLOCK_DOOR) {
-                        setBlock(px + dx, py + dy - 1, pz + dz, BLOCK_DOOR_OPEN, true);
-                    }
-                }
-            }
-        }
+    function toggleDoor(x, y, z) {
+        const t = getBlock(x, y, z);
+        if (!isDoorBlock(t) && !isDoorBlock(getBlock(x, y + 1, z)) && !isDoorBlock(getBlock(x, y - 1, z))) return false;
+        const cur = isDoorBlock(t) ? t : (isDoorBlock(getBlock(x, y + 1, z)) ? getBlock(x, y + 1, z) : getBlock(x, y - 1, z));
+        return setDoorOpen(x, y, z, cur !== BLOCK_DOOR_OPEN, false);
+    }
+    function villagerTapDoor(mob, open) {
+        const spec = jobSpec(mob);
+        if (!spec.door) return;
+        setDoorOpen(spec.door[0], VILLAGE_Y + 1, spec.door[1], open, true);
+        mob.doorWait = 0.42;
+        mob.doorPunch = 1;
+        mob.yaw = Math.atan2((spec.door[0] + 0.5) - mob.pos.x, (spec.door[1] + 0.5) - mob.pos.z);
     }
     function toggleGate(x, y, z) {
         const t = getBlock(x, y, z);
@@ -9121,7 +9163,6 @@
         updateTorchLights(currentTime * 0.001);
         updateMobsManager(dt);
         updateVillagerSocial(dt);
-        openDoorsNearPlayer();
         updateSpeechBubbles();
 
         if (cloudsMesh) {
@@ -9212,73 +9253,6 @@
     
     
     </script><!--DOWNLOAD-PAD
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
