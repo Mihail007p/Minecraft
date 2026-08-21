@@ -4211,19 +4211,83 @@
     }
     function buildVillagerMesh() {
         const g = new THREE.Group();
-        const robe = 0x3d6e28, skin = 0xc68642, brown = 0x5a3c18;
-        const body = createVoxelBox(0.42, 0.7, 0.28, robe); body.position.set(0, 0.7, 0);
-        const head = createVoxelBox(0.32, 0.32, 0.32, skin); head.position.set(0, 1.18, 0);
-        const nose = createVoxelBox(0.08, 0.1, 0.14, skin); nose.position.set(0, -0.02, 0.2);
-        const brow = createVoxelBox(0.34, 0.08, 0.34, brown); brow.position.set(0, 0.18, 0);
-        head.add(nose); head.add(brow);
-        addEyes(head, 0.1, 0.04, 0.16, 0.07, 0.07);
-        g.add(body); g.add(head);
-        function arm(x) {
-            const a = createVoxelBox(0.12, 0.4, 0.12, robe, -0.2); a.position.set(x, 0.9, 0); g.add(a); return a;
+        const skin = 0xc68642, skinD = 0xa56b38, skinL = 0xd4a574;
+        const hair = 0x3a2410, browC = 0x2a1808;
+        const coat = 0x3d6e28, coatD = 0x2a5218, shirt = 0xc4a06a;
+        const pants = 0x4a3018, boot = 0x241408, belt = 0x2a1a0c, lip = 0xa05048;
+
+        const torso = new THREE.Group();
+        torso.position.set(0, 1.12, 0);
+        const chest = createVoxelBox(0.46, 0.52, 0.26, coat);
+        const vest = createVoxelBox(0.38, 0.36, 0.28, coatD); vest.position.set(0, 0.04, 0.02);
+        const collar = createVoxelBox(0.42, 0.08, 0.3, shirt); collar.position.set(0, 0.24, 0.01);
+        const beltM = createVoxelBox(0.48, 0.07, 0.28, belt); beltM.position.set(0, -0.22, 0);
+        const buckle = createVoxelBox(0.08, 0.07, 0.04, 0xc4a06a); buckle.position.set(0, -0.22, 0.14);
+        const hem = createVoxelBox(0.5, 0.16, 0.3, coat); hem.position.set(0, -0.34, 0);
+        torso.add(chest); torso.add(vest); torso.add(collar); torso.add(beltM); torso.add(buckle); torso.add(hem);
+        g.add(torso);
+
+        const neck = createVoxelBox(0.14, 0.1, 0.14, skin); neck.position.set(0, 1.42, 0);
+        g.add(neck);
+
+        const head = new THREE.Group();
+        head.position.set(0, 1.64, 0);
+        const skull = createVoxelBox(0.36, 0.36, 0.34, skin);
+        const jaw = createVoxelBox(0.3, 0.1, 0.28, skinD); jaw.position.set(0, -0.16, 0.02);
+        const cheekL = createVoxelBox(0.08, 0.1, 0.08, skinL); cheekL.position.set(0.16, -0.04, 0.12);
+        const cheekR = createVoxelBox(0.08, 0.1, 0.08, skinL); cheekR.position.set(-0.16, -0.04, 0.12);
+        const hairCap = createVoxelBox(0.38, 0.12, 0.36, hair); hairCap.position.set(0, 0.16, -0.01);
+        const hairBack = createVoxelBox(0.34, 0.18, 0.08, hair); hairBack.position.set(0, 0.04, -0.16);
+        const bang = createVoxelBox(0.34, 0.06, 0.08, hair); bang.position.set(0, 0.14, 0.14);
+        const brow = createVoxelBox(0.28, 0.04, 0.06, browC); brow.position.set(0, 0.08, 0.16);
+        const earL = createVoxelBox(0.06, 0.1, 0.06, skinD); earL.position.set(0.2, 0.0, 0.0);
+        const earR = createVoxelBox(0.06, 0.1, 0.06, skinD); earR.position.set(-0.2, 0.0, 0.0);
+        head.add(skull); head.add(jaw); head.add(cheekL); head.add(cheekR);
+        head.add(hairCap); head.add(hairBack); head.add(bang); head.add(brow); head.add(earL); head.add(earR);
+        addEyes(head, 0.09, 0.03, 0.17, 0.08, 0.07);
+        const lidL = createVoxelBox(0.09, 0.02, 0.03, skin); lidL.position.set(0.09, 0.07, 0.17);
+        const lidR = createVoxelBox(0.09, 0.02, 0.03, skin); lidR.position.set(-0.09, 0.07, 0.17);
+        head.add(lidL); head.add(lidR);
+        const nose = createVoxelBox(0.08, 0.1, 0.1, skinD); nose.position.set(0, -0.02, 0.2);
+        const nostrilL = createVoxelBox(0.025, 0.02, 0.02, 0x8a5a3a); nostrilL.position.set(0.02, -0.05, 0.25);
+        const nostrilR = createVoxelBox(0.025, 0.02, 0.02, 0x8a5a3a); nostrilR.position.set(-0.02, -0.05, 0.25);
+        head.add(nose); head.add(nostrilL); head.add(nostrilR);
+        const mouth = createVoxelBox(0.12, 0.03, 0.03, lip); mouth.position.set(0, -0.12, 0.18);
+        const lipU = createVoxelBox(0.1, 0.02, 0.02, skinL); lipU.position.set(0, -0.1, 0.185);
+        head.add(mouth); head.add(lipU);
+        g.add(head);
+
+        function makeArm(side) {
+            const arm = new THREE.Group();
+            arm.position.set(side * 0.3, 1.36, 0);
+            const sleeve = createVoxelBox(0.13, 0.38, 0.13, coat); sleeve.position.set(0, -0.16, 0);
+            const cuff = createVoxelBox(0.14, 0.06, 0.14, coatD); cuff.position.set(0, -0.34, 0);
+            const hand = createVoxelBox(0.12, 0.12, 0.12, skin); hand.position.set(0, -0.44, 0.02);
+            const f1 = createVoxelBox(0.03, 0.08, 0.03, skin); f1.position.set(0.04, -0.54, 0.04);
+            const f2 = createVoxelBox(0.03, 0.09, 0.03, skin); f2.position.set(0.0, -0.55, 0.05);
+            const f3 = createVoxelBox(0.03, 0.08, 0.03, skin); f3.position.set(-0.04, -0.54, 0.04);
+            const thumb = createVoxelBox(0.03, 0.06, 0.03, skin); thumb.position.set(side * 0.07, -0.46, 0.06);
+            arm.add(sleeve); arm.add(cuff); arm.add(hand); arm.add(f1); arm.add(f2); arm.add(f3); arm.add(thumb);
+            g.add(arm);
+            return arm;
         }
-        g.legs = [arm(0.22), arm(-0.22)];
+        function makeLeg(side) {
+            const leg = new THREE.Group();
+            leg.position.set(side * 0.12, 0.78, 0);
+            const thigh = createVoxelBox(0.16, 0.4, 0.16, pants); thigh.position.set(0, -0.16, 0);
+            const shin = createVoxelBox(0.15, 0.28, 0.15, pants); shin.position.set(0, -0.46, 0);
+            const bootM = createVoxelBox(0.17, 0.16, 0.2, boot); bootM.position.set(0, -0.68, 0.02);
+            const sole = createVoxelBox(0.17, 0.04, 0.22, 0x140c08); sole.position.set(0, -0.78, 0.03);
+            leg.add(thigh); leg.add(shin); leg.add(bootM); leg.add(sole);
+            g.add(leg);
+            return leg;
+        }
+        g.arms = [makeArm(1), makeArm(-1)];
+        g.legs = [makeLeg(1), makeLeg(-1)];
         g.head = head;
+        g.torso = torso;
+        g.biped = true;
+        g.ears = [earL, earR];
         return g;
     }
     function buildFrogMesh() {
@@ -4534,7 +4598,7 @@
         cow: { health: 10, radius: 0.50, height: 1.18, walk: 1.20, panic: 3.1, jump: 6.4 },
         rabbit: { health: 3, radius: 0.18, height: 0.42, walk: 2.1, panic: 5.2, jump: 5.5 },
         wolf: { health: 10, radius: 0.36, height: 0.72, walk: 2.0, panic: 4.6, jump: 6.5 },
-        villager: { health: 20, radius: 0.28, height: 1.5, walk: 0.9, panic: 1.6, jump: 5.5 },
+        villager: { health: 20, radius: 0.28, height: 1.82, walk: 0.95, panic: 1.8, jump: 5.5 },
         frog: { health: 4, radius: 0.22, height: 0.38, walk: 1.1, panic: 2.8, jump: 6.0 },
         horse: { health: 15, radius: 0.42, height: 1.45, walk: 2.4, panic: 5.5, jump: 7.2 },
         camel: { health: 16, radius: 0.46, height: 1.7, walk: 1.8, panic: 3.8, jump: 6.0 },
@@ -4727,7 +4791,19 @@
                         this.mesh.head.rotation.x = 0.12;
                     }
                 }
-                if (this.mesh.legs && this.mesh.legs.length >= 4) {
+                if (this.mesh.biped && this.mesh.legs && this.mesh.legs.length >= 2) {
+                    const amp = this.state === 'panic' ? 0.7 : (speed > 0 ? 0.5 : 0);
+                    const a = Math.sin(this.walkTimer) * amp;
+                    this.mesh.legs[0].rotation.x = a;
+                    this.mesh.legs[1].rotation.x = -a;
+                    if (this.mesh.arms && this.mesh.arms.length >= 2) {
+                        this.mesh.arms[0].rotation.x = -a * 0.85;
+                        this.mesh.arms[1].rotation.x = a * 0.85;
+                    }
+                    if (this.mesh.torso) {
+                        this.mesh.torso.rotation.z = Math.sin(this.walkTimer) * amp * 0.08;
+                    }
+                } else if (this.mesh.legs && this.mesh.legs.length >= 4) {
                     const amp = this.state === 'panic' ? 0.75 : (speed > 0 ? 0.55 : 0);
                     const legAngle = Math.sin(this.walkTimer) * amp;
                     this.mesh.legs[0].rotation.x = legAngle;
@@ -4840,7 +4916,16 @@
             this.mesh.position.copy(this.pos);
             this.mesh.rotation.y = this.yaw;
             if (this.type === 'villager' && this.mesh.head) {
-                this.mesh.head.lookAt(player.pos.x, this.pos.y + 1.2, player.pos.z);
+                const dx = player.pos.x - this.pos.x;
+                const dz = player.pos.z - this.pos.z;
+                let rel = Math.atan2(dx, dz) - this.yaw;
+                while (rel > Math.PI) rel -= Math.PI * 2;
+                while (rel < -Math.PI) rel += Math.PI * 2;
+                const wantY = Math.max(-0.7, Math.min(0.7, rel));
+                this.mesh.head.rotation.y += (wantY - this.mesh.head.rotation.y) * Math.min(1, dt * 5);
+                const dist = Math.hypot(dx, dz) + 0.001;
+                const wantX = Math.max(-0.3, Math.min(0.3, -Math.atan2((player.pos.y + 1.5) - (this.pos.y + 1.62), dist)));
+                this.mesh.head.rotation.x += (wantX - this.mesh.head.rotation.x) * Math.min(1, dt * 5);
             }
 
             if (this.type === 'chicken' && this.health > 0) {
@@ -7187,247 +7272,8 @@
     
     
     
+    
     </script><!--DOWNLOAD-PAD
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
