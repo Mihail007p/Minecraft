@@ -787,7 +787,7 @@
             left: 50%;
             transform: translateX(-50%);
             color: #fff;
-            font-size: 26px;
+            font-size: 32px;
             font-weight: 800;
             letter-spacing: 0.5px;
             text-shadow: 0 2px 10px #000, 0 0 4px #000;
@@ -1734,6 +1734,42 @@
             for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
                 let c = mixHex('#c8b090', '#f0e0c8', fbm(x, y, 50));
                 if ((x % 8) < 2) c = '#a89070';
+                s(x, y, c);
+            }
+        });
+        MC_TEX.tiles[51] = make(function (s) {
+            for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
+                let c = mixHex('#f0a0c8', '#ffe0f0', fbm(x, y, 51));
+                if (n01(x, y, 52) > 0.9) c = '#ffffff';
+                if (n01(x, y, 53) < 0.08) c = '#d06098';
+                s(x, y, c);
+            }
+        });
+        MC_TEX.tiles[52] = make(function (s) {
+            for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
+                let c = mixHex('#0a2810', '#1e5a22', fbm(x, y, 52));
+                if (n01(x, y, 54) > 0.92) c = '#0a1808';
+                s(x, y, c);
+            }
+        });
+        MC_TEX.tiles[53] = make(function (s) {
+            for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
+                let c = mixHex('#7a8a18', '#d0d050', fbm(x, y, 53));
+                if (n01(x, y, 55) > 0.9) c = '#c07020';
+                s(x, y, c);
+            }
+        });
+        MC_TEX.tiles[54] = make(function (s) {
+            for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
+                let c = mixHex('#6a8a3a', '#f0b0d0', fbm(x, y, 54));
+                if (n01(x, y, 56) > 0.88) c = '#ffd0e8';
+                s(x, y, c);
+            }
+        });
+        MC_TEX.tiles[55] = make(function (s) {
+            for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
+                let c = mixHex('#081808', '#1c4a18', fbm(x, y, 55));
+                if (n01(x, y, 57) > 0.93) c = '#0c280c';
                 s(x, y, c);
             }
         });
@@ -4850,6 +4886,10 @@
         if (bio === 'savanna') return s < 40 ? 'llama' : (s < 70 ? 'horse' : (s < 88 ? 'cow' : 'villager'));
         if (bio === 'mushroom') return 'mooshroom';
         if (bio === 'mesa') return 'rabbit';
+        if (bio === 'cherry') return s < 45 ? 'pig' : (s < 75 ? 'rabbit' : 'bee');
+        if (bio === 'dark') return s < 55 ? 'wolf' : 'fox';
+        if (bio === 'ocean') return 'squid';
+        if (bio === 'ice_spikes') return s < 55 ? 'wolf' : 'fox';
         const p = ['cow', 'sheep', 'pig', 'chicken', 'horse', 'villager', 'bee', 'cat'];
         return p[seed % p.length];
     }
@@ -5161,22 +5201,28 @@
         if (chunk) chunk.isDirty = true;
     }
 
+    const BIOME_LIST = [
+        'plains', 'forest', 'jungle', 'desert', 'taiga', 'snow', 'swamp',
+        'savanna', 'mountains', 'mushroom', 'mesa', 'cherry', 'dark', 'ocean', 'ice_spikes'
+    ];
     function biomeAt(wx, wz) {
-        const temp = fbm(wx * 0.0078, wz * 0.0078);
-        const wet = fbm(wx * 0.0082 + 80, wz * 0.0082 + 80);
-        const ridge = fbm(wx * 0.0054 + 200, wz * 0.0054 + 200);
-        const rare = fbm(wx * 0.0044 + 410, wz * 0.0044 + 410);
-        if (rare > 0.46 && wet > 0.08) return 'mushroom';
-        if (rare < -0.44 && temp > 0.12 && wet < 0.05) return 'mesa';
-        if (ridge > 0.40) return 'mountains';
-        if (temp > 0.30 && wet < -0.14) return 'desert';
-        if (temp > 0.22 && wet > 0.28) return 'jungle';
-        if (temp > 0.16 && wet < 0.06 && wet > -0.14) return 'savanna';
-        if (temp < -0.28) return 'snow';
-        if (temp < -0.08 && wet > 0.08) return 'taiga';
-        if (wet > 0.32 && temp > -0.06) return 'swamp';
-        if (wet > 0.08) return 'forest';
-        return 'plains';
+        if (wx * wx + wz * wz < 16 * 16) return 'plains';
+        const cell = 30;
+        const cx = Math.floor(wx / cell);
+        const cz = Math.floor(wz / cell);
+        let best = 1e15, bestH = 0;
+        for (let dx = -1; dx <= 1; dx++) {
+            for (let dz = -1; dz <= 1; dz++) {
+                const ix = cx + dx, iz = cz + dz;
+                const h = pseudoHash2D(ix * 17 + 3, iz * 29 + 9);
+                const px = ix * cell + (h % cell);
+                const pz = iz * cell + ((h >>> 8) % cell);
+                const ddx = wx - px, ddz = wz - pz;
+                const d = ddx * ddx + ddz * ddz;
+                if (d < best) { best = d; bestH = h; }
+            }
+        }
+        return BIOME_LIST[bestH % BIOME_LIST.length];
     }
     function biomeTitle(id) {
         if (id === 'desert') return '🌵 Пустыня';
@@ -5189,7 +5235,21 @@
         if (id === 'savanna') return '🌾 Саванна';
         if (id === 'mushroom') return '🍄 Грибные острова';
         if (id === 'mesa') return '🏜 Меса';
+        if (id === 'cherry') return '🌸 Вишнёвый сад';
+        if (id === 'dark') return '🌑 Тёмный лес';
+        if (id === 'ocean') return '🌊 Океан';
+        if (id === 'ice_spikes') return '🧊 Ледяные пики';
         return '🌿 Равнины';
+    }
+    function placeIceSpike(chunk, lx, h, lz, hgt) {
+        for (let th = 1; th <= hgt; th++) {
+            if (h + th < CHUNK_HEIGHT) chunk.setBlock(lx, h + th, lz, BLOCK_ICE);
+        }
+        if (hgt > 9 && lx + 1 < CHUNK_SIZE) {
+            for (let th = 1; th <= hgt - 3; th++) {
+                if (h + th < CHUNK_HEIGHT) chunk.setBlock(lx + 1, h + th, lz, BLOCK_ICE);
+            }
+        }
     }
     function placeGiantMushroom(chunk, lx, h, lz) {
         const stemH = 5;
@@ -5306,6 +5366,10 @@
                 else if (bio === 'mountains') h = Math.floor(WATER_LEVEL + 14 + n1 * 1.35 + n2 * 0.9 + n3);
                 else if (bio === 'mesa') h = Math.floor(WATER_LEVEL + 8 + n1 * 0.55 + n2 * 0.4);
                 else if (bio === 'mushroom') h = Math.floor(WATER_LEVEL + 4 + n1 * 0.4 + n3 * 0.5);
+                else if (bio === 'ocean') h = Math.floor(WATER_LEVEL - 9 + n3 * 0.6);
+                else if (bio === 'cherry') h = Math.floor(WATER_LEVEL + 3 + n1 * 0.4 + n3 * 0.5);
+                else if (bio === 'dark') h = Math.floor(WATER_LEVEL + 3 + n1 * 0.5 + n2 * 0.3);
+                else if (bio === 'ice_spikes') h = Math.floor(WATER_LEVEL + 5 + n1 * 0.5 + n2 * 0.35);
                 h = Math.max(2, Math.min(CHUNK_HEIGHT - 10, h));
                 heights[lx + lz * CHUNK_SIZE] = h;
 
@@ -5316,6 +5380,8 @@
                 else if (bio === 'taiga' && !shore) { top = BLOCK_PODZOL; fill = BLOCK_DIRT; }
                 else if (bio === 'mushroom' && !shore) { top = BLOCK_MYCELIUM; fill = BLOCK_DIRT; }
                 else if (bio === 'mesa' && !shore) { top = BLOCK_TERRACOTTA; fill = BLOCK_TERRACOTTA; }
+                else if (bio === 'ocean') { top = BLOCK_SAND; fill = BLOCK_SAND; }
+                else if (bio === 'ice_spikes' && !shore) { top = BLOCK_SNOW; fill = BLOCK_DIRT; }
                 else if (bio === 'mountains' && !shore) {
                     if (h > WATER_LEVEL + 28) { top = BLOCK_SNOW; fill = BLOCK_STONE; }
                     else if (h > WATER_LEVEL + 16) { top = BLOCK_STONE; fill = BLOCK_STONE; }
@@ -5355,12 +5421,18 @@
                 else if (bio === 'savanna') treeChance = 16;
                 else if (bio === 'mountains') treeChance = 6;
                 else if (bio === 'mushroom') treeChance = 28;
+                else if (bio === 'cherry') treeChance = 38;
+                else if (bio === 'dark') treeChance = 110;
+                else if (bio === 'ocean' || bio === 'ice_spikes') treeChance = 0;
                 if (canTree && treeRoll < treeChance) {
                     if (bio === 'jungle') placeJungleTree(chunk, lx, h, lz);
                     else if (bio === 'taiga' || bio === 'snow') placeSpruceTree(chunk, lx, h, lz);
                     else if (bio === 'savanna') placeAcaciaTree(chunk, lx, h, lz);
                     else if (bio === 'mushroom') placeGiantMushroom(chunk, lx, h, lz);
+                    else if (bio === 'dark') placeOakTree(chunk, lx, h, lz, 6);
                     else placeOakTree(chunk, lx, h, lz, bio === 'swamp' ? 4 : 5);
+                } else if (bio === 'ice_spikes' && h > WATER_LEVEL && treeRoll < 70 && lx >= 1 && lx <= CHUNK_SIZE - 2 && lz >= 1 && lz <= CHUNK_SIZE - 2) {
+                    placeIceSpike(chunk, lx, h, lz, 7 + (treeRoll % 9));
                 } else if (bio === 'desert' && h > WATER_LEVEL && treeRoll < 22 && chunk.getBlock(lx, h, lz) === BLOCK_SAND) {
                     const ch = 2 + (treeRoll % 3);
                     for (let th = 1; th <= ch; th++) {
@@ -5461,11 +5533,18 @@
                                     solidNorm.push(faces[f].norm[0], faces[f].norm[1], faces[f].norm[2]);
                                 }
                                 let tileId = getBlockFaceTile(block, f);
+                                const gbio = biomeAt(wx, wz);
                                 if (block === BLOCK_GRASS && f === 2) {
-                                    const gbio = biomeAt(wx, wz);
                                     if (gbio === 'jungle') tileId = 43;
                                     else if (gbio === 'savanna') tileId = 44;
                                     else if (gbio === 'swamp') tileId = 45;
+                                    else if (gbio === 'cherry') tileId = 54;
+                                    else if (gbio === 'dark') tileId = 55;
+                                }
+                                if (block === BLOCK_LEAVES) {
+                                    if (gbio === 'cherry') tileId = 51;
+                                    else if (gbio === 'jungle' || gbio === 'dark') tileId = 52;
+                                    else if (gbio === 'savanna') tileId = 53;
                                 }
                                 const tile = getTileUV(tileId);
                                 solidUV.push(tile.u0, tile.v0, tile.u0, tile.v1, tile.u1, tile.v1, tile.u1, tile.v0);
@@ -5651,7 +5730,8 @@
         const candidates = [
             [0, 0], [2, 2], [-2, 2], [2, -2], [-2, -2],
             [4, 0], [-4, 0], [0, 4], [0, -4], [5, 3], [-5, 4],
-            [6, -2], [-3, -6], [8, 1], [-7, 5], [3, 8]
+            [6, -2], [-3, -6], [8, 1], [-7, 5], [3, 8],
+            [10, 10], [-10, 8], [12, -4], [-8, -12]
         ];
 
         let best = null;
@@ -5681,7 +5761,8 @@
         player.onGround = true;
         player.spawnProtect = 2.5;
         camera.position.set(player.pos.x, player.pos.y + player.eyeHeight, player.pos.z);
-        setTimeout(function () { showInvToast('Тапни животное без меча'); }, 1400);
+        setTimeout(function () { showInvToast('Иди вперёд — сменятся биомы'); }, 1200);
+        setTimeout(function () { showInvToast('Тапни животное без меча'); }, 3200);
     }
 
     function checkSolidCollision(px, py, pz, r, h) {
@@ -5933,7 +6014,8 @@
             const biomeTint = {
                 desert: 0xd4c46a, snow: 0xc5d8ea, swamp: 0x5a7a4a, jungle: 0x2f7a48,
                 taiga: 0x7aa0b8, mountains: 0x8eb4d4, savanna: 0xd2c078, forest: 0x6aa86a,
-                mushroom: 0xb080b0, mesa: 0xc45a28
+                mushroom: 0xb080b0, mesa: 0xc45a28,
+                cherry: 0xf0b0d0, dark: 0x1a3a18, ocean: 0x3a70b8, ice_spikes: 0xb8e8f8
             };
             if (dayFactor > 0.35 && biomeTint[bio]) {
                 currentSky.lerp(new THREE.Color(biomeTint[bio]), 0.48);
@@ -7014,191 +7096,8 @@
     requestAnimationFrame(animate);
     
     
+    
     </script><!--DOWNLOAD-PAD
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
