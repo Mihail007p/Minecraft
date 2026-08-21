@@ -48,6 +48,26 @@
         }
         #crosshair::before { top: 6px; left: 0; width: 14px; height: 2px; }
         #crosshair::after { top: 0; left: 6px; width: 2px; height: 14px; }
+        #mine-bar {
+            position: absolute;
+            top: 54%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 96px;
+            height: 8px;
+            background: rgba(0, 0, 0, 0.55);
+            border: 1px solid rgba(255,255,255,0.7);
+            border-radius: 4px;
+            display: none;
+            z-index: 12;
+            overflow: hidden;
+            pointer-events: none;
+        }
+        #mine-bar-fill {
+            height: 100%;
+            width: 0%;
+            background: #f1c40f;
+        }
 
         #damage-flash {
             position: absolute;
@@ -774,6 +794,7 @@
 <body>
     <canvas id="game-canvas"></canvas>
     <div id="crosshair"></div>
+    <div id="mine-bar"><div id="mine-bar-fill"></div></div>
     <div id="damage-flash"></div>
     <div id="underwater-overlay"></div>
     
@@ -1002,6 +1023,18 @@
     const ITEM_SPAWN_PIG = 70;
     const ITEM_SPAWN_SHEEP = 71;
     const ITEM_SPAWN_COW = 72;
+    const BLOCK_COAL_ORE = 73;
+    const BLOCK_IRON_ORE = 74;
+    const BLOCK_GOLD_ORE = 75;
+    const BLOCK_DIAMOND_ORE = 76;
+    const ITEM_IRON_INGOT = 77;
+    const ITEM_GOLD_INGOT = 78;
+    const ITEM_DIAMOND = 79;
+    const ITEM_IRON_PICK = 80;
+    const ITEM_IRON_AXE = 81;
+    const ITEM_IRON_SWORD = 82;
+    const ITEM_DIAMOND_PICK = 83;
+    const ITEM_DIAMOND_SWORD = 84;
 
     const BLOCK_NAMES = {
         [BLOCK_GRASS]: 'Трава',
@@ -1075,13 +1108,27 @@
         [ITEM_SPAWN_CHICKEN]: 'Курица',
         [ITEM_SPAWN_PIG]: 'Свинья',
         [ITEM_SPAWN_SHEEP]: 'Овца',
-        [ITEM_SPAWN_COW]: 'Корова'
+        [ITEM_SPAWN_COW]: 'Корова',
+        [BLOCK_COAL_ORE]: 'Уг. руда',
+        [BLOCK_IRON_ORE]: 'Жел. руда',
+        [BLOCK_GOLD_ORE]: 'Зол. руда',
+        [BLOCK_DIAMOND_ORE]: 'Алм. руда',
+        [ITEM_IRON_INGOT]: 'Железо',
+        [ITEM_GOLD_INGOT]: 'Золото',
+        [ITEM_DIAMOND]: 'Алмаз',
+        [ITEM_IRON_PICK]: 'Жел. кирка',
+        [ITEM_IRON_AXE]: 'Жел. топор',
+        [ITEM_IRON_SWORD]: 'Жел. меч',
+        [ITEM_DIAMOND_PICK]: 'Алм. кирка',
+        [ITEM_DIAMOND_SWORD]: 'Алм. меч'
     };
 
     function isToolItem(type) {
         return (type >= ITEM_WOOD_PICK && type <= ITEM_STONE_SHOVEL) ||
             type === ITEM_WOOD_HOE || type === ITEM_STONE_HOE ||
-            type === ITEM_BOW || type === ITEM_FISHING_ROD || type === ITEM_SHIELD;
+            type === ITEM_BOW || type === ITEM_FISHING_ROD || type === ITEM_SHIELD ||
+            type === ITEM_IRON_PICK || type === ITEM_IRON_AXE || type === ITEM_IRON_SWORD ||
+            type === ITEM_DIAMOND_PICK || type === ITEM_DIAMOND_SWORD;
     }
     function isArmorItem(type) {
         return type >= ITEM_HELMET && type <= ITEM_BOOTS;
@@ -1108,6 +1155,7 @@
             type === ITEM_COOKED_MEAT || type === ITEM_BOWL || type === ITEM_STEW ||
             type === ITEM_BOAT || type === ITEM_GLASS_BOTTLE ||
             type === ITEM_LEATHER || type === ITEM_EGG || isSpawnEgg(type) ||
+            type === ITEM_IRON_INGOT || type === ITEM_GOLD_INGOT || type === ITEM_DIAMOND ||
             isToolItem(type) || isArmorItem(type);
     }
     function canPlaceType(type) {
@@ -1118,7 +1166,7 @@
             !isNonBlockItem(type);
     }
 
-    const MC_TEX = { tiles: new Array(32) };
+    const MC_TEX = { tiles: new Array(40) };
     (function buildMcTextures() {
         function hash(x, y, s) {
             let n = Math.imul(x * 374761393 + y * 668265263 + s * 1274126177, 1597334677);
@@ -1470,6 +1518,23 @@
             for (let y = 14; y < 30; y++) for (let x = 8; x < 24; x++) s(x, y, '#121212');
             for (let y = 20; y < 28; y++) for (let x = 12; x < 20; x++) s(x, y, '#ff7722');
         });
+
+        function oreTile(speckle, glow) {
+            return make(function (s) {
+                for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
+                    let c = stoneCol(x, y);
+                    const v = n01(x, y, speckle + 3);
+                    if (v > 0.78) c = glow;
+                    else if (v > 0.70) c = mixHex(c, glow, 0.55);
+                    if (n01(x, y, speckle + 9) > 0.93) c = mixHex(glow, '#ffffff', 0.35);
+                    s(x, y, c);
+                }
+            });
+        }
+        MC_TEX.tiles[32] = oreTile(32, '#2a2a2a');
+        MC_TEX.tiles[33] = oreTile(33, '#d8c0a0');
+        MC_TEX.tiles[34] = oreTile(34, '#f0c040');
+        MC_TEX.tiles[35] = oreTile(35, '#5ee7ff');
 
         MC_TEX.get = function (id, x, y) {
             const t = MC_TEX.tiles[id];
@@ -1866,6 +1931,62 @@
         drawSpawnEgg('#f3a8b6', '#e07a90', '#ffc4d0'); save(70);
         drawSpawnEgg('#f4f4f4', '#c4a882', '#ffffff'); save(71);
         drawSpawnEgg('#8b5a2b', '#f0e6d0', '#c4a06a'); save(72);
+
+        drawIso(32, 32); save(73);
+        drawIso(33, 33); save(74);
+        drawIso(34, 34); save(75);
+        drawIso(35, 35); save(76);
+
+        sprite(function (s) {
+            for (let y = 6; y < 12; y++) for (let x = 3; x < 13; x++) s(x, y, (y === 6) ? '#f0f0f0' : (y === 11) ? '#6a6a70' : '#c8c8d0');
+            s(4, 7, '#ffffff'); s(10, 9, '#8a8a90');
+        }); save(77);
+        sprite(function (s) {
+            for (let y = 6; y < 12; y++) for (let x = 3; x < 13; x++) s(x, y, (y === 6) ? '#ffe680' : (y === 11) ? '#b8860b' : '#f0c040');
+            s(4, 7, '#fff8c0');
+        }); save(78);
+        sprite(function (s) {
+            s(8, 2, '#b8ffff'); s(7, 3, '#7fe9ff'); s(8, 3, '#e8ffff'); s(9, 3, '#7fe9ff');
+            s(6, 4, '#3ec6e0'); s(7, 4, '#7fe9ff'); s(8, 4, '#ffffff'); s(9, 4, '#7fe9ff'); s(10, 4, '#3ec6e0');
+            s(5, 5, '#1a7a9a'); s(6, 5, '#3ec6e0'); s(7, 5, '#7fe9ff'); s(8, 5, '#b8ffff'); s(9, 5, '#3ec6e0'); s(10, 5, '#1a7a9a');
+            s(6, 6, '#1a7a9a'); s(7, 6, '#3ec6e0'); s(8, 6, '#3ec6e0'); s(9, 6, '#1a7a9a');
+            s(7, 7, '#1a7a9a'); s(8, 7, '#1a7a9a'); s(8, 8, '#0e4a60');
+        }); save(79);
+
+        function drawPickCols(a, b, c) {
+            sprite(function (s) {
+                handle(s, 2, 14);
+                for (let x = 5; x < 15; x++) { s(x, 2, c); s(x, 3, a); s(x, 4, b); s(x, 5, c); }
+                s(4, 3, b); s(4, 4, c); s(14, 3, b); s(14, 4, c);
+            });
+        }
+        function drawAxeCols(a, b, c) {
+            sprite(function (s) {
+                handle(s, 2, 14);
+                for (let y = 1; y < 8; y++) for (let x = 8; x < 15; x++) {
+                    if (x + y > 10 && x + y < 20) s(x, y, (y === 1) ? a : (y === 7) ? c : b);
+                }
+                s(9, 2, a); s(13, 2, a);
+            });
+        }
+        function drawSwordCols(a, b, c) {
+            sprite(function (s) {
+                s(2, 13, woodC()); s(3, 13, woodB()); s(3, 12, woodA()); s(4, 12, woodB());
+                s(4, 11, woodC()); s(5, 11, woodB());
+                for (let x = 3; x < 12; x++) { s(x, 10, woodC()); s(x, 9, woodB()); }
+                for (let i = 0; i < 9; i++) {
+                    s(6 + i, 8 - i, a);
+                    s(7 + i, 8 - i, b);
+                    s(6 + i, 7 - i, c);
+                }
+                s(14, 0, '#f0f0f0'); s(15, 0, a);
+            });
+        }
+        drawPickCols('#e8e8f0', '#b0b0bc', '#6a6a78'); save(80);
+        drawAxeCols('#e8e8f0', '#b0b0bc', '#6a6a78'); save(81);
+        drawSwordCols('#e8e8f0', '#b0b0bc', '#6a6a78'); save(82);
+        drawPickCols('#b8ffff', '#7fe9ff', '#1a7a9a'); save(83);
+        drawSwordCols('#b8ffff', '#7fe9ff', '#1a7a9a'); save(84);
     })();
 
     // --- 2. ИНВЕНТАРЬ И СОХРАНЕНИЕ ---
@@ -2276,7 +2397,9 @@
         54:'#8a6230',55:'#c07840',56:'#c4a06a',57:'#8a6230',58:'#c4a06a',59:'#f4f4f4',
         60:'#f4f4f4',61:'#f4f4f4',62:'#f4f4f4',63:'#8a8a8a',64:'#8a8a8a',65:'#d8cb8c',
         66:'#8ec8d8',67:'#8a5a30',68:'#f5ead4',69:'#fff6e4',70:'#f3a8b6',71:'#f4f4f4',
-        72:'#8b5a2b'
+        72:'#8b5a2b',73:'#2a2a2a',74:'#d8c0a0',75:'#f0c040',76:'#5ee7ff',
+        77:'#c8c8d0',78:'#f0c040',79:'#7fe9ff',80:'#c8c8d0',81:'#c8c8d0',
+        82:'#c8c8d0',83:'#7fe9ff',84:'#7fe9ff'
     };
     const CRAFT_RECIPES = [
         { id: 'planks', name: 'Доски', cat: 'building', shapeless: [[4, 1]], result: { type: 5, count: 4 }, size: 2 },
@@ -2335,13 +2458,20 @@
         { id: 'spawn-chick', name: 'Курица', cat: 'misc', shapeless: [[68, 1], [11, 1]], result: { type: 69, count: 1 }, size: 2 },
         { id: 'spawn-pig', name: 'Свинья', cat: 'misc', shapeless: [[9, 2]], result: { type: 70, count: 1 }, size: 2 },
         { id: 'spawn-sheep', name: 'Овца', cat: 'misc', shapeless: [[9, 1], [10, 1]], result: { type: 71, count: 1 }, size: 2 },
-        { id: 'spawn-cow', name: 'Корова', cat: 'misc', shapeless: [[9, 1], [67, 1]], result: { type: 72, count: 1 }, size: 2 }
+        { id: 'spawn-cow', name: 'Корова', cat: 'misc', shapeless: [[9, 1], [67, 1]], result: { type: 72, count: 1 }, size: 2 },
+        { id: 'ipick', name: 'Жел. кирка', cat: 'equipment', shape: ['III', '.S.', '.S.'], keys: { I: 77, S: 12 }, result: { type: 80, count: 1 }, size: 3 },
+        { id: 'iaxe', name: 'Жел. топор', cat: 'equipment', shape: ['II.', 'IS.', '.S.'], keys: { I: 77, S: 12 }, result: { type: 81, count: 1 }, size: 3 },
+        { id: 'isword', name: 'Жел. меч', cat: 'equipment', shape: ['.I.', '.I.', '.S.'], keys: { I: 77, S: 12 }, result: { type: 82, count: 1 }, size: 3 },
+        { id: 'dpick', name: 'Алм. кирка', cat: 'equipment', shape: ['DDD', '.S.', '.S.'], keys: { D: 79, S: 12 }, result: { type: 83, count: 1 }, size: 3 },
+        { id: 'dsword', name: 'Алм. меч', cat: 'equipment', shape: ['.D.', '.D.', '.S.'], keys: { D: 79, S: 12 }, result: { type: 84, count: 1 }, size: 3 }
     ];
     const SMELT_RECIPES = [
         { id: 'smelt-glass', name: 'Стекло', cat: 'building', in: 7, result: { type: 33, count: 1 } },
         { id: 'smelt-meat', name: 'Жаркое', cat: 'misc', in: 9, result: { type: 28, count: 1 } },
         { id: 'smelt-coal', name: 'Уголь', cat: 'misc', in: 4, result: { type: 27, count: 1 } },
-        { id: 'smelt-smooth', name: 'Гладкий камень', cat: 'building', in: 3, result: { type: 45, count: 1 } }
+        { id: 'smelt-smooth', name: 'Гладкий камень', cat: 'building', in: 3, result: { type: 45, count: 1 } },
+        { id: 'smelt-iron', name: 'Железо', cat: 'misc', in: 74, result: { type: 77, count: 1 } },
+        { id: 'smelt-gold', name: 'Золото', cat: 'misc', in: 75, result: { type: 78, count: 1 } }
     ];
     let bookOpen = false;
     let bookCat = 'all';
@@ -2699,7 +2829,7 @@
             const rec = findSmelt(furnaceIn && furnaceIn.type);
             hint.textContent = rec
                 ? ('Плавка: ' + (BLOCK_NAMES[furnaceIn.type] || '') + ' → ' + rec.name + (furnaceFuelLeft ? ' · топливо ' + furnaceFuelLeft : ' · положи топливо вниз'))
-                : 'Верх: песок/мясо/дерево/камень · Низ: топливо';
+                : 'Верх: песок/мясо/дерево/камень/руда · Низ: топливо';
         }
     }
 
@@ -3050,10 +3180,10 @@
     // --- 4. ТЕКСТУРНЫЙ АТЛАС (С классической текстурой воды) ---
     function createTextureAtlas() {
         const canvas = document.createElement('canvas');
-        canvas.width = 128; canvas.height = 256;
+        canvas.width = 128; canvas.height = 512;
         const ctx = canvas.getContext('2d');
         ctx.imageSmoothingEnabled = false;
-        for (let id = 0; id < 32; id++) {
+        for (let id = 0; id < 40; id++) {
             const tile = MC_TEX.tiles[id];
             if (!tile) continue;
             const ox = (id % 4) * 32, oy = Math.floor(id / 4) * 32;
@@ -3073,7 +3203,7 @@
 
     function getTileUV(tileId) {
         const col = tileId % 4, row = Math.floor(tileId / 4);
-        const uSize = 0.25, vSize = 0.125;
+        const uSize = 0.25, vSize = 0.0625;
         return { u0: col * uSize, v0: 1.0 - (row + 1) * vSize, u1: col * uSize + uSize, v1: 1.0 - row * vSize };
     }
 
@@ -3115,6 +3245,10 @@
         if (isToolItem(blockType) || blockType === ITEM_ARROW) return 15;
         if (blockType === ITEM_LEATHER) return 1;
         if (blockType === ITEM_EGG || isSpawnEgg(blockType)) return 12;
+        if (blockType === BLOCK_COAL_ORE || blockType === ITEM_CHARCOAL) return 32;
+        if (blockType === BLOCK_IRON_ORE || blockType === ITEM_IRON_INGOT) return 33;
+        if (blockType === BLOCK_GOLD_ORE || blockType === ITEM_GOLD_INGOT) return 34;
+        if (blockType === BLOCK_DIAMOND_ORE || blockType === ITEM_DIAMOND) return 35;
         return 1;
     }
 
@@ -3928,6 +4062,8 @@
 
         let dropType = blockType;
         if (blockType === BLOCK_GRASS) dropType = BLOCK_DIRT;
+        if (blockType === BLOCK_COAL_ORE) dropType = ITEM_CHARCOAL;
+        if (blockType === BLOCK_DIAMOND_ORE) dropType = ITEM_DIAMOND;
 
         const mesh = createMiniDropMesh(dropType);
         mesh.position.set(x + 0.5, y + 0.5, z + 0.5);
@@ -4088,6 +4224,7 @@
     function generateChunkTerrain(chunk) {
         const startX = chunk.cx * CHUNK_SIZE;
         const startZ = chunk.cz * CHUNK_SIZE;
+        const heights = new Uint8Array(CHUNK_SIZE * CHUNK_SIZE);
 
         for (let lx = 0; lx < CHUNK_SIZE; lx++) {
             for (let lz = 0; lz < CHUNK_SIZE; lz++) {
@@ -4098,6 +4235,7 @@
                 const n2 = perlin2D(wx * 0.05, wz * 0.05) * 3.0;
                 let h = Math.floor(8 + n1 + n2);
                 h = Math.max(2, Math.min(CHUNK_HEIGHT - 4, h));
+                heights[lx + lz * CHUNK_SIZE] = h;
 
                 for (let y = 0; y < CHUNK_HEIGHT; y++) {
                     if (y === 0) chunk.setBlock(lx, y, lz, BLOCK_STONE);
@@ -4120,6 +4258,30 @@
                             }
                         }
                     }
+                }
+            }
+        }
+
+        for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+            for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+                const wx = startX + lx;
+                const wz = startZ + lz;
+                const h = heights[lx + lz * CHUNK_SIZE];
+                for (let y = 1; y < h; y++) {
+                    if (chunk.getBlock(lx, y, lz) !== BLOCK_STONE) continue;
+                    const caveA = perlin2D(wx * 0.055, wz * 0.055 + y * 0.13);
+                    const caveB = perlin2D(wx * 0.11 + 30.2, wz * 0.11 + y * 0.09);
+                    const tunnel = Math.abs(caveA) < 0.12 && caveB > 0.05;
+                    const pocket = caveA > 0.56 && caveB > 0.12;
+                    if ((tunnel || pocket) && y < h - 1) {
+                        chunk.setBlock(lx, y, lz, BLOCK_EMPTY);
+                        continue;
+                    }
+                    const r = pseudoHash2D(wx * 131 + y * 17, wz * 197 + y * 23) % 1000;
+                    if (y <= 4 && r < 10) chunk.setBlock(lx, y, lz, BLOCK_DIAMOND_ORE);
+                    else if (y <= 7 && r < 22) chunk.setBlock(lx, y, lz, BLOCK_GOLD_ORE);
+                    else if (y <= 12 && r < 48) chunk.setBlock(lx, y, lz, BLOCK_IRON_ORE);
+                    else if (y <= h - 2 && r < 95) chunk.setBlock(lx, y, lz, BLOCK_COAL_ORE);
                 }
             }
         }
@@ -4777,19 +4939,121 @@
         else if (player.onGround) player.vel.y = 8.5;
     });
 
+    function heldType() {
+        const s = inventory[selectedSlotIndex];
+        return (!s || s.count <= 0) ? BLOCK_EMPTY : s.type;
+    }
+    function pickTier(type) {
+        if (type === ITEM_WOOD_PICK) return 1;
+        if (type === ITEM_STONE_PICK) return 2;
+        if (type === ITEM_IRON_PICK) return 3;
+        if (type === ITEM_DIAMOND_PICK) return 4;
+        return 0;
+    }
+    function requiredPick(block) {
+        if (block === BLOCK_STONE || block === BLOCK_COAL_ORE || block === BLOCK_STONE_BRICK ||
+            block === BLOCK_SMOOTH_STONE || block === BLOCK_FURNACE || block === BLOCK_WALL ||
+            block === BLOCK_SANDSTONE || block === BLOCK_CUT_SANDSTONE) return 1;
+        if (block === BLOCK_IRON_ORE) return 2;
+        if (block === BLOCK_GOLD_ORE || block === BLOCK_DIAMOND_ORE) return 3;
+        return 0;
+    }
+    function isAxeTool(type) {
+        return type === ITEM_WOOD_AXE || type === ITEM_STONE_AXE || type === ITEM_IRON_AXE;
+    }
+    function swordDamage(type) {
+        if (type === ITEM_WOOD_SWORD) return 3;
+        if (type === ITEM_STONE_SWORD) return 4;
+        if (type === ITEM_IRON_SWORD) return 5;
+        if (type === ITEM_DIAMOND_SWORD) return 7;
+        return 2;
+    }
+    function mineSeconds(block, tool) {
+        let base = 0.32;
+        if (block === BLOCK_LEAVES || block === BLOCK_SAND || block === ITEM_WOOL || block === BLOCK_CARPET) base = 0.16;
+        else if (block === BLOCK_DIRT || block === BLOCK_GRASS) base = 0.18;
+        else if (block === BLOCK_WOOD || block === BLOCK_PLANKS || block === BLOCK_CRAFT ||
+            block === BLOCK_CHEST || block === BLOCK_BARREL || block === BLOCK_DOOR) base = 0.5;
+        else if (block === BLOCK_STONE || block === BLOCK_SANDSTONE || block === BLOCK_STONE_BRICK) base = 1.15;
+        else if (block === BLOCK_COAL_ORE) base = 1.2;
+        else if (block === BLOCK_IRON_ORE) base = 1.4;
+        else if (block === BLOCK_GOLD_ORE) base = 1.5;
+        else if (block === BLOCK_DIAMOND_ORE) base = 1.8;
+        else if (block === BLOCK_GLASS) base = 0.22;
+        if (isAxeTool(tool) && (block === BLOCK_WOOD || block === BLOCK_PLANKS || block === BLOCK_LEAVES || block === BLOCK_CRAFT)) base *= 0.38;
+        const need = requiredPick(block);
+        const tier = pickTier(tool);
+        if (need > 0) {
+            if (tier < need) return base * 4.5;
+            base *= [1, 0.7, 0.5, 0.36, 0.22][tier];
+        }
+        return Math.max(0.12, base);
+    }
+    function canHarvest(block, tool) {
+        const need = requiredPick(block);
+        if (need <= 0) return true;
+        return pickTier(tool) >= need;
+    }
+
+    let miningHold = false;
+    let mining = null;
+    function stopMining() {
+        miningHold = false;
+        mining = null;
+        const bar = document.getElementById('mine-bar');
+        if (bar) bar.style.display = 'none';
+    }
+    function updateMining(dt) {
+        const bar = document.getElementById('mine-bar');
+        const fill = document.getElementById('mine-bar-fill');
+        if (!miningHold || player.isDead || invOpen) {
+            if (mining) stopMining();
+            miningHold = false;
+            return;
+        }
+        const hit = raycastVoxel();
+        if (!hit.hit || hit.isMob || !hit.block || hit.block.y <= 0) {
+            mining = null;
+            if (bar) bar.style.display = 'none';
+            return;
+        }
+        const tool = heldType();
+        const need = mineSeconds(hit.blockType, tool);
+        const b = hit.block;
+        if (!mining || mining.x !== b.x || mining.y !== b.y || mining.z !== b.z) {
+            mining = { x: b.x, y: b.y, z: b.z, t: 0, type: hit.blockType };
+        }
+        const prev = mining.t;
+        mining.t += dt;
+        if (bar && fill) {
+            bar.style.display = 'block';
+            fill.style.width = Math.min(100, (mining.t / need) * 100) + '%';
+        }
+        if (Math.floor(mining.t * 5) !== Math.floor(prev * 5)) triggerHandPunch();
+        if (mining.t >= need) {
+            if (canHarvest(mining.type, tool)) {
+                spawnBlockDrop(mining.x, mining.y, mining.z, mining.type);
+            } else {
+                showInvToast('Нужна кирка');
+            }
+            setBlock(mining.x, mining.y, mining.z, BLOCK_EMPTY);
+            mining = null;
+            if (bar) bar.style.display = 'none';
+        }
+    }
+
     document.getElementById('btn-break').addEventListener('touchstart', (e) => {
         e.preventDefault();
         triggerHandPunch();
         const hit = raycastVoxel();
-        if (hit.hit) {
-            if (hit.isMob) {
-                hit.mob.takeDamage(2);
-            } else if (hit.block.y > 0) {
-                spawnBlockDrop(hit.block.x, hit.block.y, hit.block.z, hit.blockType);
-                setBlock(hit.block.x, hit.block.y, hit.block.z, BLOCK_EMPTY);
-            }
+        if (hit.hit && hit.isMob) {
+            hit.mob.takeDamage(swordDamage(heldType()));
+            return;
         }
+        miningHold = true;
     });
+    document.getElementById('btn-break').addEventListener('touchend', function (e) { e.preventDefault(); stopMining(); });
+    document.getElementById('btn-break').addEventListener('touchcancel', function () { stopMining(); });
 
     function consumeSelectedOne() {
         const currentSlot = inventory[selectedSlotIndex];
@@ -5268,6 +5532,7 @@
 
         updatePhysics(dt);
         updateFirstPersonArm(dt);
+        updateMining(dt);
         updateInfiniteChunks(player.pos.x, player.pos.z);
 
         const hit = raycastVoxel();
