@@ -6332,46 +6332,51 @@
     const VILLAGER_JOBS = {
         ivan: {
             job: 'elder',
-            home: [9.5, 15.5],
+            home: [10.2, 15.5],
             door: [12, 15],
             approach: [14.4, 15.5],
-            inside: [10.5, 15.5],
+            inside: [10.4, 15.5],
+            nightPath: [[16.5, 20.5], [14.4, 15.5]],
             sites: [[20.5, 20.5], [16.5, 16.5], [24.5, 16.5], [20.5, 12.5], [16.5, 20.5], [24.5, 20.5]],
             lines: ['Проверяю площадь.', 'Голем на месте.', 'Пока ходим — деревня жива.']
         },
         masha: {
             job: 'farmer',
-            home: [13.5, 27.5],
+            home: [13.5, 27.8],
             door: [13, 24],
             approach: [13.5, 22.4],
-            inside: [13.5, 26.5],
+            inside: [13.5, 26.6],
+            nightPath: [[13.5, 22.4]],
             sites: [[19.5, 9.5, 3.1416], [19.5, 9.5, 3.1416], [15.5, 6.5, 1.57], [23.5, 6.5, -1.57]],
             lines: ['Грядки сохнут.', 'Воды на ферму.', 'Сорняк опять полез.']
         },
         boris: {
             job: 'smith',
-            home: [30.5, 15.5],
+            home: [31.3, 15.5],
             door: [28, 15],
             approach: [26.4, 15.5],
-            inside: [29.5, 15.5],
+            inside: [30.1, 15.5],
+            nightPath: [[22.5, 12.5], [22.5, 15.5], [26.4, 15.5]],
             sites: [[25.5, 9.5, 0], [25.5, 9.5, 0], [25.5, 9.5, 0], [24.5, 9.5, 0]],
             lines: ['Наковальня горячая.', 'Голему нужен гвоздь.', 'Уголь кончается.']
         },
         anna: {
             job: 'mapper',
-            home: [27.5, 21.5],
+            home: [27.5, 20.7],
             door: [27, 24],
             approach: [27.5, 26.4],
-            inside: [27.5, 22.5],
+            inside: [27.5, 21.9],
+            nightPath: [[22.5, 26.5], [27.5, 26.4]],
             sites: [[22.5, 20.5, 0], [22.5, 20.5, 0], [21.5, 20.5, 0], [23.5, 20.5, 0]],
             lines: ['Тут дыра на карте.', 'Остров кончается вон там.', 'Запомню этот поворот.']
         },
         gleb: {
             job: 'fisher',
-            home: [34.5, 20.5],
+            home: [33.8, 20.5],
             door: [31, 20],
             approach: [29.4, 20.5],
-            inside: [32.5, 20.5],
+            inside: [33.1, 20.5],
+            nightPath: [[10.5, 8.5], [20.5, 12.5], [26.5, 16.5], [29.4, 20.5]],
             sites: [[9.5, 1.5, 3.1416], [9.5, 1.5, 3.1416], [10.5, 1.5, 3.1416], [9.5, 2.5, 3.1416]],
             lines: ['Клюёт… нет, водоросли.', 'Сеть на берег.', 'Море сегодня злое.']
         }
@@ -6427,6 +6432,23 @@
         };
         return mob._wanderJob;
     }
+    function startNightWalk(mob) {
+        const spec = jobSpec(mob);
+        const path = (spec.nightPath && spec.nightPath.length) ? spec.nightPath.slice() : (spec.approach ? [spec.approach] : [spec.home]);
+        mob.nightWay = path;
+        mob.nightStep = 'path';
+        const p = mob.nightWay.shift();
+        mob.jobTarget = { x: p[0], z: p[1] };
+        mob.jobPhase = 'path';
+        mob.jobTimer = 20;
+        if (Math.random() < 0.4) villagerSay(mob, 'Пора по домам.', 2.2);
+    }
+    function lockToDoorAxis(mob, spec) {
+        if (!spec || !spec.door) return;
+        const alongX = Math.abs((spec.inside[0] - spec.approach[0])) >= Math.abs((spec.inside[1] - spec.approach[1]));
+        if (alongX) mob.pos.z = spec.door[1] + 0.5;
+        else mob.pos.x = spec.door[0] + 0.5;
+    }
     function pickNextJobPhase(mob, night) {
         const spec = jobSpec(mob);
         function setTarget(x, z, phase, face) {
@@ -6436,11 +6458,7 @@
             mob.jobTimer = 5 + Math.random() * 8;
         }
         if (night) {
-            if (spec.approach) setTarget(spec.approach[0], spec.approach[1], 'toDoor');
-            else setTarget(spec.home[0], spec.home[1], 'home');
-            mob.nightStep = spec.door ? 'toDoor' : 'inside';
-            mob.jobTimer = 20;
-            if (Math.random() < 0.4) villagerSay(mob, 'Пора по домам.', 2.2);
+            startNightWalk(mob);
             return;
         }
         if (Math.random() < 0.7 && spec.sites[0] && villagerWalkable(spec.sites[0][0], spec.sites[0][1], 0.34)) {
@@ -6496,13 +6514,8 @@
             return;
         }
         const specNow = jobSpec(mob);
-        if (night && specNow.door && mob.nightStep !== 'inside' && mob.nightStep !== 'toDoor' && mob.nightStep !== 'enter') {
-            mob.nightStep = 'toDoor';
-            mob.jobTarget = { x: specNow.approach[0], z: specNow.approach[1] };
-            mob.jobPhase = 'toDoor';
-            if (Math.random() < 0.45) villagerSay(mob, 'Пора по домам.', 2.2);
-        }
-        if (!night && (mob.nightStep === 'inside' || mob.nightStep === 'enter')) {
+        if (night && specNow.door && !mob.nightStep) startNightWalk(mob);
+        if (!night && (mob.nightStep === 'inside' || mob.nightStep === 'enter' || mob.nightStep === 'path')) {
             villagerTapDoor(mob, true);
             mob.nightStep = 'leave';
             mob.jobTarget = { x: specNow.approach[0], z: specNow.approach[1] };
@@ -6518,6 +6531,7 @@
             pickNextJobPhase(mob, night);
             return;
         }
+        if (mob.nightStep === 'enter' || mob.nightStep === 'leave') lockToDoorAxis(mob, specNow);
         const dx = t.x - mob.pos.x, dz = t.z - mob.pos.z;
         const dist = Math.hypot(dx, dz);
         if (dist > 0.9) {
@@ -6564,7 +6578,22 @@
                 while (dy < -Math.PI) dy += Math.PI * 2;
                 mob.yaw += dy * Math.min(1, dt * 3);
             }
-            if (mob.nightStep === 'toDoor') {
+            if (mob.nightStep === 'path') {
+                if (mob.nightWay && mob.nightWay.length) {
+                    const p = mob.nightWay.shift();
+                    mob.jobTarget = { x: p[0], z: p[1] };
+                    mob.state = 'walk';
+                    return;
+                }
+                villagerTapDoor(mob, true);
+                mob.nightStep = 'enter';
+                const inn = specNow.inside || specNow.home;
+                mob.jobTarget = { x: inn[0], z: inn[1] };
+                mob.jobPhase = 'enter';
+                mob.jobTimer = 10;
+                mob.state = 'walk';
+                return;
+            } else if (mob.nightStep === 'toDoor') {
                 villagerTapDoor(mob, true);
                 mob.nightStep = 'enter';
                 const inn = specNow.inside || specNow.home;
@@ -9300,58 +9329,6 @@
     
     
     </script><!--DOWNLOAD-PAD
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
