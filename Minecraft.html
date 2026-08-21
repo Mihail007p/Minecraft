@@ -5384,6 +5384,138 @@
         return new THREE.Mesh(geo, terrainMaterial);
     }
 
+    const fallingBlocks = [];
+    function createFallingBlockMesh(blockType) {
+        const geo = new THREE.BoxGeometry(0.92, 0.92, 0.92);
+        const uvs = [];
+        for (let f = 0; f < 6; f++) {
+            const tile = getTileUV(getBlockFaceTile(blockType, f));
+            uvs.push(tile.u0, tile.v0, tile.u0, tile.v1, tile.u1, tile.v1, tile.u1, tile.v0);
+        }
+        geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+        const mesh = new THREE.Mesh(geo, terrainMaterial);
+        mesh.castShadow = false;
+        return mesh;
+    }
+    function spawnFallingBlock(x, y, z, type, kick) {
+        if (fallingBlocks.length > 90) {
+            spawnBlockDrop(x, y, z, type);
+            return;
+        }
+        const mesh = createFallingBlockMesh(type);
+        mesh.position.set(x + 0.5, y + 0.5, z + 0.5);
+        scene.add(mesh);
+        const dirx = (x + 0.5) - (kick ? kick.x : x + 0.5);
+        const dirz = (z + 0.5) - (kick ? kick.z : z + 0.5);
+        const len = Math.hypot(dirx, dirz) || 1;
+        fallingBlocks.push({
+            type: type,
+            mesh: mesh,
+            pos: new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5),
+            vel: new THREE.Vector3(
+                (dirx / len) * (1.6 + Math.random() * 2.4) + (Math.random() - 0.5) * 0.8,
+                1.2 + Math.random() * 3.2,
+                (dirz / len) * (1.6 + Math.random() * 2.4) + (Math.random() - 0.5) * 0.8
+            ),
+            spin: new THREE.Vector3((Math.random() - 0.5) * 8, (Math.random() - 0.5) * 10, (Math.random() - 0.5) * 8),
+            age: 0
+        });
+    }
+    function treeLooksLikeHouse(x, y, z) {
+        let house = 0;
+        for (let dx = -1; dx <= 1; dx++) {
+            for (let dz = -1; dz <= 1; dz++) {
+                const t = getBlock(x + dx, y, z + dz);
+                if (t === BLOCK_PLANKS || t === BLOCK_STONE_BRICK || t === BLOCK_DOOR ||
+                    t === BLOCK_DOOR_OPEN || t === BLOCK_GLASS || t === BLOCK_BED) house++;
+            }
+        }
+        return house >= 2;
+    }
+    function collectTreeBlocks(ox, oy, oz) {
+        const logs = [], leafs = [];
+        const seen = {};
+        const q = [[ox, oy, oz]];
+        while (q.length && logs.length < 56) {
+            const p = q.pop();
+            const k = p[0] + ',' + p[1] + ',' + p[2];
+            if (seen[k]) continue;
+            seen[k] = 1;
+            if (Math.abs(p[0] - ox) > 6 || Math.abs(p[2] - oz) > 6 || p[1] < oy - 1 || p[1] > oy + 16) continue;
+            const t = getBlock(p[0], p[1], p[2]);
+            if (t !== BLOCK_WOOD) continue;
+            logs.push([p[0], p[1], p[2]]);
+            q.push([p[0] + 1, p[1], p[2]], [p[0] - 1, p[1], p[2]], [p[0], p[1] + 1, p[2]],
+                [p[0], p[1] - 1, p[2]], [p[0], p[1], p[2] + 1], [p[0], p[1], p[2] - 1]);
+        }
+        for (let i = 0; i < logs.length; i++) {
+            const lx = logs[i][0], ly = logs[i][1], lz = logs[i][2];
+            for (let dx = -2; dx <= 2; dx++) {
+                for (let dy = -1; dy <= 3; dy++) {
+                    for (let dz = -2; dz <= 2; dz++) {
+                        if (leafs.length > 70) break;
+                        const x = lx + dx, y = ly + dy, z = lz + dz;
+                        const k = 'L' + x + ',' + y + ',' + z;
+                        if (seen[k]) continue;
+                        if (getBlock(x, y, z) !== BLOCK_LEAVES) continue;
+                        seen[k] = 1;
+                        leafs.push([x, y, z]);
+                    }
+                }
+            }
+        }
+        return { logs: logs, leafs: leafs };
+    }
+    function fellTree(ox, oy, oz) {
+        if (treeLooksLikeHouse(ox, oy, oz)) {
+            spawnBlockDrop(ox, oy, oz, BLOCK_WOOD);
+            setBlock(ox, oy, oz, BLOCK_EMPTY);
+            return;
+        }
+        const part = collectTreeBlocks(ox, oy, oz);
+        if (part.logs.length < 2) {
+            spawnBlockDrop(ox, oy, oz, BLOCK_WOOD);
+            setBlock(ox, oy, oz, BLOCK_EMPTY);
+            return;
+        }
+        const kick = { x: ox + 0.5, z: oz + 0.5 };
+        for (let i = 0; i < part.logs.length; i++) {
+            const b = part.logs[i];
+            setBlock(b[0], b[1], b[2], BLOCK_EMPTY);
+            spawnFallingBlock(b[0], b[1], b[2], BLOCK_WOOD, kick);
+        }
+        for (let i = 0; i < part.leafs.length; i++) {
+            const b = part.leafs[i];
+            setBlock(b[0], b[1], b[2], BLOCK_EMPTY);
+            spawnFallingBlock(b[0], b[1], b[2], BLOCK_LEAVES, kick);
+        }
+        showInvToast('Дерево падает');
+    }
+    function updateFallingBlocks(dt) {
+        for (let i = fallingBlocks.length - 1; i >= 0; i--) {
+            const b = fallingBlocks[i];
+            b.age += dt;
+            b.vel.y -= 22.0 * dt;
+            b.vel.y = Math.max(b.vel.y, -28);
+            b.pos.x += b.vel.x * dt;
+            b.pos.y += b.vel.y * dt;
+            b.pos.z += b.vel.z * dt;
+            b.mesh.position.copy(b.pos);
+            b.mesh.rotation.x += b.spin.x * dt;
+            b.mesh.rotation.y += b.spin.y * dt;
+            b.mesh.rotation.z += b.spin.z * dt;
+            const bx = Math.floor(b.pos.x), by = Math.floor(b.pos.y - 0.46), bz = Math.floor(b.pos.z);
+            const hit = isSolid(getBlock(bx, by, bz)) || b.pos.y < 0.4 || b.age > 4.5;
+            if (hit) {
+                const drop = (b.type === BLOCK_LEAVES && Math.random() < 0.45) ? null : b.type;
+                if (drop) spawnBlockDrop(Math.floor(b.pos.x), Math.max(0, Math.floor(b.pos.y)), Math.floor(b.pos.z), drop);
+                scene.remove(b.mesh);
+                if (b.mesh.geometry) b.mesh.geometry.dispose();
+                fallingBlocks.splice(i, 1);
+            }
+        }
+    }
+
     function spawnBlockDrop(x, y, z, blockType) {
         if (blockType === BLOCK_EMPTY || blockType === BLOCK_WATER) return;
 
@@ -7022,11 +7154,16 @@
         if (Math.floor(mining.t * 3.2) !== Math.floor(prev * 3.2)) triggerHandPunch();
         if (mining.t >= need) {
             if (canHarvest(mining.type, tool)) {
-                spawnBlockDrop(mining.x, mining.y, mining.z, mining.type);
+                if (mining.type === BLOCK_WOOD) {
+                    fellTree(mining.x, mining.y, mining.z);
+                } else {
+                    spawnBlockDrop(mining.x, mining.y, mining.z, mining.type);
+                    setBlock(mining.x, mining.y, mining.z, BLOCK_EMPTY);
+                }
             } else {
                 showInvToast('Нужна кирка');
+                setBlock(mining.x, mining.y, mining.z, BLOCK_EMPTY);
             }
-            setBlock(mining.x, mining.y, mining.z, BLOCK_EMPTY);
             stopMining();
         }
     }
@@ -7994,6 +8131,7 @@
 
         updateDayNightCycle(dt);
         updateDroppedItems(dt);
+        updateFallingBlocks(dt);
         updateMobsManager(dt);
         updateVillagerSocial(dt);
         updateSpeechBubbles();
@@ -8080,257 +8218,8 @@
     
     
     
+    
     </script><!--DOWNLOAD-PAD
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
