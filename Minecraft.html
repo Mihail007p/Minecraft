@@ -5029,6 +5029,8 @@
         if (bio === 'savanna') return s < 40 ? 'llama' : (s < 70 ? 'horse' : (s < 88 ? 'cow' : 'villager'));
         if (bio === 'mushroom') return 'mooshroom';
         if (bio === 'mesa') return 'rabbit';
+        if (bio === 'ocean') return 'squid';
+        if (bio === 'beach') return 'rabbit';
         if (bio === 'cherry') return s < 45 ? 'pig' : (s < 75 ? 'rabbit' : 'bee');
         if (bio === 'dark') return s < 55 ? 'wolf' : 'fox';
         if (bio === 'ocean') return 'squid';
@@ -5043,8 +5045,9 @@
         const midZ = chunk.cz * CHUNK_SIZE + CHUNK_SIZE / 2;
         if (Math.hypot(midX - player.pos.x, midZ - player.pos.z) < 14) return;
         const seed = pseudoHash2D(chunk.cx * 19 + 3, chunk.cz * 31 + 7);
-        if ((seed % 100) > 72) return;
         const bio = biomeAt(midX, midZ);
+        if (bio === 'ocean' && (seed % 100) > 18) return;
+        if ((seed % 100) > 72) return;
         const type = faunaForBiome(bio, seed);
         const want = (type === 'villager' || type === 'panda' || type === 'golem') ? 1 : (type === 'horse' || type === 'camel' || type === 'llama' ? 2 : 2 + (seed % 3));
         let n = 0;
@@ -5344,28 +5347,45 @@
         if (chunk) chunk.isDirty = true;
     }
 
-    const BIOME_LIST = [
+    const LAND_BIOMES = [
         'plains', 'forest', 'jungle', 'desert', 'taiga', 'snow', 'swamp',
-        'savanna', 'mountains', 'mushroom', 'mesa', 'cherry', 'dark', 'ocean', 'ice_spikes'
+        'savanna', 'mountains', 'mushroom', 'mesa', 'cherry', 'dark', 'ice_spikes'
     ];
-    function biomeAt(wx, wz) {
-        if (wx * wx + wz * wz < 16 * 16) return 'plains';
-        const cell = 30;
-        const cx = Math.floor(wx / cell);
-        const cz = Math.floor(wz / cell);
-        let best = 1e15, bestH = 0;
+    const ISLAND_SPACING = 176;
+    function islandParams(ix, iz) {
+        if (ix === 0 && iz === 0) {
+            return { exists: true, cx: 0, cz: 0, radius: 28, biome: 'plains' };
+        }
+        const h = pseudoHash2D(ix * 73 + 11, iz * 91 + 19);
+        if ((h % 100) < 50) return { exists: false };
+        return {
+            exists: true,
+            cx: ix * ISLAND_SPACING + ((h % 71) - 35),
+            cz: iz * ISLAND_SPACING + (((h >>> 8) % 71) - 35),
+            radius: 17 + (h % 13),
+            biome: LAND_BIOMES[h % LAND_BIOMES.length]
+        };
+    }
+    function nearestIsland(wx, wz) {
+        const gx = Math.round(wx / ISLAND_SPACING);
+        const gz = Math.round(wz / ISLAND_SPACING);
+        let best = null, bestD = 1e15;
         for (let dx = -1; dx <= 1; dx++) {
             for (let dz = -1; dz <= 1; dz++) {
-                const ix = cx + dx, iz = cz + dz;
-                const h = pseudoHash2D(ix * 17 + 3, iz * 29 + 9);
-                const px = ix * cell + (h % cell);
-                const pz = iz * cell + ((h >>> 8) % cell);
-                const ddx = wx - px, ddz = wz - pz;
-                const d = ddx * ddx + ddz * ddz;
-                if (d < best) { best = d; bestH = h; }
+                const p = islandParams(gx + dx, gz + dz);
+                if (!p.exists) continue;
+                const d = Math.hypot(wx - p.cx, wz - p.cz);
+                if (d < bestD) { bestD = d; best = p; best.d = d; }
             }
         }
-        return BIOME_LIST[bestH % BIOME_LIST.length];
+        return best;
+    }
+    function biomeAt(wx, wz) {
+        const isl = nearestIsland(wx, wz);
+        if (!isl) return 'ocean';
+        if (isl.d > isl.radius + 4) return 'ocean';
+        if (isl.d > isl.radius - 2.2) return 'beach';
+        return isl.biome;
     }
     function biomeTitle(id) {
         if (id === 'desert') return '🌵 Пустыня';
@@ -5382,6 +5402,7 @@
         if (id === 'dark') return '🌑 Тёмный лес';
         if (id === 'ocean') return '🌊 Океан';
         if (id === 'ice_spikes') return '🧊 Ледяные пики';
+        if (id === 'beach') return '🏖️ Берег';
         return '🌿 Равнины';
     }
     function placeIceSpike(chunk, lx, h, lz, hgt) {
@@ -5499,20 +5520,22 @@
                 const n1 = fbm(wx * 0.007, wz * 0.007) * 26.0;
                 const n2 = perlin2D(wx * 0.028, wz * 0.028) * 10.0;
                 const n3 = perlin2D(wx * 0.07, wz * 0.07) * 3.5;
-                let h = Math.floor(WATER_LEVEL + 2 + n1 + n2 + n3);
-                if (bio === 'desert') h = Math.floor(WATER_LEVEL + 4 + n1 * 0.35 + n3 * 0.4);
-                else if (bio === 'swamp') h = Math.floor(WATER_LEVEL - 1 + n1 * 0.25 + n3 * 0.5);
-                else if (bio === 'snow') h = Math.floor(WATER_LEVEL + 6 + n1 * 0.85 + n2 * 0.5);
-                else if (bio === 'jungle') h = Math.floor(WATER_LEVEL + 3 + n1 * 0.55 + n2 * 0.4);
-                else if (bio === 'taiga') h = Math.floor(WATER_LEVEL + 5 + n1 * 0.7 + n2 * 0.45);
-                else if (bio === 'savanna') h = Math.floor(WATER_LEVEL + 3 + n1 * 0.3 + n3 * 0.5);
-                else if (bio === 'mountains') h = Math.floor(WATER_LEVEL + 14 + n1 * 1.35 + n2 * 0.9 + n3);
-                else if (bio === 'mesa') h = Math.floor(WATER_LEVEL + 8 + n1 * 0.55 + n2 * 0.4);
-                else if (bio === 'mushroom') h = Math.floor(WATER_LEVEL + 4 + n1 * 0.4 + n3 * 0.5);
-                else if (bio === 'ocean') h = Math.floor(WATER_LEVEL - 9 + n3 * 0.6);
-                else if (bio === 'cherry') h = Math.floor(WATER_LEVEL + 3 + n1 * 0.4 + n3 * 0.5);
-                else if (bio === 'dark') h = Math.floor(WATER_LEVEL + 3 + n1 * 0.5 + n2 * 0.3);
-                else if (bio === 'ice_spikes') h = Math.floor(WATER_LEVEL + 5 + n1 * 0.5 + n2 * 0.35);
+                const isl = nearestIsland(wx, wz);
+                let h;
+                if (!isl || isl.d > (isl.radius + 6)) {
+                    h = Math.floor(WATER_LEVEL - 14 + n3 * 0.35);
+                } else {
+                    let t = 1 - isl.d / Math.max(8, isl.radius);
+                    if (t < 0) t = 0;
+                    t = t * t * (3 - 2 * t);
+                    let peak = 7;
+                    if (isl.biome === 'mountains') peak = 24;
+                    else if (isl.biome === 'mesa') peak = 12;
+                    else if (isl.biome === 'snow' || isl.biome === 'ice_spikes') peak = 9;
+                    else if (isl.biome === 'jungle' || isl.biome === 'dark') peak = 8;
+                    else if (isl.biome === 'swamp') peak = 3;
+                    h = Math.floor(WATER_LEVEL - 1 + t * (peak + 5) + n3 * 0.45 * t);
+                }
                 h = Math.max(2, Math.min(CHUNK_HEIGHT - 10, h));
                 heights[lx + lz * CHUNK_SIZE] = h;
 
@@ -5523,7 +5546,7 @@
                 else if (bio === 'taiga' && !shore) { top = BLOCK_PODZOL; fill = BLOCK_DIRT; }
                 else if (bio === 'mushroom' && !shore) { top = BLOCK_MYCELIUM; fill = BLOCK_DIRT; }
                 else if (bio === 'mesa' && !shore) { top = BLOCK_TERRACOTTA; fill = BLOCK_TERRACOTTA; }
-                else if (bio === 'ocean') { top = BLOCK_SAND; fill = BLOCK_SAND; }
+                else if (bio === 'ocean' || bio === 'beach') { top = BLOCK_SAND; fill = BLOCK_SAND; }
                 else if (bio === 'ice_spikes' && !shore) { top = BLOCK_SNOW; fill = BLOCK_DIRT; }
                 else if (bio === 'mountains' && !shore) {
                     if (h > WATER_LEVEL + 28) { top = BLOCK_SNOW; fill = BLOCK_STONE; }
@@ -5542,8 +5565,7 @@
                     }
                     else if (y === h) chunk.setBlock(lx, y, lz, top);
                     else if (y > h && y <= WATER_LEVEL) {
-                        if (bio === 'snow' && y === WATER_LEVEL) chunk.setBlock(lx, y, lz, BLOCK_ICE);
-                        else chunk.setBlock(lx, y, lz, BLOCK_WATER);
+                        chunk.setBlock(lx, y, lz, BLOCK_WATER);
                     }
                 }
                 if (bio === 'swamp' && h < WATER_LEVEL) {
@@ -5566,7 +5588,7 @@
                 else if (bio === 'mushroom') treeChance = 28;
                 else if (bio === 'cherry') treeChance = 38;
                 else if (bio === 'dark') treeChance = 110;
-                else if (bio === 'ocean' || bio === 'ice_spikes') treeChance = 0;
+                else if (bio === 'ocean' || bio === 'beach' || bio === 'ice_spikes') treeChance = 0;
                 if (canTree && treeRoll < treeChance) {
                     if (bio === 'jungle') placeJungleTree(chunk, lx, h, lz);
                     else if (bio === 'taiga' || bio === 'snow') placeSpruceTree(chunk, lx, h, lz);
@@ -5592,6 +5614,7 @@
                 const wx = startX + lx;
                 const wz = startZ + lz;
                 const h = heights[lx + lz * CHUNK_SIZE];
+                if (h <= WATER_LEVEL + 1) continue;
                 for (let y = 1; y < h; y++) {
                     const b = chunk.getBlock(lx, y, lz);
                     if (b !== BLOCK_STONE && b !== BLOCK_DEEPSLATE) continue;
@@ -5869,7 +5892,8 @@
         drownTimer: 0,
         highestFallY: 72,
         isDead: false,
-        spawnProtect: 0
+        spawnProtect: 0,
+        boating: false
     };
 
     fpArm = buildFirstPersonArm();
@@ -5931,8 +5955,9 @@
             }
         }
         camera.position.set(player.pos.x, player.pos.y + player.eyeHeight, player.pos.z);
-        setTimeout(function () { showInvToast('Иди вперёд — сменятся биомы'); }, 1200);
-        setTimeout(function () { showInvToast('Тапни животное без меча'); }, 3200);
+        player.boating = false;
+        setTimeout(function () { showInvToast('Ты на острове. Дальше — океан'); }, 1200);
+        setTimeout(function () { showInvToast('Скрафти лодку — острова далеко'); }, 3400);
         hideWorldLoading();
     }
 
@@ -6015,6 +6040,7 @@
         player.vel.set(0, 0, 0);
         deathScreen.style.display = 'none';
         if (riddenMob) { riddenMob.ridden = false; riddenMob = null; }
+        player.boating = false;
         placePlayerAtSpawn();
         updateHUD();
     }
@@ -6056,6 +6082,21 @@
         
         player.isInWater = (feetBlock === BLOCK_WATER || eyeBlock === BLOCK_WATER);
         player.isUnderwater = (eyeBlock === BLOCK_WATER);
+        if (player.boating) {
+            player.pos.y = WATER_LEVEL + 0.22;
+            player.vel.y = 0;
+            player.onGround = true;
+            player.highestFallY = player.pos.y;
+            player.oxygen = player.maxOxygen;
+            player.isUnderwater = false;
+            underwaterOverlay.style.opacity = '0';
+            const wx = Math.floor(player.pos.x), wz = Math.floor(player.pos.z);
+            const here = getBlock(wx, WATER_LEVEL, wz);
+            const land = getBlock(wx, WATER_LEVEL + 1, wz);
+            if (isOpaque(land) || (here !== BLOCK_WATER && isOpaque(here))) {
+                player.boating = false;
+            }
+        }
 
         if (player.isUnderwater) {
             underwaterOverlay.style.opacity = '1';
@@ -6186,7 +6227,8 @@
                 desert: 0xd4c46a, snow: 0xc5d8ea, swamp: 0x5a7a4a, jungle: 0x2f7a48,
                 taiga: 0x7aa0b8, mountains: 0x8eb4d4, savanna: 0xd2c078, forest: 0x6aa86a,
                 mushroom: 0xb080b0, mesa: 0xc45a28,
-                cherry: 0xf0b0d0, dark: 0x1a3a18, ocean: 0x3a70b8, ice_spikes: 0xb8e8f8
+                cherry: 0xf0b0d0, dark: 0x1a3a18, ocean: 0x2a5a98, ice_spikes: 0xb8e8f8,
+                beach: 0xd2c078
             };
             if (dayFactor > 0.35 && biomeTint[bio]) {
                 currentSky.lerp(new THREE.Color(biomeTint[bio]), 0.48);
@@ -6427,6 +6469,12 @@
 
     document.getElementById('btn-jump').addEventListener('touchstart', (e) => {
         e.preventDefault();
+        if (player.boating) {
+            player.boating = false;
+            player.vel.y = 6.5;
+            showInvToast('Вышли из лодки');
+            return;
+        }
         if (riddenMob) {
             if (riddenMob.onGround) riddenMob.vel.y = riddenMob.jumpVel;
             return;
@@ -6804,6 +6852,17 @@
         const currentSlot = inventory[selectedSlotIndex];
         if (!currentSlot || currentSlot.type === BLOCK_EMPTY || currentSlot.count <= 0) return;
 
+        if (currentSlot.type === ITEM_BOAT) {
+            const bx = Math.floor(player.pos.x), bz = Math.floor(player.pos.z);
+            if (!player.isInWater && getBlock(bx, WATER_LEVEL, bz) !== BLOCK_WATER) {
+                showInvToast('Лодку ставь у воды');
+                return;
+            }
+            player.boating = true;
+            consumeSelectedOne();
+            showInvToast('Лодка · прыжок — выйти');
+            return;
+        }
         if (isSpawnEgg(currentSlot.type)) {
             const kind = spawnEggMobType(currentSlot.type);
             if (kind && spawnMobInFront(kind)) consumeSelectedOne();
@@ -7219,7 +7278,7 @@
             fpsTimer = 0;
         }
 
-        const currentSpeed = player.isInWater ? 3.4 : 5.0;
+        const currentSpeed = player.boating ? 8.6 : (player.isInWater ? 3.4 : 5.0);
         const forwardX = -Math.sin(player.yaw);
         const forwardZ = -Math.cos(player.yaw);
         const rightX = Math.cos(player.yaw);
@@ -7275,81 +7334,8 @@
     
     
     
+    
     </script><!--DOWNLOAD-PAD
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
