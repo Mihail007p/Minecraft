@@ -1162,6 +1162,7 @@
     </div>
 
     <script>
+
     window.addEventListener('error', function (e) {
         const el = document.getElementById('boot-error');
         if (!el || el.dataset.shown === '1') return;
@@ -1431,6 +1432,9 @@
             type !== BLOCK_DOOR_OPEN && type !== BLOCK_GLASS && type !== BLOCK_TORCH &&
             type !== BLOCK_BED && !isFenceBlock(type) &&
             !isNonBlockItem(type);
+    }
+    function isDoorNeighbor(type) {
+        return isOpaque(type) || type === BLOCK_GLASS || type === BLOCK_DOOR || type === BLOCK_DOOR_OPEN;
     }
     function isSolid(type) {
         if (type === BLOCK_EMPTY || type === BLOCK_WATER || type === BLOCK_DOOR_OPEN ||
@@ -5213,6 +5217,9 @@
             if (!this.ridden) {
                 if (this.state === 'walk' || this.state === 'follow') speed = this.walkSpeed;
                 else if (this.state === 'panic' || this.state === 'hunt') speed = this.panicSpeed;
+                if (this.type === 'villager' && this.nightStep && this.nightStep !== 'inside' && this.state === 'walk') {
+                    speed = Math.max(speed, 1.55);
+                }
             }
 
             if ((this.type === 'golem' || this.type === 'villager') && !this.angry) {
@@ -5224,20 +5231,24 @@
                     this.state = 'walk';
                     this.stateTimer = 2.5;
                 }
-                const ax = this.pos.x + Math.sin(this.yaw) * 1.35;
-                const az = this.pos.z + Math.cos(this.yaw) * 1.35;
-                const ay = Math.floor(this.pos.y + 0.05);
-                if (blocksMob(getBlock(Math.floor(ax), ay, Math.floor(az))) ||
-                    blocksMob(getBlock(Math.floor(ax), ay + 1, Math.floor(az)))) {
-                    this.yaw += 0.8 + Math.random() * 1.6;
-                    this.vel.x = 0;
-                    this.vel.z = 0;
+                const guided = this.type === 'villager' && this.nightStep && this.nightStep !== 'inside';
+                const onJobPath = this.type === 'villager' && this.jobPhase === 'workpath';
+                if (!guided && !onJobPath) {
+                    const ax = this.pos.x + Math.sin(this.yaw) * 1.35;
+                    const az = this.pos.z + Math.cos(this.yaw) * 1.35;
+                    const ay = Math.floor(this.pos.y + 0.05);
+                    if (blocksMob(getBlock(Math.floor(ax), ay, Math.floor(az))) ||
+                        blocksMob(getBlock(Math.floor(ax), ay + 1, Math.floor(az)))) {
+                        this.yaw += 0.8 + Math.random() * 1.6;
+                        this.vel.x = 0;
+                        this.vel.z = 0;
+                    }
                 }
                 if (!this._lp) this._lp = this.pos.clone();
                 const moved = Math.hypot(this.pos.x - this._lp.x, this.pos.z - this._lp.z);
                 this.stuckT = (this.stuckT || 0) + ((this.state === 'walk' && moved < 0.03) ? dt : -this.stuckT);
                 if (this.stuckT < 0) this.stuckT = 0;
-                if (this.stuckT > 0.55) {
+                if (this.stuckT > 0.55 && !guided) {
                     this.yaw += Math.PI * (0.4 + Math.random() * 0.8);
                     this.stuckT = 0;
                     this.vel.x = 0;
@@ -5402,8 +5413,21 @@
                 if (this.type === 'villager' && (this.thruDoor || this.nightStep === 'enter' || this.nightStep === 'leave')) {
                     const spec = (typeof jobSpec === 'function') ? jobSpec(this) : null;
                     if (spec && spec.door) {
-                        const tx = spec.door[0] + 0.5, tz = spec.door[1] + 0.5;
-                        this.yaw = Math.atan2(tx - this.pos.x, tz - this.pos.z);
+                        const goal = (this.nightStep === 'leave')
+                            ? (spec.approach || spec.home)
+                            : (spec.inside || spec.home);
+                        this.yaw = Math.atan2(goal[0] - this.pos.x, goal[1] - this.pos.z);
+                        if (!checkSolidCollision(this.pos.x, this.pos.y + 1.05, this.pos.z, 0.16, this.height, true)) {
+                            this.vel.y = this.jumpVel * 0.55;
+                            this.onGround = false;
+                        }
+                    }
+                } else if (this.type === 'villager' && this.nightStep === 'path') {
+                    if (!checkSolidCollision(this.pos.x, this.pos.y + 1.15, this.pos.z, this.radius, this.height, true)) {
+                        this.vel.y = this.jumpVel * 0.72;
+                        this.onGround = false;
+                    } else {
+                        this.yaw += 0.65;
                     }
                 } else if (this.type === 'golem' || this.type === 'villager') {
                     this.yaw += 0.9 + Math.random() * 1.3;
@@ -5593,7 +5617,7 @@
         if (bio === 'jungle') return s < 42 ? 'parrot' : (s < 82 ? 'panda' : 'chicken');
         if (bio === 'taiga') return s < 42 ? 'fox' : (s < 72 ? 'wolf' : 'rabbit');
         if (bio === 'mountains') return s < 72 ? 'goat' : 'sheep';
-        if (bio === 'savanna') return s < 40 ? 'llama' : (s < 70 ? 'horse' : (s < 88 ? 'cow' : 'villager'));
+        if (bio === 'savanna') return s < 40 ? 'llama' : (s < 70 ? 'horse' : 'cow');
         if (bio === 'mushroom') return 'mooshroom';
         if (bio === 'mesa') return 'rabbit';
         if (bio === 'ocean') return 'squid';
@@ -5602,7 +5626,7 @@
         if (bio === 'dark') return s < 55 ? 'wolf' : 'fox';
         if (bio === 'ocean') return 'squid';
         if (bio === 'ice_spikes') return s < 55 ? 'wolf' : 'fox';
-        const p = ['cow', 'sheep', 'pig', 'chicken', 'horse', 'villager', 'bee', 'cat'];
+        const p = ['cow', 'sheep', 'pig', 'chicken', 'horse', 'bee', 'cat'];
         return p[seed % p.length];
     }
 
@@ -5616,7 +5640,8 @@
         if (bio === 'ocean' && (seed % 100) > 18) return;
         if ((seed % 100) > 72) return;
         const type = faunaForBiome(bio, seed);
-        const want = (type === 'villager' || type === 'panda' || type === 'golem') ? 1 : (type === 'horse' || type === 'camel' || type === 'llama' ? 2 : 2 + (seed % 3));
+        if (type === 'villager') return;
+        const want = (type === 'panda' || type === 'golem') ? 1 : (type === 'horse' || type === 'camel' || type === 'llama' ? 2 : 2 + (seed % 3));
         let n = 0;
         for (let i = 0; i < 16 && n < want && mobs.length < 18; i++) {
             const lx = (seed + i * 5) % CHUNK_SIZE;
@@ -5644,15 +5669,18 @@
             const sz = Math.floor(player.pos.z + Math.cos(spawnAngle) * spawnDist);
             const bio = biomeAt(sx, sz);
             const type = faunaForBiome(bio, (sx * 13 + sz) >>> 0);
+            if (type === 'villager') { /* only named village people */ }
+            else {
             const sy = animalSurfaceY(sx, sz, type);
             if (sy > 0) {
-                const pack = (type === 'villager' || type === 'panda') ? 1 : 1 + (Math.random() < 0.5 ? 1 : 0);
+                const pack = (type === 'panda') ? 1 : 1 + (Math.random() < 0.5 ? 1 : 0);
                 for (let k = 0; k < pack && mobs.length < 20; k++) {
                     const ox = sx + (k === 0 ? 0 : (k % 2 ? 1 : -1));
                     const oz = sz + (k === 0 ? 0 : (k > 1 ? 1 : 0));
                     const y2 = animalSurfaceY(ox, oz, type);
                     if (y2 > 0) mobs.push(new Mob(type, ox + 0.5, y2 + 0.05, oz + 0.5));
                 }
+            }
             }
         }
 
@@ -6452,6 +6480,85 @@
         }
         return false;
     }
+    function villagePath(sx, sz, gx, gz) {
+        const minX = 3, maxX = 40, minZ = -6, maxZ = 33;
+        let x0 = Math.floor(sx), z0 = Math.floor(sz);
+        const x1 = Math.max(minX, Math.min(maxX, Math.floor(gx)));
+        const z1 = Math.max(minZ, Math.min(maxZ, Math.floor(gz)));
+        const cache = Object.create(null);
+        function walk(x, z) {
+            const k = x + ',' + z;
+            if (cache[k] !== undefined) return cache[k];
+            if (x < minX || x > maxX || z < minZ || z > maxZ) { cache[k] = false; return false; }
+            const ok = villagerWalkable(x + 0.5, z + 0.5, 0.26);
+            cache[k] = ok;
+            return ok;
+        }
+        if (!walk(x0, z0)) {
+            let found = false;
+            for (let d = 1; d <= 7 && !found; d++) {
+                for (let dx = -d; dx <= d && !found; dx++) {
+                    for (let dz = -d; dz <= d && !found; dz++) {
+                        if (walk(x0 + dx, z0 + dz)) { x0 += dx; z0 += dz; found = true; }
+                    }
+                }
+            }
+            if (!found) return [[gx, gz]];
+        }
+        if (x0 === x1 && z0 === z1) return [[gx, gz]];
+        const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
+        const startK = x0 + ',' + z0;
+        const came = Object.create(null);
+        const gScore = Object.create(null);
+        gScore[startK] = 0;
+        const open = [[x0, z0, Math.hypot(x1 - x0, z1 - z0)]];
+        let guard = 0, foundK = null;
+        while (open.length && guard++ < 1400) {
+            let bi = 0;
+            for (let i = 1; i < open.length; i++) if (open[i][2] < open[bi][2]) bi = i;
+            const cur = open.splice(bi, 1)[0];
+            const cx = cur[0], cz = cur[1], ck = cx + ',' + cz;
+            if (cx === x1 && cz === z1) { foundK = ck; break; }
+            const cg = gScore[ck];
+            for (let i = 0; i < dirs.length; i++) {
+                const nx = cx + dirs[i][0], nz = cz + dirs[i][1];
+                if (!walk(nx, nz)) continue;
+                if (dirs[i][0] && dirs[i][1] && (!walk(nx, cz) || !walk(cx, nz))) continue;
+                const nk = nx + ',' + nz;
+                const ng = cg + ((dirs[i][0] && dirs[i][1]) ? 1.414 : 1);
+                if (gScore[nk] !== undefined && ng >= gScore[nk]) continue;
+                came[nk] = ck;
+                gScore[nk] = ng;
+                const f = ng + Math.hypot(x1 - nx, z1 - nz);
+                let exists = false;
+                for (let j = 0; j < open.length; j++) {
+                    if (open[j][0] === nx && open[j][1] === nz) { open[j][2] = f; exists = true; break; }
+                }
+                if (!exists) open.push([nx, nz, f]);
+            }
+        }
+        if (!foundK) return [[gx, gz]];
+        const cells = [];
+        let k = foundK;
+        while (k && k !== startK) {
+            const p = k.split(',');
+            cells.push([+p[0], +p[1]]);
+            k = came[k];
+        }
+        cells.reverse();
+        const pts = [[x0 + 0.5, z0 + 0.5]];
+        for (let i = 0; i < cells.length; i++) pts.push([cells[i][0] + 0.5, cells[i][1] + 0.5]);
+        pts[pts.length - 1] = [gx, gz];
+        const pulled = [pts[0]];
+        let i = 0;
+        while (i < pts.length - 1) {
+            let j = pts.length - 1;
+            while (j > i + 1 && lineBlocked(pts[i][0], pts[i][1], pts[j][0], pts[j][1], 0.28)) j--;
+            pulled.push(pts[j]);
+            i = j;
+        }
+        return pulled.slice(1);
+    }
     function jobSpec(mob) {
         if (mob.vilId && VILLAGER_JOBS[mob.vilId]) return VILLAGER_JOBS[mob.vilId];
         if (mob._wanderJob) return mob._wanderJob;
@@ -6465,22 +6572,101 @@
         };
         return mob._wanderJob;
     }
+    function doorCenter(spec) {
+        return [spec.door[0] + 0.5, spec.door[1] + 0.5];
+    }
+    function pastDoor(mob, spec) {
+        if (!spec || !spec.door || !spec.inside) return -99;
+        const dx = spec.door[0] + 0.5, dz = spec.door[1] + 0.5;
+        const ix = spec.inside[0] - dx, iz = spec.inside[1] - dz;
+        const ilen = Math.hypot(ix, iz) || 1;
+        return ((mob.pos.x - dx) * ix + (mob.pos.z - dz) * iz) / ilen;
+    }
+    function inFrontOfDoor(mob, spec) {
+        if (!spec || !spec.door || !spec.approach) return false;
+        const dx = spec.door[0] + 0.5, dz = spec.door[1] + 0.5;
+        const ax = spec.approach[0] - dx, az = spec.approach[1] - dz;
+        const alen = Math.hypot(ax, az) || 1;
+        const fx = ax / alen, fz = az / alen;
+        const rx = mob.pos.x - dx, rz = mob.pos.z - dz;
+        const front = rx * fx + rz * fz;
+        const side = Math.abs(rx * (-fz) + rz * fx);
+        return front > -0.2 && front < 2.5 && side < 1.05;
+    }
+    function villagerGuided(mob) {
+        return !!(mob && mob.nightStep && mob.nightStep !== 'inside');
+    }
     function startNightWalk(mob) {
         const spec = jobSpec(mob);
-        const path = (spec.nightPath && spec.nightPath.length) ? spec.nightPath.slice() : (spec.approach ? [spec.approach] : [spec.home]);
-        mob.nightWay = path;
+        if (!spec.door || !spec.approach) {
+            mob.nightStep = null;
+            mob.nightWay = [];
+            return;
+        }
+        if (pastDoor(mob, spec) > 0.7) {
+            mob.nightStep = 'inside';
+            mob.thruDoor = false;
+            mob.nightWay = [];
+            mob.jobTarget = { x: spec.home[0], z: spec.home[1] };
+            mob.jobPhase = 'home';
+            mob.jobTimer = 30;
+            mob.state = 'work';
+            mob.vel.x = 0;
+            mob.vel.z = 0;
+            return;
+        }
         mob.nightStep = 'path';
+        mob.thruDoor = false;
+        mob.homeSeekT = 0;
+        mob.repathCd = 0;
+        const path = villagePath(mob.pos.x, mob.pos.z, spec.approach[0], spec.approach[1]);
+        mob.nightWay = (path && path.length) ? path.slice() : [[spec.approach[0], spec.approach[1]]];
         const p = mob.nightWay.shift();
         mob.jobTarget = { x: p[0], z: p[1] };
         mob.jobPhase = 'path';
-        mob.jobTimer = 20;
-        if (Math.random() < 0.4) villagerSay(mob, 'Пора по домам.', 2.2);
+        mob.jobTimer = 40;
+        if (Math.random() < 0.45) villagerSay(mob, 'Пора по домам.', 2.2);
     }
     function lockToDoorAxis(mob, spec) {
         if (!spec || !spec.door) return;
         const alongX = Math.abs((spec.inside[0] - spec.approach[0])) >= Math.abs((spec.inside[1] - spec.approach[1]));
         if (alongX) mob.pos.z = spec.door[1] + 0.5;
         else mob.pos.x = spec.door[0] + 0.5;
+    }
+    function beginDoorEnter(mob, spec) {
+        villagerTapDoor(mob, true);
+        lockToDoorAxis(mob, spec);
+        mob.nightStep = 'enter';
+        mob.nightWay = [];
+        mob.jobTarget = { x: spec.inside[0], z: spec.inside[1] };
+        mob.jobPhase = 'enter';
+        mob.jobTimer = 14;
+        mob.state = 'walk';
+        mob.doorRetry = 0;
+    }
+    function finishInside(mob, spec) {
+        mob.pos.x = spec.inside[0];
+        mob.pos.z = spec.inside[1];
+        mob.pos.y = VILLAGE_Y + 1.05;
+        villagerTapDoor(mob, false);
+        mob.nightStep = 'inside';
+        mob.thruDoor = false;
+        mob.nightWay = [];
+        mob.jobTarget = { x: spec.home[0], z: spec.home[1] };
+        mob.jobPhase = 'home';
+        mob.jobTimer = 30;
+        mob.state = 'work';
+        mob.vel.x = 0;
+        mob.vel.z = 0;
+    }
+    function snapToApproach(mob, spec) {
+        mob.pos.x = spec.approach[0];
+        mob.pos.z = spec.approach[1];
+        mob.pos.y = VILLAGE_Y + 1.05;
+        mob.vel.x = 0;
+        mob.vel.z = 0;
+        mob.vel.y = 0;
+        beginDoorEnter(mob, spec);
     }
     function pickNextJobPhase(mob, night) {
         const spec = jobSpec(mob);
@@ -6491,7 +6677,8 @@
             mob.jobTimer = 5 + Math.random() * 8;
         }
         if (night) {
-            startNightWalk(mob);
+            if (spec.door) startNightWalk(mob);
+            else setTarget(VILLAGE_HUB[0], VILLAGE_HUB[1], 'hub');
             return;
         }
         if (Math.random() < 0.7 && spec.sites[0] && villagerWalkable(spec.sites[0][0], spec.sites[0][1], 0.34)) {
@@ -6563,11 +6750,21 @@
         if (night && specNow.door && (!mob.nightStep || mob.nightStep === 'workpath')) {
             startNightWalk(mob);
         }
-        if (!night && (mob.nightStep === 'inside' || mob.nightStep === 'enter' || mob.nightStep === 'path')) {
-            villagerTapDoor(mob, true);
-            mob.nightStep = 'leave';
-            mob.jobTarget = { x: specNow.approach[0], z: specNow.approach[1] };
-            mob.jobPhase = 'leave';
+        if (!night && mob.nightStep) {
+            if (mob.nightStep === 'inside' || mob.nightStep === 'enter') {
+                villagerTapDoor(mob, true, false);
+                lockToDoorAxis(mob, specNow);
+                mob.nightStep = 'leave';
+                mob.thruDoor = true;
+                mob.jobTarget = { x: specNow.approach[0], z: specNow.approach[1] };
+                mob.jobPhase = 'leave';
+                mob.jobTimer = 12;
+                mob.state = 'walk';
+                return;
+            }
+            mob.nightStep = null;
+            mob.thruDoor = false;
+            startWorkWalk(mob);
             return;
         }
         mob.jobTimer = (mob.jobTimer || 0) - dt;
@@ -6575,6 +6772,51 @@
         if (!mob.jobTarget) pickNextJobPhase(mob, night);
         const t = mob.jobTarget;
         if (!t) return;
+
+        if (night && specNow.door && mob.nightStep === 'path') {
+            mob.homeSeekT = (mob.homeSeekT || 0) + dt;
+            mob.repathCd = (mob.repathCd || 0) - dt;
+            const dApp = Math.hypot(mob.pos.x - specNow.approach[0], mob.pos.z - specNow.approach[1]);
+            if (dApp < 1.45 || inFrontOfDoor(mob, specNow)) {
+                beginDoorEnter(mob, specNow);
+                return;
+            }
+            if (mob.homeSeekT > 26) {
+                snapToApproach(mob, specNow);
+                return;
+            }
+            if (mob.repathCd <= 0 && mob.homeSeekT > 3.5) {
+                const np = villagePath(mob.pos.x, mob.pos.z, specNow.approach[0], specNow.approach[1]);
+                mob.nightWay = (np && np.length) ? np.slice() : [];
+                const p = mob.nightWay.length ? mob.nightWay.shift() : specNow.approach;
+                mob.jobTarget = { x: p[0], z: p[1] };
+                mob.repathCd = 3.2;
+            }
+        }
+
+        if (night && specNow.door && mob.nightStep === 'enter') {
+            mob.homeSeekT = (mob.homeSeekT || 0) + dt;
+            mob.doorRetry = (mob.doorRetry || 0) - dt;
+            if (mob.doorRetry <= 0) {
+                villagerTapDoor(mob, true, false);
+                mob.doorRetry = 0.7;
+                mob.doorWait = 0;
+            }
+            if (pastDoor(mob, specNow) >= 0.85 ||
+                Math.hypot(mob.pos.x - specNow.inside[0], mob.pos.z - specNow.inside[1]) < 0.55) {
+                finishInside(mob, specNow);
+                return;
+            }
+            if (mob.homeSeekT > 34 || (mob.homeSeekT > 8 && pastDoor(mob, specNow) > 0.15 &&
+                Math.hypot(mob.pos.x - specNow.approach[0], mob.pos.z - specNow.approach[1]) < 0.8)) {
+                mob.pos.x = specNow.inside[0];
+                mob.pos.z = specNow.inside[1];
+                mob.pos.y = VILLAGE_Y + 1.05;
+                finishInside(mob, specNow);
+                return;
+            }
+        }
+
         if (!mob.nightStep && !villagerWalkable(t.x, t.z, 0.3)) {
             pickNextJobPhase(mob, night);
             return;
@@ -6582,38 +6824,39 @@
         if (mob.nightStep === 'enter' || mob.nightStep === 'leave') lockToDoorAxis(mob, specNow);
         const dx = t.x - mob.pos.x, dz = t.z - mob.pos.z;
         const dist = Math.hypot(dx, dz);
-        if (dist > 0.9) {
+        if (dist > 0.75) {
             let yaw = Math.atan2(dx, dz);
-            const look = 0.75;
+            const look = (mob.nightStep === 'enter' || mob.nightStep === 'leave') ? 0.45 : 0.75;
             const ax = mob.pos.x + Math.sin(yaw) * look;
             const az = mob.pos.z + Math.cos(yaw) * look;
             if (mob.nightStep === 'enter' || mob.nightStep === 'leave') {
                 yaw = Math.atan2(dx, dz);
-            } else if (checkSolidCollision(ax, mob.pos.y, az, mob.radius, mob.height, true)) {
-                const tryY = [yaw + 0.95, yaw - 0.95, yaw + 1.7, yaw - 1.7];
+            } else if (checkSolidCollision(ax, mob.pos.y, az, mob.radius * 0.85, mob.height, true)) {
+                const tryY = [yaw + 0.7, yaw - 0.7, yaw + 1.35, yaw - 1.35, yaw + 2.1, yaw - 2.1];
                 let ok = false;
                 for (let i = 0; i < tryY.length; i++) {
                     const tx = mob.pos.x + Math.sin(tryY[i]) * look;
                     const tz = mob.pos.z + Math.cos(tryY[i]) * look;
-                    if (!checkSolidCollision(tx, mob.pos.y, tz, mob.radius, mob.height, true)) {
+                    if (!checkSolidCollision(tx, mob.pos.y, tz, mob.radius * 0.85, mob.height, true)) {
                         yaw = tryY[i];
                         ok = true;
                         break;
                     }
                 }
                 if (!ok) {
-                    if (mob.nightStep === 'path' && mob.nightWay && mob.nightWay.length) {
-                        const p = mob.nightWay.shift();
-                        mob.jobTarget = { x: p[0], z: p[1] };
-                    } else if (mob.nightStep === 'path' && specNow.approach) {
-                        mob.jobTarget = { x: specNow.approach[0], z: specNow.approach[1] };
+                    if (mob.nightStep === 'path') {
+                        if (mob.nightWay && mob.nightWay.length) {
+                            const p = mob.nightWay.shift();
+                            mob.jobTarget = { x: p[0], z: p[1] };
+                        } else if (specNow.approach) {
+                            mob.jobTarget = { x: specNow.approach[0], z: specNow.approach[1] };
+                        }
                     } else if (mob.jobPhase === 'workpath' && mob.workWay && mob.workWay.length) {
                         const p = mob.workWay.shift();
                         mob.jobTarget = { x: p[0], z: p[1] };
                     } else if (!mob.nightStep) {
                         pickNextJobPhase(mob, night);
                     }
-                    return;
                 }
             }
             mob.yaw = yaw;
@@ -6625,7 +6868,7 @@
             mob.stateTimer = 1.5;
             mob.vel.x = 0;
             mob.vel.z = 0;
-            if (mob.jobFace != null) {
+            if (mob.jobFace != null && mob.nightStep !== 'enter' && mob.nightStep !== 'leave' && mob.nightStep !== 'path') {
                 let dy = mob.jobFace - mob.yaw;
                 while (dy > Math.PI) dy -= Math.PI * 2;
                 while (dy < -Math.PI) dy += Math.PI * 2;
@@ -6647,38 +6890,18 @@
                     mob.state = 'walk';
                     return;
                 }
-                villagerTapDoor(mob, true);
-                mob.nightStep = 'enter';
-                const inn = specNow.inside || specNow.home;
-                mob.jobTarget = { x: inn[0], z: inn[1] };
-                mob.jobPhase = 'enter';
-                mob.jobTimer = 10;
-                mob.state = 'walk';
+                beginDoorEnter(mob, specNow);
                 return;
             } else if (mob.nightStep === 'toDoor') {
-                villagerTapDoor(mob, true);
-                mob.nightStep = 'enter';
-                const inn = specNow.inside || specNow.home;
-                mob.jobTarget = { x: inn[0], z: inn[1] };
-                mob.jobPhase = 'enter';
-                mob.jobTimer = 10;
-                mob.state = 'walk';
+                beginDoorEnter(mob, specNow);
                 return;
             } else if (mob.nightStep === 'enter') {
-                const doorX = specNow.door[0] + 0.5, doorZ = specNow.door[1] + 0.5;
-                const ix = (specNow.inside[0] - doorX), iz = (specNow.inside[1] - doorZ);
-                const ilen = Math.hypot(ix, iz) || 1;
-                const past = ((mob.pos.x - doorX) * ix + (mob.pos.z - doorZ) * iz) / ilen;
-                if (past < 0.85) {
+                if (pastDoor(mob, specNow) < 0.85) {
                     mob.jobTarget = { x: specNow.inside[0], z: specNow.inside[1] };
                     mob.state = 'walk';
                     return;
                 }
-                villagerTapDoor(mob, false);
-                mob.nightStep = 'inside';
-                mob.jobTarget = { x: specNow.home[0], z: specNow.home[1] };
-                mob.jobPhase = 'home';
-                mob.jobTimer = 30;
+                finishInside(mob, specNow);
             } else if (mob.nightStep === 'leave') {
                 villagerTapDoor(mob, false);
                 mob.nightStep = null;
@@ -7198,7 +7421,7 @@
                     const wx = startX + lx, wz = startZ + lz;
                     if (block === BLOCK_DOOR_OPEN) {
                         const leaf = 0.10;
-                        const wallNS = isOpaque(getBlock(wx, y, wz - 1)) && isOpaque(getBlock(wx, y, wz + 1));
+                        const wallNS = isDoorNeighbor(getBlock(wx, y, wz - 1)) && isDoorNeighbor(getBlock(wx, y, wz + 1));
                         if (wallNS) {
                             solidOffset = appendWoodBox(solidPos, solidNorm, solidUV, solidIdx, solidOffset,
                                 wx + 0.06, y, wz + 0.86, wx + 0.94, y + 1, wz + 0.86 + leaf, 22);
@@ -8760,21 +8983,27 @@
         const cur = isDoorBlock(t) ? t : (isDoorBlock(getBlock(x, y + 1, z)) ? getBlock(x, y + 1, z) : getBlock(x, y - 1, z));
         return setDoorOpen(x, y, z, cur !== BLOCK_DOOR_OPEN, false);
     }
-    function villagerTapDoor(mob, open) {
+    function villagerTapDoor(mob, open, snap) {
         const spec = jobSpec(mob);
         if (!spec.door) return;
         setDoorOpen(spec.door[0], VILLAGE_Y + 1, spec.door[1], open, true);
-        mob.doorWait = 0.28;
+        setDoorOpen(spec.door[0], VILLAGE_Y + 2, spec.door[1], open, true);
         mob.doorPunch = 1;
         const dx = spec.door[0] + 0.5, dz = spec.door[1] + 0.5;
-        mob.yaw = Math.atan2(dx - mob.pos.x, dz - mob.pos.z);
         if (open) {
-            mob.pos.x = spec.approach[0] * 0.35 + dx * 0.65;
-            mob.pos.z = spec.approach[1] * 0.35 + dz * 0.65;
-            mob.yaw = Math.atan2((spec.inside[0] - dx), (spec.inside[1] - dz));
+            if (snap !== false) {
+                const ix = spec.inside[0] - dx, iz = spec.inside[1] - dz;
+                const ilen = Math.hypot(ix, iz) || 1;
+                mob.pos.x = dx - (ix / ilen) * 0.78;
+                mob.pos.z = dz - (iz / ilen) * 0.78;
+                lockToDoorAxis(mob, spec);
+                mob.doorWait = 0.22;
+            }
+            mob.yaw = Math.atan2(spec.inside[0] - dx, spec.inside[1] - dz);
             mob.thruDoor = true;
         } else {
             mob.thruDoor = false;
+            mob.yaw = Math.atan2(dx - mob.pos.x, dz - mob.pos.z);
         }
     }
     function toggleGate(x, y, z) {
@@ -9423,409 +9652,10 @@
     
     
     
-    </script><!--DOWNLOAD-PAD
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
+    
+</script>
+
+<!--DOWNLOAD-PAD
 Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
