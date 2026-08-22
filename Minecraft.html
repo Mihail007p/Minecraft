@@ -366,6 +366,32 @@
             stroke-linejoin: round;
         }
 
+        #btn-night {
+            position: absolute;
+            top: 114px;
+            right: 10px;
+            width: 44px;
+            height: 44px;
+            border-radius: 8px;
+            border: 2px solid rgba(255, 255, 255, 0.25);
+            background: rgba(0, 0, 0, 0.55);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: auto;
+            z-index: 20;
+            backdrop-filter: blur(4px);
+            font-size: 22px;
+            line-height: 1;
+        }
+        #btn-night:active { background: rgba(255, 255, 255, 0.35); transform: scale(0.92); }
+        #btn-night.on {
+            background: rgba(40, 50, 110, 0.85);
+            border-color: rgba(180, 200, 255, 0.55);
+            box-shadow: 0 0 10px rgba(120, 150, 255, 0.45);
+        }
+
         #inv-overlay {
             position: absolute;
             top: 0; left: 0;
@@ -985,6 +1011,8 @@
             <path d="M9 12 h6"></path>
         </svg>
     </div>
+
+    <div id="btn-night" title="Ночь">🌙</div>
 
     <div id="inv-overlay">
         <div id="inv-panel">
@@ -7757,10 +7785,31 @@
 
     // --- 10. СМЕНА ДНЯ И НОЧИ ---
     const DAY_DURATION = 120.0;
-    const NIGHT_DURATION = 60.0;
-    const TOTAL_CYCLE = 180.0;
+    const NIGHT_DURATION = 120.0;
+    const TOTAL_CYCLE = 240.0;
     let cycleTimer = 0.0;
     const timeDisplay = document.getElementById('time-display');
+    const btnNight = document.getElementById('btn-night');
+
+    function isNightNow() {
+        return cycleTimer >= DAY_DURATION;
+    }
+    function syncNightButton() {
+        if (!btnNight) return;
+        btnNight.classList.toggle('on', isNightNow());
+        btnNight.title = isNightNow() ? 'День' : 'Ночь';
+    }
+    function toggleForcedNight(e) {
+        if (e) e.preventDefault();
+        if (isNightNow()) {
+            cycleTimer = 2;
+            showInvToast('День');
+        } else {
+            cycleTimer = DAY_DURATION + 0.05;
+            showInvToast('Ночь · 2 мин');
+        }
+        if (typeof updateDayNightCycle === 'function') updateDayNightCycle(0);
+    }
 
     function updateDayNightCycle(dt) {
         cycleTimer = (cycleTimer + dt) % TOTAL_CYCLE;
@@ -7775,6 +7824,7 @@
             const rem = Math.ceil(TOTAL_CYCLE - cycleTimer);
             timeDisplay.innerText = `🌙 Ночь: ${String(Math.floor(rem / 60)).padStart(2, '0')}:${String(rem % 60).padStart(2, '0')}`;
         }
+        syncNightButton();
 
         const orbitRadius = 60.0;
         const sunX = Math.cos(celestialAngle) * orbitRadius;
@@ -7950,12 +8000,13 @@
         if (touchHitsRect(touch, document.getElementById('hotbar'), 12)) return true;
         if (touchHitsRect(touch, document.getElementById('btn-fullscreen'), 8)) return true;
         if (touchHitsRect(touch, document.getElementById('btn-inventory'), 8)) return true;
+        if (touchHitsRect(touch, document.getElementById('btn-night'), 8)) return true;
         if (touchHitsRect(touch, document.getElementById('respawn-btn'), 8)) return true;
         if (touchHitsRect(touch, document.querySelector('.btn-group'), 8)) return true;
         const t = touch.target;
         if (!t || !t.closest) return false;
         return !!(t.closest('#hotbar') || t.closest('.slot') || t.closest('.action-btn') ||
-                  t.closest('#respawn-btn') || t.closest('#btn-fullscreen') || t.closest('#btn-inventory') ||
+                  t.closest('#respawn-btn') || t.closest('#btn-fullscreen') || t.closest('#btn-inventory') || t.closest('#btn-night') ||
                   t.closest('#inv-overlay') || t.closest('#trade-overlay') || t.closest('#chat-overlay') || t.closest('#death-screen'));
     }
 
@@ -8991,6 +9042,10 @@
     }
     btnInventory.addEventListener('touchstart', onInvButton, { passive: false });
     btnInventory.addEventListener('click', onInvButton);
+    if (btnNight) {
+        btnNight.addEventListener('touchstart', toggleForcedNight, { passive: false });
+        btnNight.addEventListener('click', toggleForcedNight);
+    }
     document.getElementById('inv-close').addEventListener('touchstart', (e) => { e.preventDefault(); setInventoryOpen(false); }, { passive: false });
     document.getElementById('inv-close').addEventListener('click', () => setInventoryOpen(false));
     (function bindTrade() {
@@ -9369,87 +9424,6 @@
     
     
     </script><!--DOWNLOAD-PAD
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
