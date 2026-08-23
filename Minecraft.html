@@ -1169,6 +1169,7 @@
 
 
 
+
     window.addEventListener('error', function (e) {
         const el = document.getElementById('boot-error');
         if (!el || el.dataset.shown === '1') return;
@@ -2001,20 +2002,21 @@
         MC_TEX.tiles[58] = make(function (s) {
             for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
                 const v = fbm(x, y, 81);
-                let c = mixHex('#c4a028', '#f0e070', v);
-                if (((x + y) % 8) === 0) c = mixHex(c, '#6a8a28', 0.45);
-                if (n01(x, y, 82) > 0.9) c = '#d8c040';
-                if (n01(x, y, 83) > 0.96) c = '#8a9a30';
+                let c = mixHex('#d8b830', '#f4e878', v);
+                const ring = Math.max(Math.abs(x - 15.5), Math.abs(y - 15.5));
+                if (Math.abs(ring - 6) < 1.2 || Math.abs(ring - 12) < 1.1) c = mixHex(c, '#8a6a18', 0.45);
+                if (n01(x, y, 82) > 0.92) c = '#c4a028';
                 s(x, y, c);
             }
         });
         MC_TEX.tiles[59] = make(function (s) {
             for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
-                const band = Math.floor(y / 4);
-                const gy = y % 4;
-                let c = (band % 2) ? mixHex('#c8b038', '#e8d868', n01(x, y, 84)) : mixHex('#7a9a28', '#b8c848', n01(x, y, 85));
-                if (gy === 0) c = mixHex(c, '#4a5818', 0.5);
-                if (gy === 3) c = mixHex(c, '#d0c050', 0.25);
+                const gy = y % 8;
+                let c = mixHex('#e0c840', '#f8ec70', n01(x, y, 84) * 0.7);
+                if (n01(x + y, y, 85) > 0.55) c = mixHex(c, '#c8b028', 0.35);
+                if (gy === 0 || gy === 1) c = mixHex('#8a2018', '#c44a28', n01(x, y, 86));
+                if (gy === 2) c = mixHex(c, '#a88820', 0.4);
+                if ((x % 5) === 0) c = mixHex(c, '#b89820', 0.25);
                 s(x, y, c);
             }
         });
@@ -3909,24 +3911,111 @@
     const geoTableLeg = new THREE.BoxGeometry(0.08, 0.52, 0.08);
     const geoMapSheet = new THREE.BoxGeometry(0.72, 0.02, 0.48);
     const geoPole = new THREE.BoxGeometry(0.05, 1.15, 0.05);
-    const geoWheat = new THREE.PlaneGeometry(0.55, 0.85);
-    const geoCropStalk = new THREE.BoxGeometry(0.07, 1, 0.07);
-    const geoCropHead = new THREE.BoxGeometry(0.16, 0.09, 0.16);
-    const geoCropGrain = new THREE.BoxGeometry(0.09, 0.18, 0.05);
-    const geoCropLeaf = new THREE.BoxGeometry(0.20, 0.035, 0.05);
+    const geoWheat = new THREE.PlaneGeometry(1.0, 1.0);
     const cropMats = {
-        wheatStem: new THREE.MeshLambertMaterial({ color: 0x5a8a28 }),
-        wheatHead: new THREE.MeshLambertMaterial({ color: 0xd4b44a }),
-        wheatGrain: new THREE.MeshLambertMaterial({ color: 0xecc85a }),
-        carrotStem: new THREE.MeshLambertMaterial({ color: 0x2f7a18 }),
-        carrotHead: new THREE.MeshLambertMaterial({ color: 0xde6a14 }),
-        potatoStem: new THREE.MeshLambertMaterial({ color: 0x4a8c28 }),
-        potatoHead: new THREE.MeshLambertMaterial({ color: 0x8fbf4a }),
-        beetStem: new THREE.MeshLambertMaterial({ color: 0x2d5a18 }),
-        beetHead: new THREE.MeshLambertMaterial({ color: 0x8a2458 }),
-        compostWood: new THREE.MeshLambertMaterial({ color: 0x6b4423 }),
-        compostFill: new THREE.MeshLambertMaterial({ color: 0x3a2814 })
+        compostWood: new THREE.MeshLambertMaterial({ color: 0x5a3a1c }),
+        compostFill: new THREE.MeshLambertMaterial({ color: 0x2a1c10 })
     };
+    const cropTexCache = {};
+    function hexRgb(hex) {
+        const n = parseInt(hex.slice(1), 16);
+        return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    }
+    function makeCropCanvasTexture(kind, stage) {
+        const key = kind + ':' + stage;
+        if (cropTexCache[key]) return cropTexCache[key];
+        const c = document.createElement('canvas');
+        c.width = 32; c.height = 32;
+        const ctx = c.getContext('2d');
+        const img = ctx.createImageData(32, 32);
+        function px(x, y, hex, a) {
+            if (x < 0 || y < 0 || x > 31 || y > 31) return;
+            const i = ((31 - y) * 32 + x) * 4;
+            const rgb = hexRgb(hex);
+            img.data[i] = rgb[0]; img.data[i + 1] = rgb[1]; img.data[i + 2] = rgb[2];
+            img.data[i + 3] = a == null ? 255 : a;
+        }
+        const st = Math.max(0, Math.min(3, stage | 0));
+        if (kind === 'wheat') {
+            const cols = ['#3d6a14', '#5a8c22', '#7aaa28', '#c4a030', '#e0c848', '#f0dc68'];
+            const xs = [1, 5, 8, 12, 15, 19, 22, 26, 29];
+            for (let i = 0; i < xs.length; i++) {
+                const h = 14 + st * 5 - (i % 3) * 2 + ((xs[i] * 7) % 3);
+                const gold = st >= 2 ? Math.min(1, (st - 1) * 0.45 + (i % 2) * 0.15) : 0;
+                for (let y = 0; y < h; y++) {
+                    const t = y / h;
+                    let ci = Math.floor(t * 2 + gold * 3);
+                    if (ci > 5) ci = 5;
+                    const col = cols[ci];
+                    const x = xs[i] + ((y + i) % 5 === 0 ? 1 : 0);
+                    px(x, y, col);
+                    px(x + 1, y, col);
+                    if (y > h - 6 && st >= 2) {
+                        px(x - 1, y, cols[Math.min(5, ci + 1)]);
+                        px(x + 2, y, cols[Math.min(5, ci + 1)]);
+                    }
+                    if (y > h - 3 && st >= 3) {
+                        px(x, y, '#f4e070');
+                        px(x + 1, y, '#e8d050');
+                    }
+                }
+            }
+        } else if (kind === 'carrot') {
+            const xs = [3, 8, 13, 18, 23, 28];
+            const h = 8 + st * 3;
+            for (let i = 0; i < xs.length; i++) {
+                for (let y = 0; y < h; y++) {
+                    px(xs[i], y, y < 3 ? '#d85a10' : '#3d8a18');
+                    px(xs[i] + 1, y, '#2f6e14');
+                    if (y > h - 4) {
+                        px(xs[i] - 2, y, '#4aa020');
+                        px(xs[i] + 3, y, '#3d8a18');
+                    }
+                }
+            }
+        } else if (kind === 'potato') {
+            const xs = [4, 10, 16, 22, 27];
+            const h = 7 + st * 3;
+            for (let i = 0; i < xs.length; i++) {
+                for (let y = 0; y < h; y++) {
+                    px(xs[i], y, '#4a8c24');
+                    px(xs[i] + 1, y, '#5aa030');
+                    if (y > h - 5) {
+                        px(xs[i] - 1, y, '#6ab038');
+                        px(xs[i] + 2, y, '#3d7a1c');
+                    }
+                }
+            }
+        } else {
+            const xs = [4, 11, 18, 25];
+            const h = 8 + st * 3;
+            for (let i = 0; i < xs.length; i++) {
+                for (let y = 0; y < h; y++) {
+                    px(xs[i], y, y < 3 ? '#7a1848' : '#2d6a18');
+                    px(xs[i] + 1, y, '#3d7a20');
+                    if (y > h - 4) px(xs[i] - 2, y, '#8a2460');
+                }
+            }
+        }
+        ctx.putImageData(img, 0, 0);
+        const tex = new THREE.CanvasTexture(c);
+        tex.magFilter = THREE.NearestFilter;
+        tex.minFilter = THREE.NearestFilter;
+        tex.needsUpdate = true;
+        cropTexCache[key] = tex;
+        return tex;
+    }
+    const cropMatCache = {};
+    function cropMaterial(kind, stage) {
+        const k = kind + ':' + stage;
+        if (cropMatCache[k]) return cropMatCache[k];
+        cropMatCache[k] = new THREE.MeshLambertMaterial({
+            map: makeCropCanvasTexture(kind, stage),
+            alphaTest: 0.35,
+            side: THREE.DoubleSide
+        });
+        return cropMatCache[k];
+    }
     function buildAnvilDecor() {
         const g = new THREE.Group();
         const base = new THREE.Mesh(geoAnvilBase, workIronDark); base.position.y = 0.07;
@@ -3972,36 +4061,15 @@
     }
     function buildCropDecor(kind, stage) {
         const g = new THREE.Group();
-        const st = Math.max(0, Math.min(3, stage | 0));
-        const h = 0.26 + st * 0.17;
-        let stemM = cropMats.wheatStem, headM = cropMats.wheatHead, extraM = cropMats.wheatGrain;
-        if (kind === 'carrot') { stemM = cropMats.carrotStem; headM = cropMats.carrotHead; extraM = cropMats.carrotStem; }
-        else if (kind === 'potato') { stemM = cropMats.potatoStem; headM = cropMats.potatoHead; extraM = cropMats.potatoStem; }
-        else if (kind === 'beet') { stemM = cropMats.beetStem; headM = cropMats.beetHead; extraM = cropMats.beetStem; }
-        const spots = [[-0.18, -0.16], [0.17, -0.14], [-0.15, 0.19], [0.16, 0.15]];
-        for (let i = 0; i < 4; i++) {
-            const sh = h * (0.78 + (i % 3) * 0.09);
-            const stalk = new THREE.Mesh(geoCropStalk, stemM);
-            stalk.scale.y = sh;
-            stalk.position.set(spots[i][0], sh * 0.5, spots[i][1]);
-            g.add(stalk);
-            if (st >= 2) {
-                const top = new THREE.Mesh(geoCropHead, headM);
-                top.position.set(spots[i][0], sh + 0.02, spots[i][1]);
-                g.add(top);
-            }
-            if (kind === 'wheat' && st >= 3) {
-                const grain = new THREE.Mesh(geoCropGrain, extraM);
-                grain.position.set(spots[i][0], sh + 0.12, spots[i][1]);
-                g.add(grain);
-            }
-            if ((kind === 'carrot' || kind === 'beet') && st >= 2) {
-                const leaf = new THREE.Mesh(geoCropLeaf, stemM);
-                leaf.position.set(spots[i][0], sh + 0.05, spots[i][1]);
-                leaf.rotation.y = i * 0.7;
-                g.add(leaf);
-            }
-        }
+        const mat = cropMaterial(kind, stage);
+        const a = new THREE.Mesh(geoWheat, mat);
+        a.position.y = 0.49;
+        a.rotation.y = Math.PI / 4;
+        const b = new THREE.Mesh(geoWheat, mat);
+        b.position.y = 0.49;
+        b.rotation.y = -Math.PI / 4;
+        g.add(a);
+        g.add(b);
         return g;
     }
     function buildComposterDecor() {
@@ -7442,8 +7510,9 @@
         chunkPut(chunk, ox + 1, y + 2, oz + 2, BLOCK_TORCH);
         workPut(ox + 1, y + 1, oz + 1, 'maptable', 0);
     }
-    function paintFarmPlot(chunk, x0, z0, x1, z1, y, cropOf) {
+    function paintFarmPlot(chunk, x0, z0, x1, z1, y) {
         const mx = (x0 + x1) >> 1;
+        const mz = (z0 + z1) >> 1;
         for (let wx = x0; wx <= x1; wx++) {
             for (let wz = z0; wz <= z1; wz++) {
                 const corner = (wx === x0 || wx === x1) && (wz === z0 || wz === z1);
@@ -7453,26 +7522,21 @@
                     chunkPut(chunk, wx, y + 1, wz, BLOCK_WOOD);
                     continue;
                 }
-                if (wx === mx && (wz === z0 + 1 || wz === z1 - 1)) {
+                if (wx === mx && wz === mz) {
                     chunkPut(chunk, wx, y, wz, BLOCK_WATER);
                     continue;
                 }
                 chunkPut(chunk, wx, y, wz, BLOCK_FARMLAND);
-                const stage = 1 + Math.abs((wx * 3 + wz * 5) % 3);
-                workPut(wx, y + 1, wz, cropOf(wx, wz), stage);
+                const d = Math.abs(wx - mx) + Math.abs(wz - mz);
+                const stage = d <= 1 ? 1 : (d === 2 ? 2 : 3);
+                workPut(wx, y + 1, wz, 'wheat', stage);
             }
         }
     }
     function paintFarm(chunk, ox, oz, y) {
-        paintFarmPlot(chunk, ox - 5, oz - 3, ox - 1, oz + 2, y, function (wx, wz) {
-            if (wz <= oz - 2) return (wx + wz) & 1 ? 'potato' : 'beet';
-            return 'wheat';
-        });
-        paintFarmPlot(chunk, ox + 1, oz - 3, ox + 5, oz + 2, y, function (wx, wz) {
-            if (wz <= oz - 1) return 'potato';
-            return 'carrot';
-        });
-        for (let z = oz - 3; z <= oz + 3; z++) {
+        paintFarmPlot(chunk, ox - 5, oz - 3, ox - 1, oz + 2, y);
+        paintFarmPlot(chunk, ox + 1, oz - 3, ox + 5, oz + 2, y);
+        for (let z = oz - 4; z <= oz + 3; z++) {
             chunkPut(chunk, ox, y, z, BLOCK_DIRT);
             villageAir(chunk, ox, y + 1, y + 3, z);
         }
@@ -7480,25 +7544,19 @@
             chunkPut(chunk, x, y, oz + 3, BLOCK_DIRT);
             villageAir(chunk, x, y + 1, y + 3, oz + 3);
         }
-        chunkPut(chunk, ox - 6, y, oz + 1, BLOCK_HAY);
-        chunkPut(chunk, ox - 6, y + 1, oz + 1, BLOCK_HAY);
-        chunkPut(chunk, ox - 6, y, oz + 2, BLOCK_HAY);
-        villageAir(chunk, ox - 6, y + 2, y + 3, oz + 1);
-        villageAir(chunk, ox - 6, y + 1, y + 3, oz + 2);
-        villageAir(chunk, ox - 1, y + 1, y + 3, oz + 3);
-        workPut(ox - 1, y + 1, oz + 3, 'composter', 0);
-        chunkPut(chunk, ox + 6, y, oz - 3, BLOCK_WOOD);
-        chunkPut(chunk, ox + 6, y + 1, oz - 3, BLOCK_FENCE);
-        chunkPut(chunk, ox + 6, y + 2, oz - 3, BLOCK_TORCH);
-        chunkPut(chunk, ox + 5, y, oz - 4, BLOCK_DIRT);
-        villageAir(chunk, ox + 5, y + 1, y + 3, oz - 4);
-        chunkPut(chunk, ox + 5, y + 1, oz - 4, BLOCK_PUMPKIN);
+        chunkPut(chunk, ox - 7, y, oz + 0, BLOCK_HAY);
+        chunkPut(chunk, ox - 7, y + 1, oz + 0, BLOCK_HAY);
+        chunkPut(chunk, ox - 6, y, oz + 0, BLOCK_HAY);
+        villageAir(chunk, ox - 7, y + 2, y + 3, oz + 0);
+        villageAir(chunk, ox - 6, y + 1, y + 3, oz + 0);
+        for (let dx = -2; dx <= 1; dx++) {
+            chunkPut(chunk, ox + dx, y + 1, oz - 4, BLOCK_FENCE);
+        }
+        villageAir(chunk, ox + 3, y + 1, y + 3, oz - 4);
+        workPut(ox + 3, y + 1, oz - 4, 'composter', 0);
         chunkPut(chunk, ox + 4, y, oz - 4, BLOCK_DIRT);
         villageAir(chunk, ox + 4, y + 1, y + 3, oz - 4);
         chunkPut(chunk, ox + 4, y + 1, oz - 4, BLOCK_PUMPKIN);
-        chunkPut(chunk, ox + 3, y + 1, oz - 3, BLOCK_FENCE);
-        chunkPut(chunk, ox + 4, y + 1, oz - 3, BLOCK_FENCE);
-        chunkPut(chunk, ox + 5, y + 1, oz - 3, BLOCK_GATE);
     }
     function paintPath(chunk, x0, z0, x1, z1, y) {
         let x = x0, z = z0, guard = 0;
@@ -10054,68 +10112,10 @@
 
 
 
+
 </script>
 
 <!--DOWNLOAD-PAD
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
