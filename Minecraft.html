@@ -3904,13 +3904,13 @@
     const PERF = {
         // Tecno Pova Neo 3 8 ГБ тянет картинку лучше, чем самый слабый режим.
         // Оптимизируем логикой и частотой обновлений, а не сильным замыливанием.
-        pixelRatio: Math.min(window.devicePixelRatio || 1, IS_TOUCH_PHONE ? 1.05 : 1.25),
-        minPixelRatio: 0.82,
+        pixelRatio: Math.min(window.devicePixelRatio || 1, IS_TOUCH_PHONE ? 1.02 : 1.25),
+        minPixelRatio: 0.90,
         maxPixelRatio: Math.min(window.devicePixelRatio || 1, IS_TOUCH_PHONE ? 1.08 : 1.25),
-        speechEvery: IS_TOUCH_PHONE ? 0.22 : 0.10,
-        socialEvery: IS_TOUCH_PHONE ? 0.55 : 0.25,
-        mobCap: IS_TOUCH_PHONE ? 12 : 18,
-        mobHardCap: IS_TOUCH_PHONE ? 14 : 20,
+        speechEvery: IS_TOUCH_PHONE ? 0.30 : 0.10,
+        socialEvery: IS_TOUCH_PHONE ? 0.85 : 0.25,
+        mobCap: IS_TOUCH_PHONE ? 8 : 18,
+        mobHardCap: IS_TOUCH_PHONE ? 10 : 20,
         adaptiveCooldown: 0
     };
     let renderer;
@@ -5586,7 +5586,8 @@
                     }
                 }
             } else {
-                if (this.mesh.head) {
+                const villagerTrackingPlayer = this.type === 'villager' && (this.seesPlayer || chatMob === this || (this.lookAtPlayerT || 0) > 0);
+                if (this.mesh.head && !villagerTrackingPlayer) {
                     if (this.state === 'idle') {
                         this.mesh.head.rotation.y = Math.sin(this.idleAnim * 0.65) * 0.28;
                         this.mesh.head.rotation.x = Math.sin(this.idleAnim * 0.4) * 0.08;
@@ -5801,11 +5802,14 @@
                 let rel = Math.atan2(dx, dz) - this.yaw;
                 while (rel > Math.PI) rel -= Math.PI * 2;
                 while (rel < -Math.PI) rel += Math.PI * 2;
-                const wantY = Math.max(-0.7, Math.min(0.7, rel));
-                this.mesh.head.rotation.y += (wantY - this.mesh.head.rotation.y) * Math.min(1, dt * 3.2);
+                let wantY = Math.max(-0.62, Math.min(0.62, rel));
                 const dist = Math.hypot(dx, dz) + 0.001;
-                const wantX = Math.max(-0.22, Math.min(0.22, -Math.atan2((player.pos.y + 1.5) - (this.pos.y + 1.62), dist)));
-                this.mesh.head.rotation.x += (wantX - this.mesh.head.rotation.x) * Math.min(1, dt * 3.2);
+                let wantX = Math.max(-0.18, Math.min(0.18, -Math.atan2((player.pos.y + 1.5) - (this.pos.y + 1.62), dist)));
+                if (Math.abs(wantY - this.mesh.head.rotation.y) < 0.018) wantY = this.mesh.head.rotation.y;
+                if (Math.abs(wantX - this.mesh.head.rotation.x) < 0.012) wantX = this.mesh.head.rotation.x;
+                const headLerp = Math.min(1, dt * (chatMob === this ? 2.8 : 1.35));
+                this.mesh.head.rotation.y += (wantY - this.mesh.head.rotation.y) * headLerp;
+                this.mesh.head.rotation.x += (wantX - this.mesh.head.rotation.x) * headLerp;
             }
 
             if (this.type === 'chicken' && this.health > 0) {
@@ -7087,9 +7091,11 @@
         }
 
         if ((mob.seesPlayer || mob.seenThreatT > 0) && mob._visionYawTo != null && mob.state !== 'walk' && mob.nightStep !== 'enter' && mob.nightStep !== 'leave') {
-            const turn = wrapAngle(mob._visionYawTo - mob.yaw);
-            mob.yaw += turn * Math.min(1, dt * 4.5);
-            villagerLookAt(mob, turn);
+            // Важно: тело НЕ поворачиваем на игрока автоматически.
+            // На телефоне это боролось с рабочим направлением и выглядело как тряска.
+            // Житель замечает игрока глазами/головой, а всем корпусом разворачивается только в диалоге.
+            mob.lookAtPlayerT = 0.9;
+            villagerLookAt(mob, wrapAngle(mob._visionYawTo - mob.yaw));
         }
     }
     function villagerSteer(mob, gx, gz) {
@@ -10567,7 +10573,7 @@
         updateDroppedItems(dt);
         updateFallingBlocks(dt);
         torchAcc += dt;
-        if (torchAcc >= (IS_TOUCH_PHONE ? 0.16 : 0.08)) {
+        if (torchAcc >= (IS_TOUCH_PHONE ? 0.26 : 0.08)) {
             updateTorchLights(currentTime * 0.001);
             torchAcc = 0;
         }
@@ -10599,8 +10605,8 @@
             announceBiome(bioNow);
             if (IS_TOUCH_PHONE) {
                 PERF.adaptiveCooldown = Math.max(0, PERF.adaptiveCooldown - 1);
-                if (frameCount < 30 && PERF.pixelRatio > PERF.minPixelRatio && PERF.adaptiveCooldown <= 0) {
-                    PERF.pixelRatio = Math.max(PERF.minPixelRatio, PERF.pixelRatio - 0.05);
+                if (frameCount < 24 && PERF.pixelRatio > PERF.minPixelRatio && PERF.adaptiveCooldown <= 0) {
+                    PERF.pixelRatio = Math.max(PERF.minPixelRatio, PERF.pixelRatio - 0.04);
                     renderer.setPixelRatio(PERF.pixelRatio);
                     const s = viewSize();
                     renderer.setSize(s.w, s.h, false);
