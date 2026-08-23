@@ -1163,6 +1163,7 @@
 
     <script>
 
+
     window.addEventListener('error', function (e) {
         const el = document.getElementById('boot-error');
         if (!el || el.dataset.shown === '1') return;
@@ -6392,6 +6393,7 @@
             door: [12, 15],
             approach: [14.4, 15.5],
             inside: [10.4, 15.5],
+            house: { minX: 6.55, maxX: 11.85, minZ: 13.55, maxZ: 16.45 },
             nightPath: [[15.5, 16.5], [14.4, 15.5]],
             workPath: [[15.5, 16.5], [20.5, 20.5]],
             sites: [[20.5, 20.5], [16.5, 16.5], [24.5, 16.5], [20.5, 12.5], [16.5, 20.5], [24.5, 20.5]],
@@ -6403,6 +6405,7 @@
             door: [13, 24],
             approach: [13.5, 22.4],
             inside: [13.5, 26.6],
+            house: { minX: 11.55, maxX: 14.45, minZ: 24.55, maxZ: 29.45 },
             nightPath: [[13.5, 22.4]],
             workPath: [[13.5, 22.4], [19.5, 9.5]],
             sites: [[19.5, 9.5, 3.1416], [19.5, 9.5, 3.1416], [15.5, 6.5, 1.57], [23.5, 6.5, -1.57]],
@@ -6414,6 +6417,7 @@
             door: [28, 15],
             approach: [26.4, 15.5],
             inside: [30.1, 15.5],
+            house: { minX: 28.55, maxX: 33.45, minZ: 13.55, maxZ: 16.45 },
             nightPath: [[21.5, 9.5], [21.5, 15.5], [26.4, 15.5]],
             workPath: [[21.5, 15.5], [21.5, 9.5], [25.5, 9.5]],
             sites: [[25.5, 9.5, 0], [25.5, 9.5, 0], [25.5, 9.5, 0], [24.5, 9.5, 0]],
@@ -6425,6 +6429,7 @@
             door: [27, 24],
             approach: [27.5, 26.4],
             inside: [27.5, 21.9],
+            house: { minX: 25.55, maxX: 28.45, minZ: 18.55, maxZ: 23.45 },
             nightPath: [[22.5, 26.5], [27.5, 26.4]],
             workPath: [[22.5, 26.5], [22.5, 20.5]],
             sites: [[22.5, 20.5, 0], [22.5, 20.5, 0], [21.5, 20.5, 0], [23.5, 20.5, 0]],
@@ -6436,6 +6441,7 @@
             door: [31, 20],
             approach: [30.5, 20.5],
             inside: [33.1, 20.5],
+            house: { minX: 31.55, maxX: 36.45, minZ: 18.55, maxZ: 21.45 },
             nightPath: [[10.5, 9.5], [20.5, 12.5], [30.5, 16.5], [30.5, 20.5]],
             workPath: [[30.5, 16.5], [20.5, 12.5], [10.5, 9.5], [9.5, 1.5]],
             sites: [[9.5, 1.5, 3.1416], [9.5, 1.5, 3.1416], [10.5, 1.5, 3.1416], [9.5, 2.5, 3.1416]],
@@ -6503,7 +6509,7 @@
                     }
                 }
             }
-            if (!found) return [[gx, gz]];
+            if (!found) return null;
         }
         if (x0 === x1 && z0 === z1) return [[gx, gz]];
         const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
@@ -6537,7 +6543,7 @@
                 if (!exists) open.push([nx, nz, f]);
             }
         }
-        if (!foundK) return [[gx, gz]];
+        if (!foundK) return null;
         const cells = [];
         let k = foundK;
         while (k && k !== startK) {
@@ -6596,6 +6602,22 @@
     function villagerGuided(mob) {
         return !!(mob && mob.nightStep && mob.nightStep !== 'inside');
     }
+    function isInsideHouse(mob, spec) {
+        if (!mob || !spec || !spec.house) return false;
+        const h = spec.house;
+        return mob.pos.x >= h.minX && mob.pos.x <= h.maxX && mob.pos.z >= h.minZ && mob.pos.z <= h.maxZ;
+    }
+    function stayInside(mob, spec) {
+        mob.nightStep = 'inside';
+        mob.thruDoor = false;
+        mob.nightWay = [];
+        mob.jobTarget = { x: spec.home[0], z: spec.home[1] };
+        mob.jobPhase = 'home';
+        mob.jobTimer = 30;
+        mob.state = 'work';
+        mob.vel.x = 0;
+        mob.vel.z = 0;
+    }
     function startNightWalk(mob) {
         const spec = jobSpec(mob);
         if (!spec.door || !spec.approach) {
@@ -6603,16 +6625,8 @@
             mob.nightWay = [];
             return;
         }
-        if (pastDoor(mob, spec) > 0.7) {
-            mob.nightStep = 'inside';
-            mob.thruDoor = false;
-            mob.nightWay = [];
-            mob.jobTarget = { x: spec.home[0], z: spec.home[1] };
-            mob.jobPhase = 'home';
-            mob.jobTimer = 30;
-            mob.state = 'work';
-            mob.vel.x = 0;
-            mob.vel.z = 0;
+        if (isInsideHouse(mob, spec)) {
+            stayInside(mob, spec);
             return;
         }
         mob.nightStep = 'path';
@@ -6620,7 +6634,11 @@
         mob.homeSeekT = 0;
         mob.repathCd = 0;
         const path = villagePath(mob.pos.x, mob.pos.z, spec.approach[0], spec.approach[1]);
-        mob.nightWay = (path && path.length) ? path.slice() : [[spec.approach[0], spec.approach[1]]];
+        if (!path || !path.length) {
+            snapToApproach(mob, spec);
+            return;
+        }
+        mob.nightWay = path.slice();
         const p = mob.nightWay.shift();
         mob.jobTarget = { x: p[0], z: p[1] };
         mob.jobPhase = 'path';
@@ -6747,6 +6765,9 @@
             return;
         }
         const specNow = jobSpec(mob);
+        if (night && specNow.door && mob.nightStep === 'inside' && !isInsideHouse(mob, specNow)) {
+            startNightWalk(mob);
+        }
         if (night && specNow.door && (!mob.nightStep || mob.nightStep === 'workpath')) {
             startNightWalk(mob);
         }
@@ -6787,8 +6808,12 @@
             }
             if (mob.repathCd <= 0 && mob.homeSeekT > 3.5) {
                 const np = villagePath(mob.pos.x, mob.pos.z, specNow.approach[0], specNow.approach[1]);
-                mob.nightWay = (np && np.length) ? np.slice() : [];
-                const p = mob.nightWay.length ? mob.nightWay.shift() : specNow.approach;
+                if (!np || !np.length) {
+                    snapToApproach(mob, specNow);
+                    return;
+                }
+                mob.nightWay = np.slice();
+                const p = mob.nightWay.shift();
                 mob.jobTarget = { x: p[0], z: p[1] };
                 mob.repathCd = 3.2;
             }
@@ -6817,6 +6842,21 @@
             }
         }
 
+        if (mob.nightStep === 'inside') {
+            if (!isInsideHouse(mob, specNow)) {
+                startNightWalk(mob);
+                return;
+            }
+            if (lineBlocked(mob.pos.x, mob.pos.z, specNow.home[0], specNow.home[1], 0.28)) {
+                mob.pos.x = specNow.home[0];
+                mob.pos.z = specNow.home[1];
+                mob.pos.y = VILLAGE_Y + 1.05;
+                mob.state = 'work';
+                mob.vel.x = 0;
+                mob.vel.z = 0;
+                return;
+            }
+        }
         if (!mob.nightStep && !villagerWalkable(t.x, t.z, 0.3)) {
             pickNextJobPhase(mob, night);
             return;
@@ -7026,8 +7066,8 @@
                 chunkPut(chunk, ox + r[0], y + 5, oz + r[1], BLOCK_WOOD);
             }
         }
-        const lampL = rotXZ(-3, -1, rot);
-        const lampR = rotXZ(3, -1, rot);
+        const lampL = rotXZ(-2, 7, rot);
+        const lampR = rotXZ(2, 7, rot);
         chunkPut(chunk, ox + lampL[0], y + 1, oz + lampL[1], BLOCK_FENCE);
         chunkPut(chunk, ox + lampL[0], y + 2, oz + lampL[1], BLOCK_TORCH);
         chunkPut(chunk, ox + lampR[0], y + 1, oz + lampR[1], BLOCK_FENCE);
@@ -9653,69 +9693,10 @@
     
     
     
+
 </script>
 
 <!--DOWNLOAD-PAD
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
