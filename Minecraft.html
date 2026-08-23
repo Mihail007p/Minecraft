@@ -5303,6 +5303,13 @@
             this.stateTimer = 4.0;
             this.vel.y = 4.0;
             this.yaw = Math.atan2(this.pos.x - player.pos.x, this.pos.z - player.pos.z) + (Math.random() - 0.5) * 0.5;
+            if (this.type === 'villager') {
+                this.alertT = 12;
+                this.seenThreatT = 14;
+                this.lastKnownPlayer = { x: player.pos.x, y: player.pos.y, z: player.pos.z, t: performance.now() };
+                villagerSay(this, 'Помогите! Я видел нападение!', 3.0);
+                villagerRaiseAlarm(this, 'Нападение! Я видел, кто это сделал!');
+            }
             if ((this.type === 'wolf' || this.type === 'bee' || this.type === 'golem' || this.type === 'llama') && !this.tamed) {
                 this.angry = true;
                 this.state = 'hunt';
@@ -6729,6 +6736,139 @@
         if (hy < -0.7) hy = -0.7;
         mob.mesh.head.rotation.y = mob.mesh.head.rotation.y * 0.65 + hy * 0.35;
     }
+
+    function wrapAngle(a) {
+        while (a > Math.PI) a -= Math.PI * 2;
+        while (a < -Math.PI) a += Math.PI * 2;
+        return a;
+    }
+    function villagerEyePos(mob) {
+        return new THREE.Vector3(mob.pos.x, mob.pos.y + Math.min(1.55, mob.height * 0.86), mob.pos.z);
+    }
+    function visionTransparentBlock(b) {
+        return b === BLOCK_EMPTY || b === BLOCK_WATER || b === BLOCK_TORCH || b === BLOCK_GLASS ||
+            b === BLOCK_DOOR_OPEN || b === BLOCK_GATE_OPEN || b === BLOCK_LADDER || b === BLOCK_SIGN ||
+            b === BLOCK_PLATE || b === BLOCK_BUTTON || b === BLOCK_STONE_PLATE || b === BLOCK_STONE_BUTTON ||
+            b === BLOCK_CARPET || b === BLOCK_BED || b === BLOCK_PAINTING;
+    }
+    function villagerCanSeePoint(mob, target, opts) {
+        opts = opts || {};
+        const range = opts.range || 12;
+        const fov = opts.fov || 2.15;
+        const closeRange = opts.closeRange || 2.4;
+        const eye = villagerEyePos(mob);
+        const dx = target.x - eye.x;
+        const dy = target.y - eye.y;
+        const dz = target.z - eye.z;
+        const dist = Math.hypot(dx, dy, dz);
+        if (dist < 0.001 || dist > range) return false;
+        const yawTo = Math.atan2(dx, dz);
+        const yawDelta = Math.abs(wrapAngle(yawTo - mob.yaw));
+        if (dist > closeRange && yawDelta > fov * 0.5) return false;
+        const steps = Math.max(2, Math.ceil(dist / 0.35));
+        for (let i = 1; i < steps; i++) {
+            const t = i / steps;
+            const x = eye.x + dx * t;
+            const y = eye.y + dy * t;
+            const z = eye.z + dz * t;
+            const b = getBlock(Math.floor(x), Math.floor(y), Math.floor(z));
+            if (!visionTransparentBlock(b)) return false;
+        }
+        if (!opts.silent) {
+            mob._visionYawTo = yawTo;
+            mob._visionDist = dist;
+        }
+        return true;
+    }
+    function villagerCanSeeMob(mob, other, range) {
+        if (!other || other.health <= 0 || other === mob) return false;
+        const target = new THREE.Vector3(other.pos.x, other.pos.y + Math.min(1.25, other.height * 0.75), other.pos.z);
+        return villagerCanSeePoint(mob, target, { range: range || 11, fov: 2.2, closeRange: 2.0, silent: true });
+    }
+    function villagerCanSeePlayer(mob, range) {
+        if (typeof player === 'undefined' || player.isDead) return false;
+        const target = new THREE.Vector3(player.pos.x, player.pos.y + player.eyeHeight * 0.92, player.pos.z);
+        return villagerCanSeePoint(mob, target, { range: range || 13, fov: 2.25, closeRange: 2.7 });
+    }
+    function villagerRaiseAlarm(source, text) {
+        if (!source || source.type !== 'villager') return;
+        const sx = source.pos.x, sz = source.pos.z;
+        for (let i = 0; i < mobs.length; i++) {
+            const m = mobs[i];
+            if (!m || m.health <= 0) continue;
+            const d = Math.hypot(m.pos.x - sx, m.pos.z - sz);
+            if (m.type === 'villager' && d < 18) {
+                m.alertT = Math.max(m.alertT || 0, 9);
+                m.seenThreatT = Math.max(m.seenThreatT || 0, 12);
+                m.lastKnownPlayer = { x: player.pos.x, y: player.pos.y, z: player.pos.z, t: performance.now() };
+                if (m !== source && (m.talkCd || 0) <= 0 && Math.random() < 0.45) {
+                    m.talkCd = 6 + Math.random() * 4;
+                    villagerSay(m, text || 'Я видел опасность! К голему!', 2.4);
+                }
+            } else if (m.type === 'golem' && d < 24) {
+                m.angry = true;
+                m.state = 'hunt';
+                m.stateTimer = Math.max(m.stateTimer || 0, 14);
+                m.yaw = Math.atan2(player.pos.x - m.pos.x, player.pos.z - m.pos.z);
+            }
+        }
+    }
+    function villagerObserveWorld(mob, dt, night) {
+        mob.seesPlayer = false;
+        mob.seesHurtVillager = false;
+        mob.seenPlayerT = Math.max(0, (mob.seenPlayerT || 0) - dt);
+        mob.seenThreatT = Math.max(0, (mob.seenThreatT || 0) - dt);
+        mob.alertT = Math.max(0, (mob.alertT || 0) - dt);
+        mob.lookAtPlayerT = Math.max(0, (mob.lookAtPlayerT || 0) - dt);
+        if (mob._visionCd == null) mob._visionCd = Math.random() * 0.18;
+        mob._visionCd -= dt;
+        if (mob._visionCd > 0) return;
+        mob._visionCd = 0.12 + Math.random() * 0.08;
+
+        const range = night ? 9.0 : 14.0;
+        if (villagerCanSeePlayer(mob, range)) {
+            mob.seesPlayer = true;
+            mob.seenPlayerT = 6.0;
+            mob.lastKnownPlayer = { x: player.pos.x, y: player.pos.y, z: player.pos.z, t: performance.now() };
+            const tool = heldType ? heldType() : 0;
+            const armed = isSwordItem(tool) || isPickItem(tool) || tool === ITEM_BOW;
+            const close = mob._visionDist < 5.2;
+            if (armed && close) {
+                mob.seenThreatT = Math.max(mob.seenThreatT || 0, 5.5);
+                mob.alertT = Math.max(mob.alertT || 0, 3.5);
+            }
+            if (!chatOpen && (mob.talkCd || 0) <= 0 && close && Math.random() < (armed ? 0.08 : 0.025)) {
+                mob.talkCd = armed ? 8 : 12;
+                if (armed) villagerSay(mob, 'Я вижу оружие. Убери его, путник.', 3.0);
+                else villagerSay(mob, 'Вижу тебя. Подойди, поговорим.', 2.6);
+            }
+        }
+
+        if (!mob.seesPlayer && mob.seenPlayerT > 0 && mob.lastKnownPlayer && !night && (mob.talkCd || 0) <= 0 && Math.random() < 0.01) {
+            mob.talkCd = 8;
+            villagerSay(mob, 'Потерял тебя из виду…', 2.0);
+        }
+
+        for (let i = 0; i < mobs.length; i++) {
+            const other = mobs[i];
+            if (!other || other === mob || other.type !== 'villager' || other.health <= 0) continue;
+            if (other.health < other.maxHealth && mob.pos.distanceTo(other.pos) < 10 && villagerCanSeeMob(mob, other, 10)) {
+                mob.seesHurtVillager = true;
+                mob.alertT = Math.max(mob.alertT || 0, 6);
+                if ((mob.talkCd || 0) <= 0) {
+                    mob.talkCd = 9;
+                    villagerSay(mob, 'Я вижу раненого! Нужна помощь!', 2.6);
+                }
+                break;
+            }
+        }
+
+        if ((mob.seesPlayer || mob.seenThreatT > 0) && mob._visionYawTo != null && mob.state !== 'walk' && mob.nightStep !== 'enter' && mob.nightStep !== 'leave') {
+            const turn = wrapAngle(mob._visionYawTo - mob.yaw);
+            mob.yaw += turn * Math.min(1, dt * 4.5);
+            villagerLookAt(mob, turn);
+        }
+    }
     function villagerSteer(mob, gx, gz) {
         const y = VILLAGE_Y + 1.05;
         const want = Math.atan2(gx - mob.pos.x, gz - mob.pos.z);
@@ -7106,6 +7246,7 @@
             return;
         }
         const specNow = jobSpec(mob);
+        villagerObserveWorld(mob, dt, night);
         if (night && specNow.door && mob.nightStep === 'inside' && !isInsideHouse(mob, specNow)) {
             startNightWalk(mob);
         }
@@ -9020,16 +9161,25 @@
             for (let j = i + 1; j < vs.length; j++) {
                 const a = vs[i], b = vs[j];
                 const d = a.pos.distanceTo(b.pos);
-                if (d > 2.2 || d < 0.45) continue;
+                if (d > 2.8 || d < 0.45) continue;
                 if (a.state === 'work' || b.state === 'work') continue;
                 if (a.talkCd > 0 || b.talkCd > 0) continue;
                 if (chatMob === a || chatMob === b) continue;
+                const canSeeEachOther = villagerCanSeeMob(a, b, 3.2) || villagerCanSeeMob(b, a, 3.2);
+                if (!canSeeEachOther) continue;
                 a.talkWith = b;
                 b.talkWith = a;
                 a.talkCd = 14 + Math.random() * 8;
                 b.talkCd = a.talkCd;
-                villagerSay(a, gossipLine(a, b), 2.4);
-                setTimeout(function () { if (b.health > 0) villagerSay(b, gossipLine(b, a), 2.4); }, 1100);
+                if ((a.alertT || 0) > 0 || (b.alertT || 0) > 0) {
+                    if ((a.alertT || 0) > 0) b.alertT = Math.max(b.alertT || 0, a.alertT * 0.85);
+                    if ((b.alertT || 0) > 0) a.alertT = Math.max(a.alertT || 0, b.alertT * 0.85);
+                    villagerSay(a, 'Я видел тревогу. Передай остальным.', 2.4);
+                    setTimeout(function () { if (b.health > 0) villagerSay(b, 'Понял. Буду смотреть внимательнее.', 2.4); }, 1100);
+                } else {
+                    villagerSay(a, gossipLine(a, b), 2.4);
+                    setTimeout(function () { if (b.health > 0) villagerSay(b, gossipLine(b, a), 2.4); }, 1100);
+                }
                 setTimeout(function () { a.talkWith = null; b.talkWith = null; }, 1800);
             }
         }
@@ -9037,10 +9187,11 @@
             const v = vs[i];
             if (chatOpen) continue;
             const d = v.pos.distanceTo(player.pos);
-            if (d < 3.2 && d > 0.6 && v.talkCd <= 0 && Math.random() < 0.003) {
+            const sees = v.seesPlayer || (d < 2.2 && villagerCanSeePlayer(v, 3.0));
+            if (d < 3.4 && d > 0.6 && sees && v.talkCd <= 0 && Math.random() < 0.004) {
                 v.talkCd = 14;
-                const hook = v.vilId === 'ivan' ? 'Путник бури. Поговори со мной.' :
-                    (v.vilName || 'Житель') + ': есть что рассказать…';
+                const hook = v.vilId === 'ivan' ? 'Путник бури. Я вижу тебя — поговори со мной.' :
+                    (v.vilName || 'Житель') + ': вижу тебя, есть что рассказать…';
                 villagerSay(v, hook, 3.5);
             }
         }
@@ -9084,6 +9235,11 @@
         const allFive = ['ivan','masha','boris','anna','gleb'].every(function (k) { return (story.talked[k] || 0) > 0; });
         if (allFive && story.chapter < 3) { story.chapter = 3; saveStory(); }
 
+        if (/видишь|увидел|заметил|смотри|где я|следишь/.test(t)) {
+            if (mob.seesPlayer) return 'Да. Я вижу тебя прямо сейчас: расстояние примерно ' + Math.round(mob._visionDist || mob.pos.distanceTo(player.pos)) + ' блоков, преград нет.';
+            if (mob.lastKnownPlayer && (mob.seenPlayerT || 0) > 0) return 'Сейчас потерял из виду, но помню, где ты был: рядом с X ' + Math.round(mob.lastKnownPlayer.x) + ', Z ' + Math.round(mob.lastKnownPlayer.z) + '.';
+            return 'Я смотрю глазами, а не магией: стены, двери и темнота мешают. Выйди на свет или подойди ближе.';
+        }
         if (/привет|здравст|хай|hello|добрый/.test(t)) {
             if (id === 'ivan') return talks === 1 ? 'Я Иван, староста Тихой Заводи. Тебя вынесло той же бурей, что расколола мир на острова. Слушай нас — и поймёшь, кто ты.' : ('Снова ты. Глава ' + (story.chapter + 1) + ' твоей истории ещё пишется.');
             if (id === 'masha') return 'Маша. Лечу и корми. Брат пропал на песчаном острове. Если поплывёшь — ищи кактусы. Он их рисовал на двери.';
