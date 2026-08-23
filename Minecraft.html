@@ -5286,6 +5286,7 @@
                 this.vilLook = opts.look || (VILLAGER_LOOKS[this.vilId] ? VILLAGER_LOOKS[this.vilId] : pickWandererLook(x, z));
                 this.vilName = opts.vilName || (this.vilLook.gender === 'f' ? 'Жительница' : 'Житель');
                 assignVillagerJob(this);
+                villagerInitBrain(this);
             }
             this.mesh = buildMobMesh(type, this);
             this.mesh.position.copy(this.pos);
@@ -5304,9 +5305,12 @@
             this.vel.y = 4.0;
             this.yaw = Math.atan2(this.pos.x - player.pos.x, this.pos.z - player.pos.z) + (Math.random() - 0.5) * 0.5;
             if (this.type === 'villager') {
+                villagerInitBrain(this);
+                this.villagerBrain.trust = Math.max(0, this.villagerBrain.trust - 0.22);
                 this.alertT = 12;
                 this.seenThreatT = 14;
                 this.lastKnownPlayer = { x: player.pos.x, y: player.pos.y, z: player.pos.z, t: performance.now() };
+                villagerRemember(this, 'attack', 'Игрок напал рядом с X ' + Math.round(player.pos.x) + ', Z ' + Math.round(player.pos.z));
                 villagerSay(this, 'Помогите! Я видел нападение!', 3.0);
                 villagerRaiseAlarm(this, 'Нападение! Я видел, кто это сделал!');
             }
@@ -6742,6 +6746,86 @@
         while (a < -Math.PI) a += Math.PI * 2;
         return a;
     }
+    function villagerInitBrain(mob) {
+        if (!mob || mob.villagerBrain) return;
+        const id = mob.vilId || 'wanderer';
+        let seed = 0;
+        for (let i = 0; i < id.length; i++) seed = (seed * 31 + id.charCodeAt(i)) >>> 0;
+        seed = (seed + Math.floor(mob.pos.x * 17) + Math.floor(mob.pos.z * 23)) >>> 0;
+        mob.villagerBrain = {
+            trust: id === 'ivan' ? 0.62 : 0.5,
+            courage: 0.28 + ((seed % 37) / 100),
+            curiosity: 0.35 + (((seed >> 3) % 45) / 100),
+            sociability: 0.38 + (((seed >> 7) % 50) / 100),
+            memory: [],
+            learnedPlayerName: false
+        };
+        mob.needSocial = 4 + ((seed % 9) * 0.7);
+        mob.needLookAround = 1.5 + (((seed >> 4) % 8) * 0.35);
+        mob.calmT = 0;
+        mob.unstickCd = Math.random() * 0.5;
+    }
+    function villagerRemember(mob, kind, text) {
+        if (!mob || !mob.villagerBrain) return;
+        const mem = mob.villagerBrain.memory;
+        mem.push({ kind: kind, text: text, t: performance.now() });
+        while (mem.length > 8) mem.shift();
+    }
+    function villagerChooseSafetyPoint(mob) {
+        const spec = jobSpec(mob);
+        const px = (mob.lastKnownPlayer && mob.lastKnownPlayer.x != null) ? mob.lastKnownPlayer.x : player.pos.x;
+        const pz = (mob.lastKnownPlayer && mob.lastKnownPlayer.z != null) ? mob.lastKnownPlayer.z : player.pos.z;
+        const awayX = mob.pos.x - px;
+        const awayZ = mob.pos.z - pz;
+        const len = Math.hypot(awayX, awayZ) || 1;
+        const candidates = [];
+        candidates.push([mob.pos.x + awayX / len * 4.2, mob.pos.z + awayZ / len * 4.2]);
+        if (spec && spec.home) candidates.push([spec.home[0], spec.home[1]]);
+        candidates.push([VILLAGE_HUB[0], VILLAGE_HUB[1]]);
+        for (let i = 0; i < candidates.length; i++) {
+            const x = candidates[i][0], z = candidates[i][1];
+            if (villagerWalkable(x, z, 0.34) && !lineBlocked(mob.pos.x, mob.pos.z, x, z, mob.radius)) return { x: x, z: z };
+        }
+        return { x: VILLAGE_HUB[0], z: VILLAGE_HUB[1] };
+    }
+    function villagerUpdateMind(mob, dt, night) {
+        villagerInitBrain(mob);
+        const brain = mob.villagerBrain;
+        mob.needSocial = Math.max(0, (mob.needSocial || 0) - dt * (brain.sociability || 0.5));
+        mob.needLookAround = Math.max(0, (mob.needLookAround || 0) - dt * (brain.curiosity || 0.5));
+        mob.alertRetargetCd = Math.max(0, (mob.alertRetargetCd || 0) - dt);
+        if (mob.seesPlayer) {
+            brain.trust = Math.max(0, Math.min(1, brain.trust + dt * 0.002));
+            mob.calmT = Math.min(20, (mob.calmT || 0) + dt);
+        } else {
+            mob.calmT = Math.max(0, (mob.calmT || 0) - dt * 0.5);
+        }
+        if (mob.seenThreatT > 0) brain.trust = Math.max(0, brain.trust - dt * 0.01);
+        if (!night && mob.needLookAround <= 0 && mob.state === 'work' && mob.jobPhase !== 'alert') {
+            mob.needLookAround = 4 + Math.random() * 5;
+            mob.jobFace = mob.yaw + (Math.random() - 0.5) * 1.4;
+        }
+        if (!night && mob.seenThreatT > 0 && mob.alertRetargetCd <= 0 && mob.nightStep == null && mob.jobPhase !== 'alert') {
+            const safe = villagerChooseSafetyPoint(mob);
+            if (safe) {
+                mob.alertRetargetCd = 2.0;
+                mob.jobPhase = 'alert';
+                mob.jobTimer = 3.5 + Math.random() * 2.5;
+                if (villagerPlanRoute(mob, safe.x, safe.z) && mob.brainWay.length) {
+                    mob.workWay = mob.brainWay.slice();
+                    const p = mob.workWay.shift();
+                    mob.jobTarget = { x: p[0], z: p[1] };
+                    if (mob.workWay.length) mob.jobPhase = 'workpath';
+                } else {
+                    mob.jobTarget = safe;
+                }
+                if ((mob.talkCd || 0) <= 0 && Math.random() < 0.35) {
+                    mob.talkCd = 8;
+                    villagerSay(mob, 'Я отойду. Я видел опасность.', 2.6);
+                }
+            }
+        }
+    }
     function villagerEyePos(mob) {
         return new THREE.Vector3(mob.pos.x, mob.pos.y + Math.min(1.55, mob.height * 0.86), mob.pos.z);
     }
@@ -7247,6 +7331,7 @@
         }
         const specNow = jobSpec(mob);
         villagerObserveWorld(mob, dt, night);
+        villagerUpdateMind(mob, dt, night);
         if (night && specNow.door && mob.nightStep === 'inside' && !isInsideHouse(mob, specNow)) {
             startNightWalk(mob);
         }
@@ -7300,7 +7385,15 @@
             }
         }
         mob.jobTimer = (mob.jobTimer || 0) - dt;
-        if (mob.nightStep !== 'enter' && mob.nightStep !== 'leave') unstickVillager(mob);
+        if (mob.nightStep !== 'enter' && mob.nightStep !== 'leave') {
+            mob.unstickCd = (mob.unstickCd || 0) - dt;
+            if (mob.unstickCd <= 0) {
+                const movingOrLost = mob.state === 'walk' || mob.needRepath || mob.jobPhase === 'workpath';
+                const actuallyStuck = movingOrLost ? villagerOnObstacle(mob) : false;
+                if (movingOrLost || actuallyStuck) unstickVillager(mob);
+                mob.unstickCd = movingOrLost ? 0.35 : 1.1;
+            }
+        }
         if (!mob.jobTarget) pickNextJobPhase(mob, night);
         const t = mob.jobTarget;
         if (!t) return;
@@ -7415,6 +7508,18 @@
             mob.stateTimer = 1.5;
             mob.vel.x = 0;
             mob.vel.z = 0;
+            mob.stuckT = 0;
+            mob.needRepath = false;
+            mob._seeBlocked = false;
+            if (!mob.nightStep && dist > 0.015 && dist < 0.55 && villagerWalkable(t.x, t.z, mob.radius * 0.92, villagerFeetY(mob))) {
+                const ease = Math.min(1, dt * 2.4);
+                mob.pos.x += dx * ease;
+                mob.pos.z += dz * ease;
+                if (dist < 0.06) {
+                    mob.pos.x = t.x;
+                    mob.pos.z = t.z;
+                }
+            }
             if (mob.jobFace != null && mob.nightStep !== 'enter' && mob.nightStep !== 'leave' && mob.nightStep !== 'path') {
                 let dy = mob.jobFace - mob.yaw;
                 while (dy > Math.PI) dy -= Math.PI * 2;
@@ -7455,6 +7560,9 @@
                 startWorkWalk(mob);
             } else if (mob.nightStep === 'inside') {
                 mob.state = 'work';
+            } else if (mob.jobPhase === 'alert' && mob.jobTimer <= 0) {
+                mob.seenThreatT = Math.max(0, (mob.seenThreatT || 0) - 2);
+                pickNextJobPhase(mob, night);
             } else if (mob.jobTimer <= 0) {
                 const spec = jobSpec(mob);
                 if (spec.lines && Math.random() < 0.45) {
@@ -9133,6 +9241,33 @@
     function playerBio() {
         return biomeTitle(biomeAt(Math.floor(player.pos.x), Math.floor(player.pos.z)));
     }
+    function villagerCount(type) {
+        return typeof countInvType === 'function' ? countInvType(type) : 0;
+    }
+    function villagerKnowsTool() {
+        return storyHas(ITEM_WOOD_PICK) || storyHas(ITEM_STONE_PICK) || storyHas(ITEM_IRON_PICK) || storyHas(ITEM_DIAMOND_PICK);
+    }
+    function villagerGameAdvice(mob, text) {
+        villagerInitBrain(mob);
+        const bio = playerBio();
+        const hp = Math.round(player.health || 0);
+        const night = (typeof cycleTimer === 'number' && cycleTimer >= DAY_DURATION);
+        const held = heldType ? heldType() : 0;
+        const trust = mob.villagerBrain ? mob.villagerBrain.trust : 0.5;
+        if (hp <= 8) return 'Сначала выживи: у тебя мало здоровья. Найди мясо, приготовь в печи или съешь жаркое. Не дерись, пока сердца не восстановятся.';
+        if (/ноч|темн|спать/.test(text) || night) return 'Ночью не геройствуй. Держись факелов и домов, закрывай двери. Если есть кровать — поставь её в безопасном месте и спи.';
+        if (/еда|голод|леч/.test(text)) return 'Еда проще всего с животных. Мясо лучше жарить: печь из восьми камней, топливо — дерево, доски, палки или уголь.';
+        if (/лодк|море|остров|плыть/.test(text)) return storyHas(ITEM_BOAT) ? 'Лодка уже есть — держись берега, высматривай новые биомы и не выходи в океан ночью.' : 'Для островов нужна лодка: пять досок в форме чаши. Без лодки дальняя вода опасна.';
+        if (/руд|желез|алмаз|угол|шахт/.test(text)) return 'Руды ищи в камне: уголь выше, железо до высоты 72, золото глубже, алмазы ближе к низу мира. Бери кирку и факелы.';
+        if (!storyHas(BLOCK_WOOD) && !storyHas(BLOCK_PLANKS)) return 'Начни как в настоящем Minecraft: сломай дерево. Из дерева сделай доски, из досок — верстак.';
+        if (!storyHas(BLOCK_CRAFT)) return 'Тебе нужен верстак. Сделай четыре доски и положи их квадратом 2 на 2. После этого откроются инструменты.';
+        if (!villagerKnowsTool()) return 'Сделай кирку: три доски сверху и две палки по центру. Потом добудь камень и сделай каменную кирку.';
+        if (!storyHas(BLOCK_FURNACE) && villagerCount(BLOCK_STONE) >= 8) return 'У тебя хватает камня на печь. Сложи восемь камней кольцом — сможешь жарить мясо и плавить руду.';
+        if (!storyHas(ITEM_IRON_INGOT) && storyHas(BLOCK_IRON_ORE)) return 'Я вижу путь развития: переплавь железную руду в печи. Железная кирка откроет больше возможностей.';
+        if (bio.indexOf('Пустын') >= 0 || bio.indexOf('Меса') >= 0) return 'В этом биоме мало дерева. Экономь доски, ищи кактус и камень, а для еды лучше вернуться к травяным островам.';
+        if (held && isSwordItem(held) && trust < 0.35) return 'Совет? Сначала убери меч. Жители запоминают опасность, доверие возвращается не сразу.';
+        return 'План такой: дерево → верстак → кирка → камень → печь → железо → лодка. Осматривай биомы, ставь факелы и всегда держи еду в хотбаре.';
+    }
 
     const VILLAGER_GOSSIP = [
         'Колодец сегодня чистый.',
@@ -9239,6 +9374,15 @@
             if (mob.seesPlayer) return 'Да. Я вижу тебя прямо сейчас: расстояние примерно ' + Math.round(mob._visionDist || mob.pos.distanceTo(player.pos)) + ' блоков, преград нет.';
             if (mob.lastKnownPlayer && (mob.seenPlayerT || 0) > 0) return 'Сейчас потерял из виду, но помню, где ты был: рядом с X ' + Math.round(mob.lastKnownPlayer.x) + ', Z ' + Math.round(mob.lastKnownPlayer.z) + '.';
             return 'Я смотрю глазами, а не магией: стены, двери и темнота мешают. Выйди на свет или подойди ближе.';
+        }
+        if (/совет|что делать|научи|игр|крафт|выжить|дальше|помоги|ресурс|еда|ноч|руда|желез|алмаз|лодк|печ/.test(t)) {
+            return villagerGameAdvice(mob, t);
+        }
+        if (/помнишь|память|довер/.test(t)) {
+            villagerInitBrain(mob);
+            const trustPct = Math.round((mob.villagerBrain.trust || 0) * 100);
+            const last = mob.villagerBrain.memory.length ? mob.villagerBrain.memory[mob.villagerBrain.memory.length - 1].text : 'ничего плохого не помню';
+            return 'Доверие к тебе: ' + trustPct + ' из 100. Последнее важное воспоминание: ' + last + '.';
         }
         if (/привет|здравст|хай|hello|добрый/.test(t)) {
             if (id === 'ivan') return talks === 1 ? 'Я Иван, староста Тихой Заводи. Тебя вынесло той же бурей, что расколола мир на острова. Слушай нас — и поймёшь, кто ты.' : ('Снова ты. Глава ' + (story.chapter + 1) + ' твоей истории ещё пишется.');
