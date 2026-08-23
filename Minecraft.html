@@ -1262,7 +1262,7 @@
     const CHUNK_SIZE = 16;
     const CHUNK_HEIGHT = 128;
     const WATER_LEVEL = 63;
-    const RENDER_DISTANCE = 1; // телефон: меньше чанков вокруг = стабильнее FPS
+    const RENDER_DISTANCE = 2; // Tecno Pova Neo 3 8 ГБ: возвращаем нормальную дальность без мыла
 
     const BLOCK_EMPTY  = 0;
     const BLOCK_GRASS  = 1;
@@ -3902,12 +3902,15 @@
     }
     const IS_TOUCH_PHONE = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
     const PERF = {
-        pixelRatio: Math.min(window.devicePixelRatio || 1, IS_TOUCH_PHONE ? 0.86 : 1.15),
-        minPixelRatio: 0.58,
-        speechEvery: IS_TOUCH_PHONE ? 0.18 : 0.10,
-        socialEvery: IS_TOUCH_PHONE ? 0.45 : 0.25,
-        mobCap: IS_TOUCH_PHONE ? 8 : 18,
-        mobHardCap: IS_TOUCH_PHONE ? 10 : 20,
+        // Tecno Pova Neo 3 8 ГБ тянет картинку лучше, чем самый слабый режим.
+        // Оптимизируем логикой и частотой обновлений, а не сильным замыливанием.
+        pixelRatio: Math.min(window.devicePixelRatio || 1, IS_TOUCH_PHONE ? 1.05 : 1.25),
+        minPixelRatio: 0.82,
+        maxPixelRatio: Math.min(window.devicePixelRatio || 1, IS_TOUCH_PHONE ? 1.08 : 1.25),
+        speechEvery: IS_TOUCH_PHONE ? 0.22 : 0.10,
+        socialEvery: IS_TOUCH_PHONE ? 0.55 : 0.25,
+        mobCap: IS_TOUCH_PHONE ? 12 : 18,
+        mobHardCap: IS_TOUCH_PHONE ? 14 : 20,
         adaptiveCooldown: 0
     };
     let renderer;
@@ -5973,7 +5976,23 @@
 
         for (let i = mobs.length - 1; i >= 0; i--) {
             const mob = mobs[i];
-            try { mob.update(dt); } catch (err) { console.error(err); }
+            let stepDt = dt;
+            let skipMobUpdate = false;
+            if (IS_TOUCH_PHONE && mob.type !== 'villager' && mob.type !== 'golem' && !mob.tamed && !mob.ridden && !mob.onShoulder) {
+                const pd = mob.pos.distanceTo(player.pos);
+                if (pd > 34) {
+                    mob._farAccum = (mob._farAccum || 0) + dt;
+                    const cadence = pd > 52 ? 0.34 : 0.22;
+                    if (mob._farAccum < cadence) skipMobUpdate = true;
+                    else {
+                        stepDt = Math.min(mob._farAccum, 0.075);
+                        mob._farAccum = 0;
+                    }
+                }
+            }
+            if (!skipMobUpdate) {
+                try { mob.update(stepDt); } catch (err) { console.error(err); }
+            }
 
             if (mob.health <= 0) {
                 const x = mob.pos.x - 0.5, y = mob.pos.y, z = mob.pos.z - 0.5;
@@ -6044,7 +6063,7 @@
                 continue;
             }
 
-            const farLimit = IS_TOUCH_PHONE ? 54 : 96;
+            const farLimit = IS_TOUCH_PHONE ? 72 : 96;
             if (!mob.tamed && !mob.ridden && !mob.onShoulder && mob.type !== 'villager' && mob.type !== 'golem' && mob.pos.distanceTo(player.pos) > farLimit) {
                 mob.dispose();
                 mobs.splice(i, 1);
@@ -10527,7 +10546,8 @@
     // --- 13. GAME LOOP ---
     let lastTime = performance.now();
     let frameCount = 0, fpsTimer = 0;
-    let speechAcc = 0, socialAcc = 0, torchAcc = 0;
+    let speechAcc = 0, socialAcc = 0, torchAcc = 0, chunkAcc = 999;
+    let lastChunkCX = null, lastChunkCZ = null;
     const statsEl = document.getElementById('stats').firstElementChild;
 
     updateInfiniteChunks(player.pos.x, player.pos.z);
@@ -10579,12 +10599,18 @@
             announceBiome(bioNow);
             if (IS_TOUCH_PHONE) {
                 PERF.adaptiveCooldown = Math.max(0, PERF.adaptiveCooldown - 1);
-                if (frameCount < 42 && PERF.pixelRatio > PERF.minPixelRatio && PERF.adaptiveCooldown <= 0) {
-                    PERF.pixelRatio = Math.max(PERF.minPixelRatio, PERF.pixelRatio - 0.08);
+                if (frameCount < 30 && PERF.pixelRatio > PERF.minPixelRatio && PERF.adaptiveCooldown <= 0) {
+                    PERF.pixelRatio = Math.max(PERF.minPixelRatio, PERF.pixelRatio - 0.05);
                     renderer.setPixelRatio(PERF.pixelRatio);
                     const s = viewSize();
                     renderer.setSize(s.w, s.h, false);
-                    PERF.adaptiveCooldown = 3;
+                    PERF.adaptiveCooldown = 4;
+                } else if (frameCount > 54 && PERF.pixelRatio < PERF.maxPixelRatio && PERF.adaptiveCooldown <= 0) {
+                    PERF.pixelRatio = Math.min(PERF.maxPixelRatio, PERF.pixelRatio + 0.03);
+                    renderer.setPixelRatio(PERF.pixelRatio);
+                    const s = viewSize();
+                    renderer.setSize(s.w, s.h, false);
+                    PERF.adaptiveCooldown = 5;
                 }
             }
             frameCount = 0;
@@ -10622,7 +10648,15 @@
         }
         updateFirstPersonArm(dt);
         updateMining(dt);
-        updateInfiniteChunks(player.pos.x, player.pos.z);
+        chunkAcc += dt;
+        const pcx = Math.floor(player.pos.x / CHUNK_SIZE);
+        const pcz = Math.floor(player.pos.z / CHUNK_SIZE);
+        if (chunkAcc >= (IS_TOUCH_PHONE ? 0.28 : 0.12) || pcx !== lastChunkCX || pcz !== lastChunkCZ) {
+            updateInfiniteChunks(player.pos.x, player.pos.z);
+            lastChunkCX = pcx;
+            lastChunkCZ = pcz;
+            chunkAcc = 0;
+        }
 
         if (miningHold && mining) {
             highlightBox.position.set(mining.x + 0.5, mining.y + 0.5, mining.z + 0.5);
