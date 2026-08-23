@@ -1166,6 +1166,7 @@
 
 
 
+
     window.addEventListener('error', function (e) {
         const el = document.getElementById('boot-error');
         if (!el || el.dataset.shown === '1') return;
@@ -6873,6 +6874,17 @@
     }
     function startWorkWalk(mob) {
         const spec = jobSpec(mob);
+        if (spec.door && isInsideHouse(mob, spec)) {
+            villagerTapDoor(mob, true, false);
+            lockToDoorAxis(mob, spec);
+            mob.nightStep = 'leave';
+            mob.thruDoor = true;
+            mob.leaveT = 0;
+            mob.jobTarget = { x: spec.approach[0], z: spec.approach[1] };
+            mob.jobPhase = 'leave';
+            mob.state = 'walk';
+            return;
+        }
         mob.nightStep = null;
         mob.thruDoor = false;
         const dest = (spec.sites && spec.sites[0]) ? spec.sites[0] : VILLAGE_HUB;
@@ -6927,25 +6939,54 @@
         if (night && specNow.door && (!mob.nightStep || mob.nightStep === 'workpath')) {
             startNightWalk(mob);
         }
-        if (!night && mob.nightStep) {
-            if (mob.nightStep === 'inside' || mob.nightStep === 'enter') {
-                villagerTapDoor(mob, true, false);
-                lockToDoorAxis(mob, specNow);
-                mob.nightStep = 'leave';
-                mob.thruDoor = true;
-                mob.jobTarget = { x: specNow.approach[0], z: specNow.approach[1] };
-                mob.jobPhase = 'leave';
-                mob.jobTimer = 12;
-                mob.state = 'walk';
-                return;
-            }
+        if (!night && specNow.door && (mob.nightStep === 'inside' || mob.nightStep === 'enter' ||
+                (isInsideHouse(mob, specNow) && mob.nightStep !== 'leave'))) {
+            villagerTapDoor(mob, true, false);
+            lockToDoorAxis(mob, specNow);
+            mob.nightStep = 'leave';
+            mob.thruDoor = true;
+            mob.leaveT = 0;
+            mob.jobTarget = { x: specNow.approach[0], z: specNow.approach[1] };
+            mob.jobPhase = 'leave';
+            mob.jobTimer = 14;
+            mob.state = 'walk';
+            return;
+        }
+        if (!night && mob.nightStep && mob.nightStep !== 'leave') {
             mob.nightStep = null;
             mob.thruDoor = false;
             startWorkWalk(mob);
             return;
         }
+        if (!night && mob.nightStep === 'leave') {
+            mob.leaveT = (mob.leaveT || 0) + dt;
+            mob.doorRetry = (mob.doorRetry || 0) - dt;
+            if (mob.doorRetry <= 0) {
+                villagerTapDoor(mob, true, false);
+                mob.doorRetry = 0.6;
+                mob.doorWait = 0;
+            }
+            if (!isInsideHouse(mob, specNow) &&
+                Math.hypot(mob.pos.x - specNow.approach[0], mob.pos.z - specNow.approach[1]) < 1.5) {
+                villagerTapDoor(mob, false);
+                mob.nightStep = null;
+                mob.thruDoor = false;
+                startWorkWalk(mob);
+                return;
+            }
+            if (mob.leaveT > 8) {
+                mob.pos.x = specNow.approach[0];
+                mob.pos.z = specNow.approach[1];
+                mob.pos.y = VILLAGE_Y + 1.05;
+                villagerTapDoor(mob, false);
+                mob.nightStep = null;
+                mob.thruDoor = false;
+                startWorkWalk(mob);
+                return;
+            }
+        }
         mob.jobTimer = (mob.jobTimer || 0) - dt;
-        unstickVillager(mob);
+        if (mob.nightStep !== 'enter' && mob.nightStep !== 'leave') unstickVillager(mob);
         if (!mob.jobTarget) pickNextJobPhase(mob, night);
         const t = mob.jobTarget;
         if (!t) return;
@@ -7011,7 +7052,7 @@
             }
         }
 
-        if (mob.nightStep === 'inside') {
+        if (night && mob.nightStep === 'inside') {
             if (!isInsideHouse(mob, specNow)) {
                 startNightWalk(mob);
                 return;
@@ -9849,78 +9890,10 @@
 
 
 
+
 </script>
 
 <!--DOWNLOAD-PAD
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
