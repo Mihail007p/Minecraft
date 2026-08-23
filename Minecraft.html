@@ -391,6 +391,72 @@
             border-color: rgba(180, 200, 255, 0.55);
             box-shadow: 0 0 10px rgba(120, 150, 255, 0.45);
         }
+        #btn-sandbox {
+            position: absolute;
+            top: 166px;
+            right: 10px;
+            width: 44px;
+            height: 44px;
+            border-radius: 8px;
+            border: 2px solid rgba(255, 255, 255, 0.25);
+            background: rgba(0, 0, 0, 0.55);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: auto;
+            z-index: 20;
+            backdrop-filter: blur(4px);
+            font-size: 21px;
+            line-height: 1;
+        }
+        #btn-sandbox:active { background: rgba(255, 255, 255, 0.35); transform: scale(0.92); }
+        #sandbox-overlay {
+            position: absolute; inset: 0;
+            background: rgba(0,0,0,0.58);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 87;
+            pointer-events: auto;
+        }
+        #sandbox-panel {
+            width: min(380px, 94vw);
+            max-height: 76vh;
+            overflow-y: auto;
+            background: #c6c6c6;
+            border: 3px solid #000;
+            padding: 10px;
+            color: #222;
+            font-family: "Courier New", monospace;
+            box-shadow: 4px 4px 0 rgba(0,0,0,0.45);
+        }
+        #sandbox-panel h2 { font-size: 15px; margin: 0 0 6px; }
+        #sandbox-panel p { font-size: 12px; line-height: 1.3; margin: 0 0 8px; }
+        #sandbox-panel button {
+            display: block;
+            width: 100%;
+            margin: 5px 0;
+            padding: 9px 8px;
+            border: 2px solid #373737;
+            background: #5a8f3a;
+            color: #fff;
+            font-weight: bold;
+            font-size: 13px;
+        }
+        #sandbox-panel button.alt { background: #8b8b8b; }
+        #sandbox-log {
+            margin-top: 8px;
+            padding: 7px;
+            min-height: 90px;
+            max-height: 28vh;
+            overflow-y: auto;
+            background: #171717;
+            color: #d6ffd1;
+            font-size: 11px;
+            line-height: 1.35;
+            white-space: pre-wrap;
+        }
 
         #inv-overlay {
             position: absolute;
@@ -1013,6 +1079,19 @@
     </div>
 
     <div id="btn-night" title="Ночь">🌙</div>
+    <div id="btn-sandbox" title="Песочница жителей">🧪</div>
+
+    <div id="sandbox-overlay">
+        <div id="sandbox-panel">
+            <h2>Песочница жителей</h2>
+            <p>Тесты проверяют зрение, память, советы, тревогу, путь и дрожание жителей прямо в игре.</p>
+            <button type="button" id="sandbox-audit">Аудит жителей</button>
+            <button type="button" id="sandbox-village">Полигон у деревни</button>
+            <button type="button" id="sandbox-calm">Успокоить и стабилизировать</button>
+            <button type="button" id="sandbox-close" class="alt">Закрыть</button>
+            <div id="sandbox-log">Готов к тесту.</div>
+        </div>
+    </div>
 
     <div id="inv-overlay">
         <div id="inv-panel">
@@ -3823,12 +3902,12 @@
     }
     const IS_TOUCH_PHONE = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
     const PERF = {
-        pixelRatio: Math.min(window.devicePixelRatio || 1, IS_TOUCH_PHONE ? 1.0 : 1.15),
-        minPixelRatio: 0.72,
+        pixelRatio: Math.min(window.devicePixelRatio || 1, IS_TOUCH_PHONE ? 0.86 : 1.15),
+        minPixelRatio: 0.58,
         speechEvery: IS_TOUCH_PHONE ? 0.18 : 0.10,
         socialEvery: IS_TOUCH_PHONE ? 0.45 : 0.25,
-        mobCap: IS_TOUCH_PHONE ? 12 : 18,
-        mobHardCap: IS_TOUCH_PHONE ? 14 : 20,
+        mobCap: IS_TOUCH_PHONE ? 8 : 18,
+        mobHardCap: IS_TOUCH_PHONE ? 10 : 20,
         adaptiveCooldown: 0
     };
     let renderer;
@@ -5965,9 +6044,28 @@
                 continue;
             }
 
-            if (!mob.tamed && !mob.ridden && !mob.onShoulder && mob.pos.distanceTo(player.pos) > 96) {
+            const farLimit = IS_TOUCH_PHONE ? 54 : 96;
+            if (!mob.tamed && !mob.ridden && !mob.onShoulder && mob.type !== 'villager' && mob.type !== 'golem' && mob.pos.distanceTo(player.pos) > farLimit) {
                 mob.dispose();
                 mobs.splice(i, 1);
+            }
+        }
+        if (IS_TOUCH_PHONE && mobs.length > PERF.mobHardCap) {
+            const keep = [];
+            const extra = [];
+            for (let i = 0; i < mobs.length; i++) {
+                const m = mobs[i];
+                if (m.type === 'villager' || m.type === 'golem' || m.tamed || m.ridden || m.onShoulder) keep.push(m);
+                else extra.push(m);
+            }
+            extra.sort(function (a, b) { return b.pos.distanceTo(player.pos) - a.pos.distanceTo(player.pos); });
+            while (keep.length + extra.length > PERF.mobHardCap && extra.length) {
+                const m = extra.shift();
+                const idx = mobs.indexOf(m);
+                if (idx >= 0) {
+                    m.dispose();
+                    mobs.splice(idx, 1);
+                }
             }
         }
     }
@@ -7542,7 +7640,7 @@
                     mob.pos.z = t.z;
                 }
             }
-            if (mob.jobFace != null && mob.nightStep !== 'enter' && mob.nightStep !== 'leave' && mob.nightStep !== 'path') {
+            if (mob.jobFace != null && !mob.seesPlayer && chatMob !== mob && mob.nightStep !== 'enter' && mob.nightStep !== 'leave' && mob.nightStep !== 'path') {
                 let dy = mob.jobFace - mob.yaw;
                 while (dy > Math.PI) dy -= Math.PI * 2;
                 while (dy < -Math.PI) dy += Math.PI * 2;
@@ -8496,9 +8594,14 @@
             ['anna', 22.5, 20.5],
             ['gleb', 10.5, 4.5]
         ];
+        function hasVillager(id) {
+            for (let i = 0; i < mobs.length; i++) if (mobs[i].type === 'villager' && mobs[i].vilId === id && mobs[i].health > 0) return true;
+            return false;
+        }
         for (let i = 0; i < spots.length; i++) {
-            if (mobs.length >= 20) break;
+            if (mobs.length >= PERF.mobHardCap + 6) break;
             const id = spots[i][0], x = spots[i][1], z = spots[i][2];
+            if (hasVillager(id)) continue;
             const card = VILLAGER_STORY[id];
             const m = new Mob('villager', x, VILLAGE_Y + 1.05, z, {
                 vilId: id,
@@ -8507,7 +8610,9 @@
             assignVillagerJob(m);
             mobs.push(m);
         }
-        if (mobs.length < 20) {
+        let hasGolem = false;
+        for (let i = 0; i < mobs.length; i++) if (mobs[i].type === 'golem' && mobs[i].health > 0) { hasGolem = true; break; }
+        if (!hasGolem && mobs.length < PERF.mobHardCap + 6) {
             const g = new Mob('golem', VILLAGE_OX + 0.5, VILLAGE_Y + 1.05, VILLAGE_OZ + 3.5);
             g.homeX = VILLAGE_OX + 0.5;
             g.homeZ = VILLAGE_OZ + 0.5;
@@ -8948,13 +9053,14 @@
         if (touchHitsRect(touch, document.getElementById('btn-fullscreen'), 8)) return true;
         if (touchHitsRect(touch, document.getElementById('btn-inventory'), 8)) return true;
         if (touchHitsRect(touch, document.getElementById('btn-night'), 8)) return true;
+        if (touchHitsRect(touch, document.getElementById('btn-sandbox'), 8)) return true;
         if (touchHitsRect(touch, document.getElementById('respawn-btn'), 8)) return true;
         if (touchHitsRect(touch, document.querySelector('.btn-group'), 8)) return true;
         const t = touch.target;
         if (!t || !t.closest) return false;
         return !!(t.closest('#hotbar') || t.closest('.slot') || t.closest('.action-btn') ||
-                  t.closest('#respawn-btn') || t.closest('#btn-fullscreen') || t.closest('#btn-inventory') || t.closest('#btn-night') ||
-                  t.closest('#inv-overlay') || t.closest('#trade-overlay') || t.closest('#chat-overlay') || t.closest('#death-screen'));
+                  t.closest('#respawn-btn') || t.closest('#btn-fullscreen') || t.closest('#btn-inventory') || t.closest('#btn-night') || t.closest('#btn-sandbox') ||
+                  t.closest('#inv-overlay') || t.closest('#trade-overlay') || t.closest('#chat-overlay') || t.closest('#sandbox-overlay') || t.closest('#death-screen'));
     }
 
     window.addEventListener('touchstart', (e) => {
@@ -9988,6 +10094,95 @@
     window.addEventListener('resize', fitRenderer);
     window.addEventListener('orientationchange', function () { setTimeout(fitRenderer, 200); });
 
+    let sandboxOpen = false;
+    function sandboxWrite(text) {
+        const el = document.getElementById('sandbox-log');
+        if (el) el.textContent = text;
+    }
+    function setSandboxOpen(on) {
+        sandboxOpen = !!on;
+        const ov = document.getElementById('sandbox-overlay');
+        if (ov) ov.style.display = sandboxOpen ? 'flex' : 'none';
+    }
+    function villagerList() {
+        const out = [];
+        for (let i = 0; i < mobs.length; i++) if (mobs[i].type === 'villager' && mobs[i].health > 0) out.push(mobs[i]);
+        return out;
+    }
+    function calmVillagers() {
+        const vs = villagerList();
+        for (let i = 0; i < vs.length; i++) {
+            const v = vs[i];
+            villagerInitBrain(v);
+            v.alertT = 0; v.seenThreatT = 0; v.seenPlayerT = 0; v.needRepath = false; v.stuckT = 0;
+            v.vel.set(0, 0, 0); v.state = 'work'; v.stateTimer = 2; v.talkWith = null;
+            const gy = getSurfaceY(Math.floor(v.pos.x), Math.floor(v.pos.z)) + 0.05;
+            if (Math.abs(v.pos.y - gy) < 3 && !checkSolidCollision(v.pos.x, gy, v.pos.z, v.radius, v.height, true)) {
+                v.pos.y = gy; v.onGround = true;
+            }
+        }
+        sandboxWrite('Стабилизация: жителей ' + vs.length + '. Тревога снята, скорость обнулена, высота выровнена.');
+        showInvToast('Жители стабилизированы');
+    }
+    function setupVillagerSandbox() {
+        setSandboxOpen(false);
+        player.pos.set(VILLAGE_OX + 0.5, VILLAGE_Y + 1.05, VILLAGE_OZ - 4.5);
+        player.vel.set(0, 0, 0);
+        player.yaw = Math.PI;
+        player.pitch = 0;
+        camera.position.set(player.pos.x, player.pos.y + player.eyeHeight, player.pos.z);
+        updateInfiniteChunks(player.pos.x, player.pos.z);
+        seedVillageMobs();
+        calmVillagers();
+        showInvToast('Полигон жителей: деревня, зрение, диалоги, тревога');
+        setTimeout(function () { setSandboxOpen(true); }, 120);
+    }
+    function runVillagerSandboxAudit() {
+        const log = [];
+        function ok(name, pass, detail) { log.push((pass ? '✅ ' : '❌ ') + name + (detail ? ' — ' + detail : '')); return !!pass; }
+        try {
+            seedVillageMobs();
+            const vs = villagerList();
+            ok('Найдено жителей', vs.length >= 5, String(vs.length));
+            for (let i = 0; i < vs.length; i++) villagerInitBrain(vs[i]);
+            ok('Мозг/память подключены', vs.every(function (v) { return !!v.villagerBrain && Array.isArray(v.villagerBrain.memory); }), 'trust + memory');
+            const ivan = vs.filter(function (v) { return v.vilId === 'ivan'; })[0] || vs[0];
+            const saved = { px: player.pos.x, py: player.pos.y, pz: player.pos.z, yaw: player.yaw, vx: ivan.pos.x, vy: ivan.pos.y, vz: ivan.pos.z, vyaw: ivan.yaw };
+            ivan.pos.set(VILLAGE_OX + 0.5, VILLAGE_Y + 1.05, VILLAGE_OZ + 0.5);
+            ivan.vel.set(0, 0, 0); ivan.yaw = 0; ivan.state = 'work'; ivan.onGround = true;
+            player.pos.set(ivan.pos.x, ivan.pos.y, ivan.pos.z + 4.0);
+            const seesOpen = villagerCanSeePlayer(ivan, 8);
+            ok('Зрение без стены', seesOpen, 'дистанция ' + Math.round(ivan._visionDist || 0));
+            const wx = Math.floor(ivan.pos.x), wz = Math.floor(ivan.pos.z + 2);
+            const old1 = getBlock(wx, VILLAGE_Y + 1, wz), old2 = getBlock(wx, VILLAGE_Y + 2, wz);
+            setBlock(wx, VILLAGE_Y + 1, wz, BLOCK_STONE, true);
+            setBlock(wx, VILLAGE_Y + 2, wz, BLOCK_STONE, true);
+            const seesWall = villagerCanSeePlayer(ivan, 8);
+            ok('Стена закрывает обзор', !seesWall, 'луч зрения блокируется');
+            setBlock(wx, VILLAGE_Y + 1, wz, old1, true);
+            setBlock(wx, VILLAGE_Y + 2, wz, old2, true);
+            const beforeTrust = ivan.villagerBrain.trust;
+            villagerRemember(ivan, 'test', 'Проверка памяти песочницы');
+            ok('Память записывает события', ivan.villagerBrain.memory.length > 0, ivan.villagerBrain.memory[ivan.villagerBrain.memory.length - 1].text);
+            ok('Советник отвечает по игре', villagerGameAdvice(ivan, 'что делать дальше').length > 20, villagerGameAdvice(ivan, 'руда').slice(0, 34) + '...');
+            ok('Маршрут к рабочей точке', villagerPlanRoute(ivan, VILLAGE_HUB[0], VILLAGE_HUB[1]), 'path ' + ((ivan.brainWay && ivan.brainWay.length) || 0));
+            const sx = ivan.pos.x, sy = ivan.pos.y, sz = ivan.pos.z;
+            ivan.jobTarget = { x: sx, z: sz }; ivan.jobFace = ivan.yaw; ivan.state = 'work'; ivan.vel.set(0,0,0); ivan.onGround = true;
+            for (let i = 0; i < 45; i++) ivan.update(1 / 30);
+            const drift = Math.hypot(ivan.pos.x - sx, ivan.pos.z - sz) + Math.abs(ivan.pos.y - sy);
+            ok('Антидрожание на месте', drift < 0.08, 'сдвиг ' + drift.toFixed(3));
+            ivan.villagerBrain.trust = beforeTrust;
+            ivan.pos.set(saved.vx, saved.vy, saved.vz); ivan.yaw = saved.vyaw; ivan.vel.set(0,0,0); ivan.state = 'work';
+            player.pos.set(saved.px, saved.py, saved.pz); player.yaw = saved.yaw;
+            camera.position.set(player.pos.x, player.pos.y + player.eyeHeight, player.pos.z);
+            sandboxWrite(log.join('\n') + '\n\nИтог: проверены зрение, преграды, память, советы, путь и стояние без тряски.');
+            showInvToast('Аудит жителей завершён');
+        } catch (e) {
+            console.error(e);
+            sandboxWrite(log.join('\n') + '\n❌ Ошибка теста: ' + (e && e.message ? e.message : e));
+        }
+    }
+
     const btnFullscreen = document.getElementById('btn-fullscreen');
     const fsIconEnter = document.getElementById('fs-icon-enter');
     const fsIconExit = document.getElementById('fs-icon-exit');
@@ -10050,6 +10245,21 @@
         btnNight.addEventListener('touchstart', toggleForcedNight, { passive: false });
         btnNight.addEventListener('click', toggleForcedNight);
     }
+    (function bindSandboxUi() {
+        const btn = document.getElementById('btn-sandbox');
+        const ov = document.getElementById('sandbox-overlay');
+        const close = document.getElementById('sandbox-close');
+        const audit = document.getElementById('sandbox-audit');
+        const village = document.getElementById('sandbox-village');
+        const calm = document.getElementById('sandbox-calm');
+        function tap(fn) { return function (e) { if (e) { e.preventDefault(); e.stopPropagation(); } fn(); }; }
+        if (btn) { btn.addEventListener('touchstart', tap(function () { setSandboxOpen(true); }), { passive: false }); btn.addEventListener('click', tap(function () { setSandboxOpen(true); })); }
+        if (close) { close.addEventListener('touchstart', tap(function () { setSandboxOpen(false); }), { passive: false }); close.addEventListener('click', tap(function () { setSandboxOpen(false); })); }
+        if (audit) { audit.addEventListener('touchstart', tap(runVillagerSandboxAudit), { passive: false }); audit.addEventListener('click', tap(runVillagerSandboxAudit)); }
+        if (village) { village.addEventListener('touchstart', tap(setupVillagerSandbox), { passive: false }); village.addEventListener('click', tap(setupVillagerSandbox)); }
+        if (calm) { calm.addEventListener('touchstart', tap(calmVillagers), { passive: false }); calm.addEventListener('click', tap(calmVillagers)); }
+        if (ov) ov.addEventListener('click', function (e) { if (e.target === ov) setSandboxOpen(false); });
+    })();
     document.getElementById('inv-close').addEventListener('touchstart', (e) => { e.preventDefault(); setInventoryOpen(false); }, { passive: false });
     document.getElementById('inv-close').addEventListener('click', () => setInventoryOpen(false));
     (function bindTrade() {
