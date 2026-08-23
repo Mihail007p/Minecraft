@@ -4,6 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Minecraft Classic Water - Tecno Pova Neo 3</title>
+    <meta name="theme-color" content="#2e7d32">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="Minecraft Water">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <style>
         * {
             box-sizing: border-box;
@@ -1000,6 +1005,54 @@
             z-index: 40;
             white-space: nowrap;
         }
+        #install-banner {
+            position: absolute;
+            left: 10px;
+            right: 10px;
+            top: 10px;
+            display: none;
+            align-items: center;
+            gap: 8px;
+            padding: 9px 10px;
+            background: rgba(20, 30, 20, 0.92);
+            border: 2px solid rgba(160, 255, 150, 0.55);
+            border-radius: 12px;
+            color: #fff;
+            z-index: 120;
+            pointer-events: auto;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.45);
+            backdrop-filter: blur(6px);
+        }
+        #install-banner .install-text {
+            flex: 1;
+            font-size: 12px;
+            line-height: 1.25;
+        }
+        #install-banner .install-text b { display: block; font-size: 13px; color: #c8ffb0; }
+        #install-banner button {
+            border: 2px solid rgba(255,255,255,0.35);
+            border-radius: 8px;
+            padding: 8px 9px;
+            color: #fff;
+            font-size: 12px;
+            font-weight: 800;
+            background: #3d8c35;
+        }
+        #install-banner button.alt { background: rgba(90,90,90,0.85); }
+        #install-help {
+            position: absolute;
+            left: 10px; right: 10px; top: 72px;
+            display: none;
+            background: rgba(0,0,0,0.82);
+            color: #fff;
+            padding: 9px 10px;
+            border-radius: 10px;
+            z-index: 121;
+            pointer-events: auto;
+            font-size: 12px;
+            line-height: 1.35;
+        }
+        #install-help b { color: #c8ffb0; }
         #inv-toast {
             position: absolute;
             top: 58px;
@@ -1054,6 +1107,16 @@
         <div id="time-display">☀️ День: 02:00</div>
     </div>
     <div id="biome-banner"></div>
+    <div id="install-banner">
+        <div class="install-text"><b>Установить Minecraft</b><span id="install-banner-text">Добавь игру на рабочий экран телефона.</span></div>
+        <button type="button" id="install-action">Установить</button>
+        <button type="button" id="install-close" class="alt">×</button>
+    </div>
+    <div id="install-help">
+        <b>Если кнопка не открыла установку:</b><br>
+        Chrome → меню ⋮ → <b>Добавить на главный экран</b>.<br>
+        Если игра открыта из загрузок как файл: сначала открой её именно в Chrome, затем добавь ярлык.
+    </div>
 
     <div id="btn-fullscreen" title="Полный экран">
         <svg id="fs-icon-enter" viewBox="0 0 24 24">
@@ -1256,6 +1319,79 @@
         el.style.display = 'block';
         el.textContent = 'Ошибка: ' + (e.message || e);
         setTimeout(function () { el.style.display = 'none'; }, 7000);
+    });
+
+    (function setupInstallMetadata() {
+        const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192"><rect width="192" height="192" rx="34" fill="#2e7d32"/><rect x="28" y="34" width="136" height="92" fill="#7ac943"/><rect x="28" y="126" width="136" height="32" fill="#8b5a2b"/><rect x="52" y="62" width="24" height="24" fill="#fff"/><rect x="116" y="62" width="24" height="24" fill="#fff"/><rect x="58" y="68" width="12" height="12" fill="#111"/><rect x="122" y="68" width="12" height="12" fill="#111"/><rect x="70" y="104" width="52" height="12" fill="#111"/></svg>';
+        const icon = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+        const manifest = {
+            name: 'Minecraft Classic Water',
+            short_name: 'Minecraft',
+            start_url: '.',
+            scope: '.',
+            display: 'fullscreen',
+            orientation: 'portrait',
+            background_color: '#000000',
+            theme_color: '#2e7d32',
+            icons: [{ src: icon, sizes: '192x192', type: 'image/svg+xml', purpose: 'any maskable' }]
+        };
+        const link = document.createElement('link');
+        link.rel = 'manifest';
+        link.href = 'data:application/manifest+json;charset=utf-8,' + encodeURIComponent(JSON.stringify(manifest));
+        document.head.appendChild(link);
+        const apple = document.createElement('link');
+        apple.rel = 'apple-touch-icon';
+        apple.href = icon;
+        document.head.appendChild(apple);
+    })();
+
+    let deferredInstallPrompt = null;
+    function isStandaloneMode() {
+        return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    }
+    function showInstallHelp() {
+        const help = document.getElementById('install-help');
+        if (!help) return;
+        help.style.display = 'block';
+        clearTimeout(showInstallHelp._t);
+        showInstallHelp._t = setTimeout(function () { help.style.display = 'none'; }, 9000);
+    }
+    function setInstallBannerVisible(on) {
+        const b = document.getElementById('install-banner');
+        if (!b) return;
+        if (localStorage.getItem('mc_install_banner_closed') === '1' && on) return;
+        b.style.display = on ? 'flex' : 'none';
+    }
+    window.addEventListener('beforeinstallprompt', function (e) {
+        e.preventDefault();
+        deferredInstallPrompt = e;
+        if (!isStandaloneMode()) setInstallBannerVisible(true);
+    });
+    window.addEventListener('appinstalled', function () {
+        deferredInstallPrompt = null;
+        setInstallBannerVisible(false);
+        localStorage.setItem('mc_install_banner_closed', '1');
+    });
+    document.addEventListener('DOMContentLoaded', function () {
+        const action = document.getElementById('install-action');
+        const close = document.getElementById('install-close');
+        const txt = document.getElementById('install-banner-text');
+        if (txt && location.protocol === 'file:') txt.textContent = 'Открой файл в Chrome и добавь ярлык на рабочий экран.';
+        if (action) action.addEventListener('click', function (e) {
+            e.preventDefault();
+            if (deferredInstallPrompt) {
+                deferredInstallPrompt.prompt();
+                deferredInstallPrompt.userChoice.finally(function () { deferredInstallPrompt = null; });
+            } else {
+                showInstallHelp();
+            }
+        });
+        if (close) close.addEventListener('click', function (e) {
+            e.preventDefault();
+            localStorage.setItem('mc_install_banner_closed', '1');
+            setInstallBannerVisible(false);
+        });
+        if (!isStandaloneMode()) setTimeout(function () { setInstallBannerVisible(true); }, 1800);
     });
 
     // --- 1. ПАРАМЕТРЫ МИРА И БЛОКОВ ---
@@ -9075,6 +9211,8 @@
     function isHudTouch(touch) {
         if (invOpen || tradeOpen || chatOpen) return true;
         if (touchHitsRect(touch, document.getElementById('hotbar'), 12)) return true;
+        if (touchHitsRect(touch, document.getElementById('install-banner'), 8)) return true;
+        if (touchHitsRect(touch, document.getElementById('install-help'), 8)) return true;
         if (touchHitsRect(touch, document.getElementById('btn-fullscreen'), 8)) return true;
         if (touchHitsRect(touch, document.getElementById('btn-inventory'), 8)) return true;
         if (touchHitsRect(touch, document.getElementById('btn-night'), 8)) return true;
@@ -9083,7 +9221,7 @@
         if (touchHitsRect(touch, document.querySelector('.btn-group'), 8)) return true;
         const t = touch.target;
         if (!t || !t.closest) return false;
-        return !!(t.closest('#hotbar') || t.closest('.slot') || t.closest('.action-btn') ||
+        return !!(t.closest('#install-banner') || t.closest('#install-help') || t.closest('#hotbar') || t.closest('.slot') || t.closest('.action-btn') ||
                   t.closest('#respawn-btn') || t.closest('#btn-fullscreen') || t.closest('#btn-inventory') || t.closest('#btn-night') || t.closest('#btn-sandbox') ||
                   t.closest('#inv-overlay') || t.closest('#trade-overlay') || t.closest('#chat-overlay') || t.closest('#sandbox-overlay') || t.closest('#death-screen'));
     }
