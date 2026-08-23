@@ -1183,7 +1183,7 @@
     const CHUNK_SIZE = 16;
     const CHUNK_HEIGHT = 128;
     const WATER_LEVEL = 63;
-    const RENDER_DISTANCE = 2;
+    const RENDER_DISTANCE = 1; // телефон: меньше чанков вокруг = стабильнее FPS
 
     const BLOCK_EMPTY  = 0;
     const BLOCK_GRASS  = 1;
@@ -3821,13 +3821,23 @@
         const h = Math.max(1, window.innerHeight || document.documentElement.clientHeight || 640);
         return { w: w, h: h };
     }
+    const IS_TOUCH_PHONE = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+    const PERF = {
+        pixelRatio: Math.min(window.devicePixelRatio || 1, IS_TOUCH_PHONE ? 1.0 : 1.15),
+        minPixelRatio: 0.72,
+        speechEvery: IS_TOUCH_PHONE ? 0.18 : 0.10,
+        socialEvery: IS_TOUCH_PHONE ? 0.45 : 0.25,
+        mobCap: IS_TOUCH_PHONE ? 12 : 18,
+        mobHardCap: IS_TOUCH_PHONE ? 14 : 20,
+        adaptiveCooldown: 0
+    };
     let renderer;
     try {
         renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
     } catch (err) {
         renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
     }
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.25));
+    renderer.setPixelRatio(PERF.pixelRatio);
     (function bootSize() {
         const s = viewSize();
         renderer.setSize(s.w, s.h);
@@ -5526,11 +5536,11 @@
                     } else if (this.type === 'villager' && this.state === 'work' && this.mesh.arms && this.mesh.arms.length >= 2) {
                         const job = this.vilJob;
                         if (job === 'smith') {
-                            const hit = Math.max(0, Math.sin(this.idleAnim * 9));
-                            this.mesh.arms[0].rotation.x = -0.15 - hit * 1.35;
+                            const hit = Math.max(0, Math.sin(this.idleAnim * 4.5));
+                            this.mesh.arms[0].rotation.x = -0.15 - hit * 0.85;
                             this.mesh.arms[1].rotation.x = 0.35;
                         } else if (job === 'farmer') {
-                            const hoe = Math.sin(this.idleAnim * 3.2) * 0.35;
+                            const hoe = Math.sin(this.idleAnim * 1.8) * 0.20;
                             if (this.mesh.torso) this.mesh.torso.rotation.x = 0.28;
                             this.mesh.arms[0].rotation.x = -0.7 + hoe;
                             this.mesh.arms[1].rotation.x = -0.55 - hoe;
@@ -5541,7 +5551,7 @@
                         } else if (job === 'mapper') {
                             this.mesh.arms[0].rotation.x = -0.85;
                             this.mesh.arms[1].rotation.x = -0.35;
-                            this.mesh.head.rotation.y = Math.sin(this.idleAnim * 0.7) * 0.55;
+                            this.mesh.head.rotation.y = Math.sin(this.idleAnim * 0.35) * 0.32;
                         } else {
                             this.mesh.arms[0].rotation.x = -0.15;
                             this.mesh.arms[1].rotation.x = 0.1;
@@ -5567,8 +5577,12 @@
                 }
             }
 
+            const stableVillager = this.type === 'villager' && !this.ridden &&
+                (this.state === 'work' || this.state === 'idle') && Math.abs(this.vel.x) < 0.001 && Math.abs(this.vel.z) < 0.001;
             const b = getBlock(Math.floor(this.pos.x), Math.floor(this.pos.y), Math.floor(this.pos.z));
-            if (this.type === 'bee' || this.type === 'parrot' || this.type === 'squid') {
+            if (stableVillager && this.onGround && b !== BLOCK_WATER) {
+                this.vel.y = 0;
+            } else if (this.type === 'bee' || this.type === 'parrot' || this.type === 'squid') {
                 const hy = this.hoverY || (this.pos.y + 0.6);
                 this.vel.y += (hy - this.pos.y) * 3.2 * dt;
                 this.vel.y += Math.sin(this.idleAnim * 3.4) * 2.4 * dt;
@@ -5683,6 +5697,14 @@
             } else {
                 this.onGround = false;
             }
+            if (stableVillager) {
+                const gy = getSurfaceY(Math.floor(this.pos.x), Math.floor(this.pos.z)) + 0.05;
+                if (Math.abs(this.pos.y - gy) < 0.22 && !checkSolidCollision(this.pos.x, gy, this.pos.z, this.radius, this.height, true)) {
+                    this.pos.y = gy;
+                    this.vel.y = 0;
+                    this.onGround = true;
+                }
+            }
             if (this.pos.y < 0.4) {
                 this.pos.y = getSurfaceY(Math.floor(this.pos.x), Math.floor(this.pos.z)) + 0.05;
                 this.vel.y = 0;
@@ -5691,17 +5713,17 @@
 
             this.mesh.position.copy(this.pos);
             this.mesh.rotation.y = this.yaw;
-            if (this.type === 'villager' && this.mesh.head) {
+            if (this.type === 'villager' && this.mesh.head && (this.seesPlayer || chatMob === this || (this.lookAtPlayerT || 0) > 0)) {
                 const dx = player.pos.x - this.pos.x;
                 const dz = player.pos.z - this.pos.z;
                 let rel = Math.atan2(dx, dz) - this.yaw;
                 while (rel > Math.PI) rel -= Math.PI * 2;
                 while (rel < -Math.PI) rel += Math.PI * 2;
                 const wantY = Math.max(-0.7, Math.min(0.7, rel));
-                this.mesh.head.rotation.y += (wantY - this.mesh.head.rotation.y) * Math.min(1, dt * 5);
+                this.mesh.head.rotation.y += (wantY - this.mesh.head.rotation.y) * Math.min(1, dt * 3.2);
                 const dist = Math.hypot(dx, dz) + 0.001;
-                const wantX = Math.max(-0.3, Math.min(0.3, -Math.atan2((player.pos.y + 1.5) - (this.pos.y + 1.62), dist)));
-                this.mesh.head.rotation.x += (wantX - this.mesh.head.rotation.x) * Math.min(1, dt * 5);
+                const wantX = Math.max(-0.22, Math.min(0.22, -Math.atan2((player.pos.y + 1.5) - (this.pos.y + 1.62), dist)));
+                this.mesh.head.rotation.x += (wantX - this.mesh.head.rotation.x) * Math.min(1, dt * 3.2);
             }
 
             if (this.type === 'chicken' && this.health > 0) {
@@ -5847,7 +5869,7 @@
 
     function updateMobsManager(dt) {
         mobSpawnTimer += dt;
-        if (mobSpawnTimer > 4.2 && mobs.length < 18) {
+        if (mobSpawnTimer > 5.8 && mobs.length < PERF.mobCap) {
             mobSpawnTimer = 0;
             const spawnDist = 24 + Math.random() * 22;
             const spawnAngle = Math.random() * Math.PI * 2;
@@ -5860,7 +5882,7 @@
             const sy = animalSurfaceY(sx, sz, type);
             if (sy > 0) {
                 const pack = (type === 'panda') ? 1 : 1 + (Math.random() < 0.5 ? 1 : 0);
-                for (let k = 0; k < pack && mobs.length < 20; k++) {
+                for (let k = 0; k < pack && mobs.length < PERF.mobHardCap; k++) {
                     const ox = sx + (k === 0 ? 0 : (k % 2 ? 1 : -1));
                     const oz = sz + (k === 0 ? 0 : (k > 1 ? 1 : 0));
                     const y2 = animalSurfaceY(ox, oz, type);
@@ -8284,7 +8306,7 @@
             }
         }
 
-        const burst = firstChunkBurst ? 9 : 2;
+        const burst = firstChunkBurst ? (IS_TOUCH_PHONE ? 5 : 9) : (IS_TOUCH_PHONE ? 1 : 2);
         let builtCount = 0;
         for (const chunk of chunks.values()) {
             if (!chunk.isDirty || !chunk.isGenerated) continue;
@@ -10295,6 +10317,7 @@
     // --- 13. GAME LOOP ---
     let lastTime = performance.now();
     let frameCount = 0, fpsTimer = 0;
+    let speechAcc = 0, socialAcc = 0, torchAcc = 0;
     const statsEl = document.getElementById('stats').firstElementChild;
 
     updateInfiniteChunks(player.pos.x, player.pos.z);
@@ -10313,10 +10336,22 @@
         updateDayNightCycle(dt);
         updateDroppedItems(dt);
         updateFallingBlocks(dt);
-        updateTorchLights(currentTime * 0.001);
+        torchAcc += dt;
+        if (torchAcc >= (IS_TOUCH_PHONE ? 0.16 : 0.08)) {
+            updateTorchLights(currentTime * 0.001);
+            torchAcc = 0;
+        }
         updateMobsManager(dt);
-        updateVillagerSocial(dt);
-        updateSpeechBubbles();
+        socialAcc += dt;
+        if (socialAcc >= PERF.socialEvery) {
+            updateVillagerSocial(socialAcc);
+            socialAcc = 0;
+        }
+        speechAcc += dt;
+        if (speechAcc >= PERF.speechEvery) {
+            updateSpeechBubbles();
+            speechAcc = 0;
+        }
 
         if (cloudsMesh) {
             const windSpeed = 0.8;
@@ -10332,6 +10367,16 @@
             const bioNow = biomeAt(Math.floor(player.pos.x), Math.floor(player.pos.z));
             statsEl.innerText = `FPS: ${frameCount} | ${biomeTitle(bioNow)} | Mobs: ${mobs.length}`;
             announceBiome(bioNow);
+            if (IS_TOUCH_PHONE) {
+                PERF.adaptiveCooldown = Math.max(0, PERF.adaptiveCooldown - 1);
+                if (frameCount < 42 && PERF.pixelRatio > PERF.minPixelRatio && PERF.adaptiveCooldown <= 0) {
+                    PERF.pixelRatio = Math.max(PERF.minPixelRatio, PERF.pixelRatio - 0.08);
+                    renderer.setPixelRatio(PERF.pixelRatio);
+                    const s = viewSize();
+                    renderer.setSize(s.w, s.h, false);
+                    PERF.adaptiveCooldown = 3;
+                }
+            }
             frameCount = 0;
             fpsTimer = 0;
         }
