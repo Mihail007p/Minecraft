@@ -1165,6 +1165,7 @@
 
 
 
+
     window.addEventListener('error', function (e) {
         const el = document.getElementById('boot-error');
         if (!el || el.dataset.shown === '1') return;
@@ -6447,8 +6448,8 @@
             inside: [33.1, 20.5],
             house: { minX: 31.55, maxX: 36.45, minZ: 18.55, maxZ: 21.45 },
             nightPath: [[10.5, 9.5], [20.5, 12.5], [30.5, 16.5], [30.5, 20.5]],
-            workPath: [[30.5, 16.5], [20.5, 12.5], [10.5, 9.5], [9.5, 1.5]],
-            sites: [[9.5, 1.5, 3.1416], [9.5, 1.5, 3.1416], [10.5, 1.5, 3.1416], [9.5, 2.5, 3.1416]],
+            workPath: [[30.5, 16.5], [20.5, 12.5], [10.5, 9.5], [10.5, 4.5]],
+            sites: [[10.5, 4.5, 3.1416], [10.5, 4.5, 3.1416], [9.5, 4.5, 3.1416], [11.5, 4.5, 3.1416]],
             lines: ['Клюёт… нет, водоросли.', 'Сеть на берег.', 'Море сегодня злое.']
         }
     };
@@ -6475,19 +6476,43 @@
         if (y === undefined) y = VILLAGE_Y + 1.05;
         return !villagerBlockedAt(x, z, y, r);
     }
+    function villagerOnObstacle(mob) {
+        const y = VILLAGE_Y + 1.05;
+        const bx = Math.floor(mob.pos.x), bz = Math.floor(mob.pos.z);
+        const by = Math.floor(mob.pos.y);
+        const feet = getBlock(bx, by, bz);
+        const ground = getBlock(bx, by - 1, bz);
+        if (isFenceBlock(feet) || feet === BLOCK_DOOR || blocksMob(feet)) return true;
+        if (isFenceBlock(ground) && mob.pos.y > y + 0.15) return true;
+        if (villagerBlockedAt(mob.pos.x, mob.pos.z, y, mob.radius * 0.9)) return true;
+        return false;
+    }
     function unstickVillager(mob) {
-        if (!checkSolidCollision(mob.pos.x, mob.pos.y, mob.pos.z, mob.radius, mob.height, true)) return;
-        const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]];
-        for (let d = 0.4; d <= 2.4; d += 0.4) {
+        const y = VILLAGE_Y + 1.05;
+        const stuck = villagerOnObstacle(mob) ||
+            checkSolidCollision(mob.pos.x, mob.pos.y, mob.pos.z, mob.radius, mob.height, true);
+        if (!stuck) {
+            if (Math.abs(mob.pos.y - y) > 0.45 &&
+                !checkSolidCollision(mob.pos.x, y, mob.pos.z, mob.radius, mob.height, true)) {
+                mob.pos.y = y;
+            }
+            return false;
+        }
+        const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1], [0, 2], [0, -2], [2, 0], [-2, 0]];
+        for (let d = 0.45; d <= 3.6; d += 0.45) {
             for (let i = 0; i < dirs.length; i++) {
                 const nx = mob.pos.x + dirs[i][0] * d, nz = mob.pos.z + dirs[i][1] * d;
-                if (!checkSolidCollision(nx, mob.pos.y, nz, mob.radius, mob.height, true) && villagerWalkable(nx, nz, mob.radius, mob.pos.y)) {
+                if (!checkSolidCollision(nx, y, nz, mob.radius, mob.height, true) && villagerWalkable(nx, nz, mob.radius, y)) {
                     mob.pos.x = nx;
                     mob.pos.z = nz;
-                    return;
+                    mob.pos.y = y;
+                    mob.vel.x = 0;
+                    mob.vel.z = 0;
+                    return true;
                 }
             }
         }
+        return false;
     }
     function lineBlocked(x0, z0, x1, z1, r, y) {
         const len = Math.hypot(x1 - x0, z1 - z0);
@@ -6531,7 +6556,7 @@
         mob.mesh.head.rotation.y = mob.mesh.head.rotation.y * 0.65 + hy * 0.35;
     }
     function villagerSteer(mob, gx, gz) {
-        const y = villagerFeetY(mob);
+        const y = VILLAGE_Y + 1.05;
         const want = Math.atan2(gx - mob.pos.x, gz - mob.pos.z);
         const see = villagerSee(mob, 2.5);
         const offsets = [0, 0.38, -0.38, 0.8, -0.8, 1.25, -1.25, 1.75, -1.75, 2.35, -2.35];
@@ -6649,7 +6674,7 @@
         return pulled.slice(1);
     }
     function villagerPlanRoute(mob, gx, gz) {
-        const y = villagerFeetY(mob);
+        const y = VILLAGE_Y + 1.05;
         if (!lineBlocked(mob.pos.x, mob.pos.z, gx, gz, 0.3, y)) {
             mob.brainWay = [[gx, gz]];
             mob.brainGoal = { x: gx, z: gz };
@@ -6741,10 +6766,13 @@
             stayInside(mob, spec);
             return;
         }
+        unstickVillager(mob);
+        const keepT = (mob.nightStep === 'path') ? (mob.homeSeekT || 0) : 0;
         mob.nightStep = 'path';
         mob.thruDoor = false;
-        mob.homeSeekT = 0;
+        mob.homeSeekT = keepT;
         mob.repathCd = 0;
+        if (!keepT) { mob._bestHomeD = null; mob._noProg = 0; }
         if (!villagerPlanRoute(mob, spec.approach[0], spec.approach[1])) {
             snapToApproach(mob, spec);
             return;
@@ -6917,7 +6945,7 @@
             return;
         }
         mob.jobTimer = (mob.jobTimer || 0) - dt;
-        if (!mob.nightStep || mob.nightStep === 'inside') unstickVillager(mob);
+        unstickVillager(mob);
         if (!mob.jobTarget) pickNextJobPhase(mob, night);
         const t = mob.jobTarget;
         if (!t) return;
@@ -6930,7 +6958,15 @@
                 beginDoorEnter(mob, specNow);
                 return;
             }
-            if (mob.homeSeekT > 26) {
+            if (mob._bestHomeD == null || dApp < mob._bestHomeD - 0.35) {
+                mob._bestHomeD = dApp;
+                mob._noProg = 0;
+            } else {
+                mob._noProg = (mob._noProg || 0) + dt;
+            }
+            const trapped = villagerOnObstacle(mob);
+            if (trapped) unstickVillager(mob);
+            if (mob.homeSeekT > 12 || mob._noProg > 4.5 || (trapped && mob._noProg > 1.1)) {
                 snapToApproach(mob, specNow);
                 return;
             }
@@ -7230,8 +7266,10 @@
                 chunkPut(chunk, x, y, z, BLOCK_PLANKS);
                 villageAir(chunk, x, y + 1, y + 3, z);
             }
-            chunkPut(chunk, ox - 1, y + 1, z, BLOCK_FENCE);
-            chunkPut(chunk, ox + 2, y + 1, z, BLOCK_FENCE);
+            if (z !== oz) {
+                chunkPut(chunk, ox - 1, y + 1, z, BLOCK_FENCE);
+                chunkPut(chunk, ox + 2, y + 1, z, BLOCK_FENCE);
+            }
         }
         for (let dx = -1; dx <= 2; dx++) {
             for (let dz = -6; dz <= -4; dz++) {
@@ -7250,9 +7288,8 @@
                 }
             }
         }
-        chunkPut(chunk, ox, y + 1, oz - 1, BLOCK_BARREL);
-        chunkPut(chunk, ox + 1, y + 1, oz - 3, BLOCK_FENCE);
-        chunkPut(chunk, ox + 1, y + 2, oz - 3, BLOCK_TORCH);
+        chunkPut(chunk, ox - 1, y + 1, oz - 3, BLOCK_BARREL);
+        chunkPut(chunk, ox + 2, y + 2, oz - 2, BLOCK_TORCH);
         workPut(ox + 1, y + 1, oz - 2, 'fishrack', 0);
     }
     function paintMapDesk(chunk, ox, oz, y) {
@@ -7926,7 +7963,7 @@
             ['masha', 19.5, 9.5],
             ['boris', 25.5, 9.5],
             ['anna', 22.5, 20.5],
-            ['gleb', 9.5, 1.5]
+            ['gleb', 10.5, 4.5]
         ];
         for (let i = 0; i < spots.length; i++) {
             if (mobs.length >= 20) break;
@@ -9811,74 +9848,10 @@
     
 
 
+
 </script>
 
 <!--DOWNLOAD-PAD
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
-Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
 Minecraft download pad.
