@@ -1256,6 +1256,7 @@
             <button type="button" data-trade="food" data-role="general">4 шерсти → 1 жаркое</button>
             <button type="button" data-trade="gem" data-role="general">6 мяса → 1 изумруд</button>
             <button type="button" data-trade="pick" data-role="general">1 изумруд → кам. кирка</button>
+            <button type="button" data-trade="wood_pick" data-role="general">3 доски + 2 палки → дерев. кирка</button>
             <button type="button" data-trade="smith_unlock" data-role="smith">Задание Бориса: 8 угля + 1 железо → открыть броню</button>
             <button type="button" data-trade="armor_helmet" data-role="smith">2 изумруда + 3 железа → шлем</button>
             <button type="button" data-trade="armor_chest" data-role="smith">4 изумруда + 6 железа → нагрудник</button>
@@ -9819,7 +9820,7 @@
         if (/руд|желез|алмаз|угол|шахт/.test(text)) return 'Руды ищи в камне: уголь выше, железо до высоты 72, золото глубже, алмазы ближе к низу мира. Бери кирку и факелы.';
         if (!storyHas(BLOCK_WOOD) && !storyHas(BLOCK_PLANKS)) return 'Начни как в настоящем Minecraft: сломай дерево. Из дерева сделай доски, из досок — верстак.';
         if (!storyHas(BLOCK_CRAFT)) return 'Тебе нужен верстак. Сделай четыре доски и положи их квадратом 2 на 2. После этого откроются инструменты.';
-        if (!villagerKnowsTool()) return 'Сделай кирку: три доски сверху и две палки по центру. Потом добудь камень и сделай каменную кирку.';
+        if (!villagerKnowsTool()) return toolProgressAdvice();
         if (!storyHas(BLOCK_FURNACE) && villagerCount(BLOCK_STONE) >= 8) return 'У тебя хватает камня на печь. Сложи восемь камней кольцом — сможешь жарить мясо и плавить руду.';
         if (!storyHas(ITEM_IRON_INGOT) && storyHas(BLOCK_IRON_ORE)) return 'Я вижу путь развития: переплавь железную руду в печи. Железная кирка откроет больше возможностей.';
         if (bio.indexOf('Пустын') >= 0 || bio.indexOf('Меса') >= 0) return 'В этом биоме мало дерева. Экономь доски, ищи кактус и камень, а для еды лучше вернуться к травяным островам.';
@@ -9872,6 +9873,7 @@
     function villagerQuestLine(mob) {
         const id = mob.vilId || 'wanderer';
         if (id === 'ivan') {
+            if (!storyHas(ITEM_WOOD_PICK)) return 'Первое задание старосты: сделай деревянную кирку. Цепочка: дерево → доски → палки → верстак → 3 доски + 2 палки.';
             if (villagerCount(BLOCK_TORCH) < 3) return 'Задание старосты: сделай или принеси 3 факела. Деревня должна видеть ночь раньше, чем ночь увидит нас.';
             return 'Факелы есть. Следующий шаг — укрепи тропы и не оставляй двери открытыми.';
         }
@@ -10175,6 +10177,9 @@
             if (story.chapter >= 3) return 'Плыви. Смотри биомы. Возвращайся и расскажи Анне. Если принесёшь Маше кактус, Борису железо — они станут спокойнее. Это и есть сюжет: не победить дракона, а склеить дом.';
             return 'Выживай, слушай, плыви, возвращайся.';
         }
+        if (/инструмент|кирк|топор|лопат|моты|палк|верстак|камень/.test(t)) {
+            return toolProgressAdvice();
+        }
         if (/брон|шлем|нагруд|понож|ботин|щит|защит/.test(t)) {
             if (id !== 'boris') return 'За бронёй иди к Борису. Только кузнец отвечает за железо и защиту. Цепочка: уголь + железо → открыть броню → изумруды + железо → купить части.';
             if (!(story.flags && story.flags.borisArmorUnlocked)) return borisArmorQuestProgress();
@@ -10311,12 +10316,18 @@
         return parts.join(' + ');
     }
     function resourceHowTo(type) {
+        if (type === BLOCK_WOOD) return 'Дерево: сломай ствол дерева. Это первый ресурс для всех инструментов.';
+        if (type === BLOCK_PLANKS) return 'Доски: положи дерево в крафт 2×2 — получишь 4 доски.';
+        if (type === ITEM_STICK) return 'Палки: поставь 2 доски вертикально в крафте — получишь 4 палки.';
+        if (type === BLOCK_CRAFT) return 'Верстак: 4 доски квадратом 2×2. Нужен для кирок и инструментов.';
+        if (type === ITEM_WOOD_PICK) return 'Деревянная кирка: на верстаке 3 доски сверху и 2 палки по центру вниз.';
+        if (type === ITEM_STONE_PICK) return 'Каменная кирка: 3 камня сверху и 2 палки по центру. Добывает железную руду.';
         if (type === ITEM_CHARCOAL) return 'Уголь: ищи угольную руду в камне или переплавь дерево в печи.';
         if (type === ITEM_IRON_INGOT) return 'Железо: добудь железную руду каменной киркой и переплавь в печи на угле.';
         if (type === ITEM_EMERALD) return 'Изумруд: обменяй у жителей мясо, шерсть или другие ресурсы.';
         if (type === ITEM_WOOL) return 'Шерсть: добывается с овец или крафтится из нитей.';
         if (type === ITEM_MEAT) return 'Мясо: охота на животных; лучше потом приготовить в печи.';
-        if (type === BLOCK_STONE) return 'Камень: добудь киркой под землёй; из 8 камней делается печь.';
+        if (type === BLOCK_STONE) return 'Камень: добудь камень деревянной киркой под землёй; из 8 камней делается печь.';
         return (BLOCK_NAMES[type] || 'Ресурс') + ': проверь крафт, добычу или торговлю.';
     }
     function missingTradeHint(rec) {
@@ -10335,6 +10346,19 @@
             (coal < 8 ? 'Уголь ищи в камне или жги дерево в печи. ' : '') +
             (iron < 1 ? 'Железо добудь из руды каменной киркой и переплавь. ' : '') +
             'После этого Борис откроет броню.';
+    }
+    function toolProgressAdvice() {
+        if (!storyHas(BLOCK_WOOD) && !storyHas(BLOCK_PLANKS)) return 'Цепочка инструментов начинается с дерева: сломай ствол рукой.';
+        if (!storyHas(BLOCK_PLANKS)) return 'Сделай доски: дерево → крафт 2×2 → 4 доски.';
+        if (!storyHas(ITEM_STICK)) return 'Сделай палки: 2 доски вертикально → 4 палки.';
+        if (!storyHas(BLOCK_CRAFT)) return 'Сделай верстак: 4 доски квадратом 2×2. Без него кирку не собрать.';
+        if (!storyHas(ITEM_WOOD_PICK)) return 'Сделай деревянную кирку: на верстаке 3 доски сверху, 2 палки по центру вниз. Или обменяй у жителей 3 доски + 2 палки.';
+        if (!storyHas(BLOCK_STONE)) return 'Теперь деревянной киркой добудь камень под землёй. Рукой камень почти бесполезен.';
+        if (!storyHas(ITEM_STONE_PICK)) return 'Сделай каменную кирку: 3 камня сверху, 2 палки по центру. Она нужна для железной руды.';
+        if (!storyHas(BLOCK_FURNACE)) return 'Собери 8 камней кольцом — получится печь. В печи плавят руду и готовят еду.';
+        if (!storyHas(ITEM_IRON_INGOT)) return 'Добывай железную руду каменной киркой и плавь в печи на угле. Потом будут железные инструменты и броня.';
+        if (!storyHas(ITEM_IRON_PICK)) return 'Следующий уровень: железная кирка из 3 железа и 2 палок. Она открывает алмазы.';
+        return 'Цепочка инструментов собрана: дерево → доски → палки → верстак → деревянная кирка → камень → каменная кирка → печь → железо.';
     }
     function renderTradePanel() {
         const mob = tradeMob;
@@ -10371,6 +10395,7 @@
             food: { cost: [[ITEM_WOOL, 4]], give: ITEM_COOKED_MEAT, g: 1 },
             gem: { cost: [[ITEM_MEAT, 6]], give: ITEM_EMERALD, g: 1 },
             pick: { cost: [[ITEM_EMERALD, 1]], give: ITEM_STONE_PICK, g: 1 },
+            wood_pick: { cost: [[BLOCK_PLANKS, 3], [ITEM_STICK, 2]], give: ITEM_WOOD_PICK, g: 1 },
             smith_unlock: { smith: true, unlock: true, cost: [[ITEM_CHARCOAL, 8], [ITEM_IRON_INGOT, 1]], give: ITEM_EMERALD, g: 1 },
             armor_helmet: { smith: true, armor: true, cost: [[ITEM_EMERALD, 2], [ITEM_IRON_INGOT, 3]], give: ITEM_HELMET, g: 1 },
             armor_chest: { smith: true, armor: true, cost: [[ITEM_EMERALD, 4], [ITEM_IRON_INGOT, 6]], give: ITEM_CHESTPLATE, g: 1 },
@@ -10954,6 +10979,7 @@
                 ok('Магазин брони Бориса', document.querySelector('[data-trade="armor_helmet"]').style.display !== 'none', 'shop visible');
                 ok('Связка добычи брони', borisArmorQuestProgress().indexOf('угля') >= 0 || story.flags.borisArmorUnlocked, 'quest chain');
                 ok('Подсказка ресурсов', resourceHowTo(ITEM_IRON_INGOT).indexOf('переплав') >= 0, 'iron guide');
+                ok('Связка инструментов', toolProgressAdvice().indexOf('дерев') >= 0 || toolProgressAdvice().indexOf('Цепочка') >= 0, 'tool chain');
                 const oldGear = JSON.parse(JSON.stringify(equippedGear));
                 cursorStack = { type: ITEM_HELMET, count: 1 };
                 equipHeldOrMoveToHotbar();
