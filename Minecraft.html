@@ -871,7 +871,8 @@
             padding: 10px;
             color: #333;
         }
-        #trade-panel h2 { font-size: 14px; margin: 0 0 8px; }
+        #trade-panel h2 { font-size: 14px; margin: 0 0 6px; }
+        #trade-hint { font-size: 12px; line-height: 1.3; margin: 0 0 8px; color: #333; }
         #trade-panel button {
             display: block;
             width: 100%;
@@ -1249,11 +1250,18 @@
     <div id="speech-layer"></div>
     <div id="trade-overlay">
         <div id="trade-panel">
-            <h2>Житель</h2>
-            <button type="button" data-trade="iron">8 угля → 1 железо</button>
-            <button type="button" data-trade="food">4 шерсти → 1 жаркое</button>
-            <button type="button" data-trade="gem">6 мяса → 1 изумруд</button>
-            <button type="button" data-trade="pick">1 изумруд → кам. кирка</button>
+            <h2 id="trade-title">Житель</h2>
+            <div id="trade-hint">Обмен ресурсами деревни</div>
+            <button type="button" data-trade="iron" data-role="general">8 угля → 1 железо</button>
+            <button type="button" data-trade="food" data-role="general">4 шерсти → 1 жаркое</button>
+            <button type="button" data-trade="gem" data-role="general">6 мяса → 1 изумруд</button>
+            <button type="button" data-trade="pick" data-role="general">1 изумруд → кам. кирка</button>
+            <button type="button" data-trade="smith_unlock" data-role="smith">Задание Бориса: 8 угля + 1 железо → открыть броню</button>
+            <button type="button" data-trade="armor_helmet" data-role="smith">2 изумруда + 3 железа → шлем</button>
+            <button type="button" data-trade="armor_chest" data-role="smith">4 изумруда + 6 железа → нагрудник</button>
+            <button type="button" data-trade="armor_legs" data-role="smith">3 изумруда + 5 железа → поножи</button>
+            <button type="button" data-trade="armor_boots" data-role="smith">2 изумруда + 2 железа → ботинки</button>
+            <button type="button" data-trade="shield" data-role="smith">1 изумруд + 1 железо → щит</button>
             <button type="button" id="trade-close" class="alt">Закрыть</button>
         </div>
     </div>
@@ -2744,6 +2752,7 @@
     let tradeOpen = false;
     let chatOpen = false;
     let chatMob = null;
+    let tradeMob = null;
     const chatHistory = [];
     let cursorStack = { type: 0, count: 0 };
     let craft2 = null;
@@ -9024,8 +9033,24 @@
     const bubblesContainer = document.getElementById('bubbles-container');
     const deathScreen = document.getElementById('death-screen');
 
+    function playerArmorProtection() {
+        let armor = 0;
+        const seen = { h: false, c: false, l: false, b: false };
+        for (let i = 0; i < INV_SIZE; i++) {
+            const it = inventory[i];
+            if (!it || it.count <= 0) continue;
+            if (it.type === ITEM_HELMET && !seen.h) { armor += 1; seen.h = true; }
+            else if (it.type === ITEM_CHESTPLATE && !seen.c) { armor += 3; seen.c = true; }
+            else if (it.type === ITEM_LEGGINGS && !seen.l) { armor += 2; seen.l = true; }
+            else if (it.type === ITEM_BOOTS && !seen.b) { armor += 1; seen.b = true; }
+            else if (it.type === ITEM_SHIELD) armor = Math.max(armor, armor + 1);
+        }
+        return Math.min(0.55, armor * 0.07);
+    }
     function applyDamage(amount) {
         if (player.isDead) return;
+        const prot = playerArmorProtection();
+        if (prot > 0) amount = Math.max(1, Math.ceil(amount * (1 - prot)));
         player.health = Math.max(0, player.health - amount);
         damageOverlay.style.opacity = '1';
         setTimeout(() => { damageOverlay.style.opacity = '0'; }, 150);
@@ -10087,8 +10112,13 @@
             if (story.chapter >= 3) return 'Плыви. Смотри биомы. Возвращайся и расскажи Анне. Если принесёшь Маше кактус, Борису железо — они станут спокойнее. Это и есть сюжет: не победить дракона, а склеить дом.';
             return 'Выживай, слушай, плыви, возвращайся.';
         }
+        if (/брон|шлем|нагруд|понож|ботин|щит|защит/.test(t)) {
+            if (id !== 'boris') return 'За бронёй иди к Борису. Только кузнец отвечает за железо и защиту.';
+            if (!(story.flags && story.flags.borisArmorUnlocked)) return 'Хочешь броню? Моё задание: принеси 8 угля и 1 железо. Выполни заказ в торговле — открою магазин брони.';
+            return 'Броня открыта: шлем, нагрудник, поножи, ботинки и щит. Носи в инвентаре — урон по тебе станет меньше.';
+        }
         if (/торг|куп|прод|обмен|цен|кирк|желез|изумруд|шерст/.test(t)) {
-            if (id === 'boris' && hasIron) return 'Вижу железо у тебя. Хорошо. Голему не нужно, нам — да. Открой торговлю, уголь меняю честно.';
+            if (id === 'boris' && hasIron) return 'Вижу железо у тебя. Хорошо. Если выполнишь заказ 8 угля + 1 железо, открою броню.';
             if (id === 'masha') return 'Шерсть на жаркое, мясо на изумруд. Еда — тоже память: пока едим вместе, не дичаем.';
             return 'Уголь→железо, шерсть→жаркое, мясо→изумруд. Кнопка «Открыть торговлю».';
         }
@@ -10191,6 +10221,7 @@
         if (close) close.addEventListener('click', function (e) { e.preventDefault(); closeVillagerChat(); });
         if (trade) trade.addEventListener('click', function (e) {
             e.preventDefault();
+            tradeMob = chatMob;
             closeVillagerChat();
             setTradeOpen(true);
         });
@@ -10202,33 +10233,84 @@
         });
     }
 
+    function renderTradePanel() {
+        const mob = tradeMob;
+        const isSmith = mob && mob.vilId === 'boris';
+        const title = document.getElementById('trade-title');
+        const hint = document.getElementById('trade-hint');
+        if (title) title.textContent = isSmith ? 'Кузница Бориса' : ('Торговля · ' + (mob && mob.vilName ? mob.vilName : 'Житель'));
+        if (hint) {
+            hint.textContent = isSmith
+                ? ((story.flags && story.flags.borisArmorUnlocked) ? 'Броня открыта. Броня в инвентаре снижает входящий урон.' : 'Сначала выполни задание кузнеца, затем покупай броню.')
+                : 'Обычный деревенский обмен ресурсами.';
+        }
+        document.querySelectorAll('#trade-panel [data-role="smith"]').forEach(function (b) { b.style.display = isSmith ? 'block' : 'none'; });
+        document.querySelectorAll('#trade-panel [data-role="general"]').forEach(function (b) { b.style.display = 'block'; });
+    }
     function setTradeOpen(on) {
         tradeOpen = on;
         const el = document.getElementById('trade-overlay');
+        if (on && !tradeMob && chatMob) tradeMob = chatMob;
+        if (on) renderTradePanel();
         if (el) el.style.display = on ? 'flex' : 'none';
+        if (!on) tradeMob = null;
+    }
+    function tradeCostOk(cost) {
+        for (let i = 0; i < cost.length; i++) if (countInvType(cost[i][0]) < cost[i][1]) return false;
+        return true;
+    }
+    function payTradeCost(cost) {
+        for (let i = 0; i < cost.length; i++) for (let n = 0; n < cost[i][1]; n++) takeOneFromInv(cost[i][0]);
     }
     function doVillagerTrade(id) {
         const recipes = {
-            iron: { need: ITEM_CHARCOAL, n: 8, give: ITEM_IRON_INGOT, g: 1 },
-            food: { need: ITEM_WOOL, n: 4, give: ITEM_COOKED_MEAT, g: 1 },
-            gem: { need: ITEM_MEAT, n: 6, give: ITEM_EMERALD, g: 1 },
-            pick: { need: ITEM_EMERALD, n: 1, give: ITEM_STONE_PICK, g: 1 }
+            iron: { cost: [[ITEM_CHARCOAL, 8]], give: ITEM_IRON_INGOT, g: 1 },
+            food: { cost: [[ITEM_WOOL, 4]], give: ITEM_COOKED_MEAT, g: 1 },
+            gem: { cost: [[ITEM_MEAT, 6]], give: ITEM_EMERALD, g: 1 },
+            pick: { cost: [[ITEM_EMERALD, 1]], give: ITEM_STONE_PICK, g: 1 },
+            smith_unlock: { smith: true, unlock: true, cost: [[ITEM_CHARCOAL, 8], [ITEM_IRON_INGOT, 1]], give: ITEM_EMERALD, g: 1 },
+            armor_helmet: { smith: true, armor: true, cost: [[ITEM_EMERALD, 2], [ITEM_IRON_INGOT, 3]], give: ITEM_HELMET, g: 1 },
+            armor_chest: { smith: true, armor: true, cost: [[ITEM_EMERALD, 4], [ITEM_IRON_INGOT, 6]], give: ITEM_CHESTPLATE, g: 1 },
+            armor_legs: { smith: true, armor: true, cost: [[ITEM_EMERALD, 3], [ITEM_IRON_INGOT, 5]], give: ITEM_LEGGINGS, g: 1 },
+            armor_boots: { smith: true, armor: true, cost: [[ITEM_EMERALD, 2], [ITEM_IRON_INGOT, 2]], give: ITEM_BOOTS, g: 1 },
+            shield: { smith: true, armor: true, cost: [[ITEM_EMERALD, 1], [ITEM_IRON_INGOT, 1]], give: ITEM_SHIELD, g: 1 }
         };
         const rec = recipes[id];
         if (!rec) return;
-        if (countInvType(rec.need) < rec.n) {
+        const mob = tradeMob;
+        if (rec.smith && (!mob || mob.vilId !== 'boris')) {
+            showInvToast('Это продаёт только Борис');
+            return;
+        }
+        if (rec.armor && !(story.flags && story.flags.borisArmorUnlocked)) {
+            showInvToast('Сначала задание Бориса');
+            return;
+        }
+        if (!tradeCostOk(rec.cost)) {
             showInvToast('Мало ресурсов');
             return;
         }
-        for (let i = 0; i < rec.n; i++) takeOneFromInv(rec.need);
-        if (!addItemToInventory(rec.give, rec.g)) dropExtras(rec.give, rec.g);
+        payTradeCost(rec.cost);
+        if (rec.unlock) {
+            story.flags.borisArmorUnlocked = true;
+            saveStory();
+            villagerAddGossip(mob, 'trade', 8);
+            villagerRemember(mob, 'help', 'Игрок выполнил заказ кузнеца и открыл броню');
+            villageRecordEvent('help', 'Борис открыл магазин брони', mob.pos.x, mob.pos.z);
+            addItemToInventory(ITEM_EMERALD, 1);
+            renderTradePanel();
+            showInvToast('Броня открыта · бонус: изумруд');
+        } else {
+            if (!addItemToInventory(rec.give, rec.g)) dropExtras(rec.give, rec.g);
+            if (mob && mob.type === 'villager') {
+                villagerAddGossip(mob, 'trade', rec.armor ? 5 : 2);
+                villageRecordEvent('help', 'Игрок купил ' + (BLOCK_NAMES[rec.give] || 'предмет') + ' у ' + (mob.vilName || 'жителя'), mob.pos.x, mob.pos.z);
+                if (rec.armor) villagerSay(mob, 'Носи аккуратно. Броня спасает, но не делает бессмертным.', 3.0);
+            }
+            showInvToast('Обмен: ' + (BLOCK_NAMES[rec.give] || ''));
+        }
         saveInventory();
         refreshInventoryUI();
-        if (chatMob && chatMob.type === 'villager') {
-            villagerAddGossip(chatMob, 'trade', 2);
-            villageRecordEvent('help', 'Игрок торговал с ' + (chatMob.vilName || 'жителем'), chatMob.pos.x, chatMob.pos.z);
-        }
-        showInvToast('Обмен: ' + (BLOCK_NAMES[rec.give] || ''));
     }
     function interactMob(mob) {
         const tool = heldType();
@@ -10751,6 +10833,16 @@
             saveInventory();
             refreshInventoryUI();
             ok('Подарки и доверие', giftOk && trustGiftAfter > trustGiftBefore, trustGiftBefore.toFixed(2) + ' → ' + trustGiftAfter.toFixed(2));
+            const boris = villagerList().filter(function (v) { return v.vilId === 'boris'; })[0];
+            if (boris) {
+                const oldFlag = !!story.flags.borisArmorUnlocked;
+                story.flags.borisArmorUnlocked = true;
+                tradeMob = boris;
+                renderTradePanel();
+                ok('Магазин брони Бориса', document.querySelector('[data-trade="armor_helmet"]').style.display !== 'none', 'shop visible');
+                story.flags.borisArmorUnlocked = oldFlag;
+                tradeMob = null;
+            }
             const sx = ivan.pos.x, sy = ivan.pos.y, sz = ivan.pos.z;
             ivan.jobTarget = { x: sx, z: sz }; ivan.jobFace = ivan.yaw; ivan.state = 'work'; ivan.vel.set(0,0,0); ivan.onGround = true;
             for (let i = 0; i < 45; i++) ivan.update(1 / 30);
