@@ -6573,6 +6573,9 @@
         chunk.setBlock(lx, wy, lz, type);
         if (!silent && oldType !== type && typeof villagerBroadcastNoise === 'function') {
             villagerBroadcastNoise(wx + 0.5, wy + 0.5, wz + 0.5, 'block', 7.5);
+            if (typeof villageRecordEvent === 'function' && Math.hypot(wx - VILLAGE_OX, wz - VILLAGE_OZ) < 30) {
+                villageRecordEvent('block', 'Игрок изменил блок ' + (BLOCK_NAMES[type] || type), wx, wz);
+            }
         }
 
         chunk.isDirty = true;
@@ -7057,6 +7060,9 @@
         const mem = mob.villagerBrain.memory;
         mem.push({ kind: kind, text: text, t: performance.now() });
         while (mem.length > 8) mem.shift();
+        if (typeof villageRecordEvent === 'function' && (kind === 'attack' || kind === 'gift' || kind === 'help')) {
+            villageRecordEvent(kind, (mob.vilName || 'Житель') + ': ' + text, mob.pos.x, mob.pos.z);
+        }
     }
     function villagerSetIntent(mob, intent, seconds, reason) {
         if (!mob) return;
@@ -7334,6 +7340,7 @@
                 const z = mob.pos.z + Math.cos(yaw) * d;
                 if (villagerBlockedAt(x, z, y, 0.26)) {
                     clear = false;
+                    if (typeof villageMarkObstacle === 'function') villageMarkObstacle(x, z);
                     score -= (2.4 - d) * 7;
                     break;
                 }
@@ -7403,7 +7410,7 @@
                 if (!walk(nx, nz)) continue;
                 if (dirs[i][0] && dirs[i][1] && (!walk(nx, cz) || !walk(cx, nz))) continue;
                 const nk = nx + ',' + nz;
-                const ng = cg + ((dirs[i][0] && dirs[i][1]) ? 1.414 : 1);
+                const ng = cg + ((dirs[i][0] && dirs[i][1]) ? 1.414 : 1) + (typeof villageObstaclePenalty === 'function' ? villageObstaclePenalty(nx, nz) * 0.18 : 0);
                 if (gScore[nk] !== undefined && ng >= gScore[nk]) continue;
                 came[nk] = ck;
                 gScore[nk] = ng;
@@ -9647,6 +9654,80 @@
         return 'План такой: дерево → верстак → кирка → камень → печь → железо → лодка. Осматривай биомы, ставь факелы и всегда держи еду в хотбаре.';
     }
 
+    const VILLAGE_BLACKBOARD = {
+        events: [],
+        biomes: {},
+        obstacleHeat: Object.create(null),
+        playerHelp: 0,
+        playerDanger: 0
+    };
+    function villageRecordEvent(kind, text, x, z) {
+        const ev = { kind: kind || 'event', text: String(text || '').slice(0, 100), x: Math.round(x || player.pos.x), z: Math.round(z || player.pos.z), t: performance.now() };
+        VILLAGE_BLACKBOARD.events.push(ev);
+        while (VILLAGE_BLACKBOARD.events.length > 18) VILLAGE_BLACKBOARD.events.shift();
+        if (kind === 'gift' || kind === 'help') VILLAGE_BLACKBOARD.playerHelp++;
+        if (kind === 'attack' || kind === 'danger') VILLAGE_BLACKBOARD.playerDanger++;
+    }
+    function villageLatestEvent() {
+        return VILLAGE_BLACKBOARD.events.length ? VILLAGE_BLACKBOARD.events[VILLAGE_BLACKBOARD.events.length - 1] : null;
+    }
+    function villageRememberBiome(id) {
+        if (!id) return;
+        VILLAGE_BLACKBOARD.biomes[id] = (VILLAGE_BLACKBOARD.biomes[id] || 0) + 1;
+        if (VILLAGE_BLACKBOARD.biomes[id] === 1) villageRecordEvent('biome', 'Игрок нашёл биом: ' + biomeTitle(id), player.pos.x, player.pos.z);
+    }
+    function villageObstacleKey(x, z) { return Math.floor(x) + ',' + Math.floor(z); }
+    function villageMarkObstacle(x, z) {
+        const k = villageObstacleKey(x, z);
+        VILLAGE_BLACKBOARD.obstacleHeat[k] = Math.min(8, (VILLAGE_BLACKBOARD.obstacleHeat[k] || 0) + 2);
+    }
+    function villageObstaclePenalty(x, z) {
+        const k = villageObstacleKey(x, z);
+        return VILLAGE_BLACKBOARD.obstacleHeat[k] || 0;
+    }
+    function villageDecayKnowledge(dt) {
+        if (!VILLAGE_BLACKBOARD._decay) VILLAGE_BLACKBOARD._decay = 0;
+        VILLAGE_BLACKBOARD._decay += dt;
+        if (VILLAGE_BLACKBOARD._decay < 2.5) return;
+        VILLAGE_BLACKBOARD._decay = 0;
+        const heat = VILLAGE_BLACKBOARD.obstacleHeat;
+        for (const k in heat) {
+            heat[k] *= 0.75;
+            if (heat[k] < 0.5) delete heat[k];
+        }
+    }
+    function villagerQuestLine(mob) {
+        const id = mob.vilId || 'wanderer';
+        if (id === 'ivan') {
+            if (villagerCount(BLOCK_TORCH) < 3) return 'Задание старосты: сделай или принеси 3 факела. Деревня должна видеть ночь раньше, чем ночь увидит нас.';
+            return 'Факелы есть. Следующий шаг — укрепи тропы и не оставляй двери открытыми.';
+        }
+        if (id === 'masha') {
+            if (!storyHas(ITEM_COOKED_MEAT) && !storyHas(ITEM_STEW)) return 'Моё задание: добудь мясо и приготовь его. Сырое спасает плохо, жаркое спасает жизнь.';
+            return 'Еда есть. Если найдёшь молоко — принеси, я буду спокойнее за деревню.';
+        }
+        if (id === 'boris') {
+            if (!storyHas(ITEM_IRON_INGOT)) return 'Задание кузнеца: добудь железную руду и переплавь. Без железа деревня слабая.';
+            return 'Железо у тебя есть. Теперь думай о железной кирке и защите.';
+        }
+        if (id === 'anna') {
+            const known = Object.keys(VILLAGE_BLACKBOARD.biomes).length;
+            if (known < 3) return 'Моё задание: найди три разных биома. Сейчас на карте отмечено: ' + known + '.';
+            return 'Ты уже принёс карте несколько имён. Теперь ищи редкое: пустыню, снега, месу или грибы.';
+        }
+        if (id === 'gleb') {
+            if (!storyHas(ITEM_BOAT)) return 'Задание рыбака: скрафти лодку. Океан без лодки не дорога, а могила.';
+            return 'Лодка есть. Плыви днём, возвращайся до темноты и помни берег.';
+        }
+        return villagerGameAdvice(mob, 'что делать');
+    }
+    function villageReport() {
+        const ev = villageLatestEvent();
+        const known = Object.keys(VILLAGE_BLACKBOARD.biomes).map(function (k) { return biomeTitle(k); }).slice(-4).join(', ') || 'пока только окрестности';
+        const rep = VILLAGE_BLACKBOARD.playerHelp - VILLAGE_BLACKBOARD.playerDanger;
+        return 'Память деревни: биомы — ' + known + '. Репутация игрока: ' + rep + '. Последнее событие: ' + (ev ? ev.text + ' у X ' + ev.x + ', Z ' + ev.z : 'ничего важного не было') + '.';
+    }
+
     const VILLAGER_GOSSIP = [
         'Колодец сегодня чистый.',
         'Голем опять у воды стоит.',
@@ -9684,7 +9765,13 @@
                 b.talkWith = a;
                 a.talkCd = 14 + Math.random() * 8;
                 b.talkCd = a.talkCd;
-                if ((a.alertT || 0) > 0 || (b.alertT || 0) > 0) {
+                villagerSetIntent(a, 'social', 2.5, 'разговор с жителем');
+                villagerSetIntent(b, 'social', 2.5, 'разговор с жителем');
+                const latest = villageLatestEvent ? villageLatestEvent() : null;
+                if (latest && Math.random() < 0.35) {
+                    villagerSay(a, 'Слышал новость: ' + latest.text, 2.6);
+                    setTimeout(function () { if (b.health > 0) villagerSay(b, 'Запомню. Это важно для деревни.', 2.4); }, 1100);
+                } else if ((a.alertT || 0) > 0 || (b.alertT || 0) > 0) {
                     if ((a.alertT || 0) > 0) b.alertT = Math.max(b.alertT || 0, a.alertT * 0.85);
                     if ((b.alertT || 0) > 0) a.alertT = Math.max(a.alertT || 0, b.alertT * 0.85);
                     villagerSay(a, 'Я видел тревогу. Передай остальным.', 2.4);
@@ -9753,8 +9840,14 @@
             if (mob.lastKnownPlayer && (mob.seenPlayerT || 0) > 0) return 'Сейчас потерял из виду, но помню, где ты был: рядом с X ' + Math.round(mob.lastKnownPlayer.x) + ', Z ' + Math.round(mob.lastKnownPlayer.z) + '.';
             return 'Я смотрю глазами, а не магией: стены, двери и темнота мешают. Выйди на свет или подойди ближе.';
         }
+        if (/память деревн|что помнит деревн|новост|сводк/.test(t)) {
+            return villageReport();
+        }
         if (/что вокруг|что сейчас|обстанов|статус|ситуац|знаешь сейчас|что знаешь/.test(t)) {
             return villagerWorldSummary(mob);
+        }
+        if (/задание|задача|поручение|квест/.test(t)) {
+            return villagerQuestLine(mob);
         }
         if (/совет|что делать|научи|игр|крафт|выжить|дальше|помоги|ресурс|еда|ноч|руда|желез|алмаз|лодк|печ/.test(t)) {
             return villagerGameAdvice(mob, t);
@@ -10422,6 +10515,10 @@
             ok('Маршрут к рабочей точке', villagerPlanRoute(ivan, VILLAGE_HUB[0], VILLAGE_HUB[1]), 'path ' + ((ivan.brainWay && ivan.brainWay.length) || 0));
             villagerSetIntent(ivan, 'investigate', 1, 'тест');
             ok('Намерение жителя', ivan.intent === 'investigate', ivan.intentReason || ivan.intent);
+            villageRecordEvent('help', 'Тестовая новость деревни', ivan.pos.x, ivan.pos.z);
+            ok('Общая память деревни', villageReport().indexOf('Тестовая новость') >= 0, 'blackboard');
+            villageMarkObstacle(ivan.pos.x + 1, ivan.pos.z);
+            ok('Память препятствий', villageObstaclePenalty(ivan.pos.x + 1, ivan.pos.z) > 0, 'heat');
             const sx = ivan.pos.x, sy = ivan.pos.y, sz = ivan.pos.z;
             ivan.jobTarget = { x: sx, z: sz }; ivan.jobFace = ivan.yaw; ivan.state = 'work'; ivan.vel.set(0,0,0); ivan.onGround = true;
             for (let i = 0; i < 45; i++) ivan.update(1 / 30);
@@ -10772,6 +10869,7 @@
     function announceBiome(id) {
         if (!id || id === lastAnnouncedBiome) return;
         lastAnnouncedBiome = id;
+        if (typeof villageRememberBiome === 'function') villageRememberBiome(id);
         const el = document.getElementById('biome-banner');
         if (!el) return;
         el.textContent = biomeTitle(id);
@@ -10809,6 +10907,7 @@
             torchAcc = 0;
         }
         updateMobsManager(dt);
+        if (typeof villageDecayKnowledge === 'function') villageDecayKnowledge(dt);
         socialAcc += dt;
         if (socialAcc >= PERF.socialEvery) {
             updateVillagerSocial(socialAcc);
