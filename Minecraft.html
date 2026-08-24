@@ -6790,10 +6790,10 @@
         'plains', 'forest', 'jungle', 'desert', 'taiga', 'snow', 'swamp',
         'savanna', 'mountains', 'mushroom', 'mesa', 'cherry', 'dark', 'ice_spikes'
     ];
-    const ISLAND_SPACING = 176;
+    const ISLAND_SPACING = 360; // огромные острова с большими расстояниями между ними
     function islandParams(ix, iz) {
         if (ix === 0 && iz === 0) {
-            return { exists: true, cx: 0, cz: 0, radius: 58, biome: 'plains' };
+            return { exists: true, cx: 0, cz: 0, radius: 156, biome: 'plains' };
         }
         const h = pseudoHash2D(ix * 73 + 11, iz * 91 + 19);
         if ((h % 100) < 50) return { exists: false };
@@ -6801,7 +6801,7 @@
             exists: true,
             cx: ix * ISLAND_SPACING + ((h % 71) - 35),
             cz: iz * ISLAND_SPACING + (((h >>> 8) % 71) - 35),
-            radius: 20 + (h % 16),
+            radius: 42 + (h % 28),
             biome: LAND_BIOMES[h % LAND_BIOMES.length]
         };
     }
@@ -6968,7 +6968,7 @@
             house: { minX: 11.55, maxX: 14.45, minZ: 24.55, maxZ: 29.45 },
             nightPath: [[13.5, 22.4]],
             workPath: [[13.5, 22.4], [19.5, 9.5]],
-            sites: [[19.5, 9.5, 3.1416], [19.5, 9.5, 3.1416], [15.5, 6.5, 1.57], [23.5, 6.5, -1.57]],
+            sites: [[19.5, 9.5, 3.1416], [19.5, 3.5, 3.1416], [8.5, 2.5, 1.57], [31.5, 2.5, -1.57], [8.5, -9.5, 1.57], [31.5, -9.5, -1.57]],
             lines: ['Грядки сохнут.', 'Воды на ферму.', 'Сорняк опять полез.']
         },
         boris: {
@@ -8344,6 +8344,38 @@
         villageAir(chunk, ox + 4, y + 1, y + 3, oz - 4);
         chunkPut(chunk, ox + 4, y + 1, oz - 4, BLOCK_PUMPKIN);
     }
+    function paintGreatField(chunk, ox, oz, y) {
+        // Большое деревенское поле: много грядок, вода, тропы и снопы.
+        for (let px = -18; px <= 18; px += 12) {
+            for (let pz = -10; pz <= 10; pz += 8) {
+                paintFarmPlot(chunk, ox + px - 4, oz + pz - 3, ox + px + 4, oz + pz + 3, y);
+            }
+        }
+        for (let x = ox - 25; x <= ox + 25; x++) {
+            chunkPut(chunk, x, y, oz, BLOCK_DIRT);
+            villageAir(chunk, x, y + 1, y + 3, oz);
+        }
+        for (let z = oz - 17; z <= oz + 17; z++) {
+            chunkPut(chunk, ox, y, z, BLOCK_DIRT);
+            villageAir(chunk, ox, y + 1, y + 3, z);
+        }
+        for (let x = ox - 26; x <= ox + 26; x++) {
+            chunkPut(chunk, x, y, oz - 18, BLOCK_FENCE);
+            chunkPut(chunk, x, y, oz + 18, BLOCK_FENCE);
+        }
+        for (let z = oz - 17; z <= oz + 17; z++) {
+            chunkPut(chunk, ox - 26, y, z, BLOCK_FENCE);
+            chunkPut(chunk, ox + 26, y, z, BLOCK_FENCE);
+        }
+        const hay = [[ox - 23, oz - 15], [ox - 22, oz - 15], [ox - 23, oz - 14], [ox + 22, oz + 15], [ox + 23, oz + 15]];
+        for (let i = 0; i < hay.length; i++) {
+            chunkPut(chunk, hay[i][0], y, hay[i][1], BLOCK_HAY);
+            if (i % 2 === 0) chunkPut(chunk, hay[i][0], y + 1, hay[i][1], BLOCK_HAY);
+            villageAir(chunk, hay[i][0], y + 2, y + 3, hay[i][1]);
+        }
+        workPut(ox - 1, y + 1, oz - 1, 'composter', 0);
+        workPut(ox + 1, y + 1, oz + 1, 'composter', 0);
+    }
     function paintPath(chunk, x0, z0, x1, z1, y) {
         let x = x0, z = z0, guard = 0;
         const sx = Math.sign(x1 - x0), sz = Math.sign(z1 - z0);
@@ -8358,10 +8390,10 @@
     function paintSpawnVillage(chunk) {
         const minX = chunk.cx * CHUNK_SIZE, maxX = minX + CHUNK_SIZE;
         const minZ = chunk.cz * CHUNK_SIZE, maxZ = minZ + CHUNK_SIZE;
-        if (maxX < 0 || minX > 42 || maxZ < -10 || minZ > 34) return;
+        if (maxX < -42 || minX > 86 || maxZ < -42 || minZ > 48) return;
         const ox = VILLAGE_OX, oz = VILLAGE_OZ, y = VILLAGE_Y;
-        for (let wx = 5; wx <= 36; wx++) {
-            for (let wz = -2; wz <= 30; wz++) {
+        for (let wx = -36; wx <= 80; wx++) {
+            for (let wz = -36; wz <= 42; wz++) {
                 if (wx < minX || wx >= maxX || wz < minZ || wz >= maxZ) continue;
                 for (let yy = y - 4; yy < y; yy++) chunkPut(chunk, wx, yy, wz, BLOCK_DIRT);
                 chunkPut(chunk, wx, y, wz, BLOCK_GRASS);
@@ -8378,10 +8410,13 @@
         paintHouse(chunk, ox - 7, oz + 8, 0, y);
         paintHouse(chunk, ox + 13, oz + 8, 2, y);
         paintFarm(chunk, ox - 1, oz - 10, y);
+        paintGreatField(chunk, ox, oz - 24, y);
         paintSmithy(chunk, 24, 10, y);
         paintDock(chunk, 9, 3, y);
         paintMapDesk(chunk, 21, 22, y);
         paintPath(chunk, ox, oz - 8, 19, 9, y);
+        paintPath(chunk, ox, oz - 18, ox, oz - 40, y);
+        paintPath(chunk, ox - 24, oz - 24, ox + 24, oz - 24, y);
         paintPath(chunk, 20, 12, 25, 12, y);
         paintPath(chunk, 14, 16, 10, 5, y);
         paintPath(chunk, 27, 26, 33, 26, y);
