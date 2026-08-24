@@ -5535,6 +5535,7 @@
             if (this.type === 'villager') {
                 villagerInitBrain(this);
                 this.villagerBrain.trust = Math.max(0, this.villagerBrain.trust - 0.22);
+                villagerAddGossip(this, 'minorNegative', 25);
                 this.alertT = 12;
                 this.seenThreatT = 14;
                 this.lastKnownPlayer = { x: player.pos.x, y: player.pos.y, z: player.pos.z, t: performance.now() };
@@ -6163,6 +6164,14 @@
                     spawnBlockDrop(x, y, z, ITEM_MEAT);
                     if (Math.random() < 0.5) spawnBlockDrop(x, y, z, ITEM_LEATHER);
                 } else if (mob.type === 'villager') {
+                    villageRecordEvent('danger', 'Житель погиб: ' + (mob.vilName || 'житель'), mob.pos.x, mob.pos.z);
+                    for (let gi = 0; gi < mobs.length; gi++) {
+                        const w = mobs[gi];
+                        if (w && w !== mob && w.type === 'villager' && w.health > 0 && w.pos.distanceTo(mob.pos) < 16 &&
+                            villagerCanSeePoint(w, new THREE.Vector3(mob.pos.x, mob.pos.y + 1.0, mob.pos.z), { range: 16, fov: 2.4, closeRange: 4, silent: true })) {
+                            villagerAddGossip(w, 'majorNegative', 25);
+                        }
+                    }
                     if (Math.random() < 0.4) spawnBlockDrop(x, y, z, ITEM_EMERALD);
                 } else if (mob.type === 'frog') {
                     spawnBlockDrop(x, y, z, ITEM_MEAT);
@@ -7044,6 +7053,8 @@
             curiosity: 0.35 + (((seed >> 3) % 45) / 100),
             sociability: 0.38 + (((seed >> 7) % 50) / 100),
             knowledge: 1,
+            gossip: { majorPositive: 0, minorPositive: 0, trade: 0, minorNegative: 0, majorNegative: 0 },
+            lastGossipDecay: performance.now(),
             memory: [],
             learnedPlayerName: false
         };
@@ -7074,6 +7085,60 @@
         mob.intentT = Math.max(mob.intentT || 0, seconds || 0.8);
         mob.intentReason = reason || '';
     }
+    function mcDayTick() {
+        return Math.floor(((cycleTimer % TOTAL_CYCLE) / TOTAL_CYCLE) * 24000);
+    }
+    function villagerSchedulePhase(mob) {
+        const t = mcDayTick();
+        const employed = !!(mob && mob.vilJob && mob.vilJob !== 'nitwit');
+        if (t >= 12000) return 'sleep';
+        if (!employed) return (t >= 11000) ? 'home' : 'wander';
+        if (t < 8000) return 'work';
+        if (t < 10000) return 'gather';
+        if (t < 11000) return 'work';
+        return 'home';
+    }
+    function villagerAddGossip(mob, type, amount) {
+        if (!mob || mob.type !== 'villager') return;
+        villagerInitBrain(mob);
+        const g = mob.villagerBrain.gossip || (mob.villagerBrain.gossip = {});
+        const max = { majorPositive: 100, minorPositive: 200, trade: 25, minorNegative: 200, majorNegative: 100 };
+        g[type] = Math.max(0, Math.min(max[type] || 100, (g[type] || 0) + amount));
+        const rep = villagerReputation(mob);
+        mob.villagerBrain.trust = Math.max(0, Math.min(1, 0.5 + rep / 220));
+    }
+    function villagerReputation(mob) {
+        villagerInitBrain(mob);
+        const g = mob.villagerBrain.gossip || {};
+        return Math.round((g.majorPositive || 0) * 5 + (g.minorPositive || 0) + (g.trade || 0) - (g.minorNegative || 0) - (g.majorNegative || 0) * 5);
+    }
+    function villagerDecayGossip(mob, dt) {
+        if (!mob || mob.type !== 'villager') return;
+        villagerInitBrain(mob);
+        mob._gossipDecayAcc = (mob._gossipDecayAcc || 0) + dt;
+        if (mob._gossipDecayAcc < 20) return;
+        mob._gossipDecayAcc = 0;
+        const g = mob.villagerBrain.gossip;
+        g.minorPositive = Math.max(0, (g.minorPositive || 0) - 1);
+        g.trade = Math.max(0, (g.trade || 0) - 2);
+        g.minorNegative = Math.max(0, (g.minorNegative || 0) - 20);
+        g.majorNegative = Math.max(0, (g.majorNegative || 0) - 10);
+    }
+    function villagerShareGossip(a, b) {
+        if (!a || !b || a.type !== 'villager' || b.type !== 'villager') return;
+        villagerInitBrain(a); villagerInitBrain(b);
+        const ga = a.villagerBrain.gossip, gb = b.villagerBrain.gossip;
+        function pass(type, penalty, cap) {
+            const av = Math.max(0, (ga[type] || 0) - penalty);
+            const bv = Math.max(0, (gb[type] || 0) - penalty);
+            if (av > (gb[type] || 0)) gb[type] = Math.min(cap, av);
+            if (bv > (ga[type] || 0)) ga[type] = Math.min(cap, bv);
+        }
+        pass('minorPositive', 5, 200);
+        pass('trade', 20, 25);
+        pass('minorNegative', 20, 200);
+        pass('majorNegative', 10, 100);
+    }
     function villagerBroadcastNoise(x, y, z, kind, power) {
         power = power || 8;
         if (!mobs || !mobs.length) return;
@@ -7098,7 +7163,9 @@
         const parts = [];
         parts.push('Сейчас ' + playerBio());
         parts.push((typeof cycleTimer === 'number' && cycleTimer >= DAY_DURATION) ? 'ночь' : 'день');
+        parts.push('расписание: ' + (mob.mcSchedule || villagerSchedulePhase(mob)));
         parts.push('намерение: ' + (mob.intent || 'work'));
+        parts.push('репутация: ' + villagerReputation(mob));
         if (mob.seesPlayer) parts.push('вижу тебя');
         else if (mob.lastKnownPlayer) parts.push('помню тебя у X ' + Math.round(mob.lastKnownPlayer.x) + ', Z ' + Math.round(mob.lastKnownPlayer.z));
         if (mob.lastHeard && (mob.noiseT || 0) > 0) parts.push('слышу ' + mob.lastHeard.kind);
@@ -7116,6 +7183,7 @@
         if (!good) return false;
         consumeSelectedOne();
         mob.villagerBrain.trust = Math.min(1, (mob.villagerBrain.trust || 0.5) + 0.08);
+        villagerAddGossip(mob, 'minorPositive', item === ITEM_EMERALD ? 12 : 6);
         villagerRemember(mob, 'gift', 'Игрок подарил ' + (BLOCK_NAMES[item] || 'предмет'));
         villagerSay(mob, line, 3.0);
         showInvToast('Подарок: доверие +' );
@@ -7141,13 +7209,16 @@
     function villagerUpdateMind(mob, dt, night) {
         villagerInitBrain(mob);
         const brain = mob.villagerBrain;
+        const mcPhase = villagerSchedulePhase(mob);
+        mob.mcSchedule = mcPhase;
+        villagerDecayGossip(mob, dt);
         mob.needSocial = Math.max(0, (mob.needSocial || 0) - dt * (brain.sociability || 0.5));
         mob.needLookAround = Math.max(0, (mob.needLookAround || 0) - dt * (brain.curiosity || 0.5));
         mob.alertRetargetCd = Math.max(0, (mob.alertRetargetCd || 0) - dt);
         mob.intentT = Math.max(0, (mob.intentT || 0) - dt);
         mob.noiseT = Math.max(0, (mob.noiseT || 0) - dt);
         if (chatMob === mob) villagerSetIntent(mob, 'talk', 0.7, 'разговор с игроком');
-        else if (night && mob.nightStep === 'inside') villagerSetIntent(mob, 'sleep', 1.2, 'ночь дома');
+        else if (mcPhase === 'sleep' && mob.nightStep === 'inside') villagerSetIntent(mob, 'sleep', 1.2, 'ночь дома');
         else if (mob.seenThreatT > 0) villagerSetIntent(mob, 'alert', 1.4, 'опасность');
         else if ((mob.noiseT || 0) > 0 && mob.lastHeard) villagerSetIntent(mob, 'investigate', 1.0, 'шум');
         else if (mob.state === 'walk' || mob.jobPhase === 'workpath' || mob.nightStep === 'path') villagerSetIntent(mob, 'travel', 0.8, 'путь');
@@ -7612,9 +7683,24 @@
                 mob.jobTarget = { x: x, z: z };
             }
         }
-        if (night) {
+        const phase = villagerSchedulePhase(mob);
+        if (night || phase === 'sleep') {
             if (spec.door) startNightWalk(mob);
             else setTarget(VILLAGE_HUB[0], VILLAGE_HUB[1], 'hub');
+            return;
+        }
+        if (phase === 'gather') {
+            setTarget(VILLAGE_HUB[0], VILLAGE_HUB[1], 'gather', Math.random() * Math.PI * 2);
+            mob.jobTimer = 8 + Math.random() * 8;
+            return;
+        }
+        if (phase === 'home' && spec.home) {
+            setTarget(spec.approach ? spec.approach[0] : spec.home[0], spec.approach ? spec.approach[1] : spec.home[1], 'home', spec.sites && spec.sites[0] ? spec.sites[0][2] : null);
+            mob.jobTimer = 8 + Math.random() * 6;
+            return;
+        }
+        if (phase === 'wander' && Math.random() < 0.55) {
+            setTarget(VILLAGE_HUB[0] + (Math.random() - 0.5) * 8, VILLAGE_HUB[1] + (Math.random() - 0.5) * 8, 'wander');
             return;
         }
         if (Math.random() < 0.7 && spec.sites[0] && villagerWalkable(spec.sites[0][0], spec.sites[0][1], 0.34)) {
@@ -9767,6 +9853,7 @@
                 b.talkCd = a.talkCd;
                 villagerSetIntent(a, 'social', 2.5, 'разговор с жителем');
                 villagerSetIntent(b, 'social', 2.5, 'разговор с жителем');
+                villagerShareGossip(a, b);
                 const latest = villageLatestEvent ? villageLatestEvent() : null;
                 if (latest && Math.random() < 0.35) {
                     villagerSay(a, 'Слышал новость: ' + latest.text, 2.6);
@@ -9839,6 +9926,9 @@
             if (mob.seesPlayer) return 'Да. Я вижу тебя прямо сейчас: расстояние примерно ' + Math.round(mob._visionDist || mob.pos.distanceTo(player.pos)) + ' блоков, преград нет.';
             if (mob.lastKnownPlayer && (mob.seenPlayerT || 0) > 0) return 'Сейчас потерял из виду, но помню, где ты был: рядом с X ' + Math.round(mob.lastKnownPlayer.x) + ', Z ' + Math.round(mob.lastKnownPlayer.z) + '.';
             return 'Я смотрю глазами, а не магией: стены, двери и темнота мешают. Выйди на свет или подойди ближе.';
+        }
+        if (/расписан|режим дня|когда работа|когда спишь/.test(t)) {
+            return 'У нас порядок как в Minecraft: утром работа, днём встреча у центра, потом ещё работа, вечером домой, ночью сон. Сейчас мой этап: ' + (mob.mcSchedule || villagerSchedulePhase(mob)) + '.';
         }
         if (/память деревн|что помнит деревн|новост|сводк/.test(t)) {
             return villageReport();
@@ -10025,6 +10115,10 @@
         if (!addItemToInventory(rec.give, rec.g)) dropExtras(rec.give, rec.g);
         saveInventory();
         refreshInventoryUI();
+        if (chatMob && chatMob.type === 'villager') {
+            villagerAddGossip(chatMob, 'trade', 2);
+            villageRecordEvent('help', 'Игрок торговал с ' + (chatMob.vilName || 'жителем'), chatMob.pos.x, chatMob.pos.z);
+        }
         showInvToast('Обмен: ' + (BLOCK_NAMES[rec.give] || ''));
     }
     function interactMob(mob) {
@@ -10515,6 +10609,10 @@
             ok('Маршрут к рабочей точке', villagerPlanRoute(ivan, VILLAGE_HUB[0], VILLAGE_HUB[1]), 'path ' + ((ivan.brainWay && ivan.brainWay.length) || 0));
             villagerSetIntent(ivan, 'investigate', 1, 'тест');
             ok('Намерение жителя', ivan.intent === 'investigate', ivan.intentReason || ivan.intent);
+            ok('Расписание Minecraft', ['work','gather','home','sleep','wander'].indexOf(villagerSchedulePhase(ivan)) >= 0, villagerSchedulePhase(ivan));
+            const rep0 = villagerReputation(ivan);
+            villagerAddGossip(ivan, 'trade', 2);
+            ok('Gossip/репутация', villagerReputation(ivan) > rep0, rep0 + ' → ' + villagerReputation(ivan));
             villageRecordEvent('help', 'Тестовая новость деревни', ivan.pos.x, ivan.pos.z);
             ok('Общая память деревни', villageReport().indexOf('Тестовая новость') >= 0, 'blackboard');
             villageRememberBiome('desert');
