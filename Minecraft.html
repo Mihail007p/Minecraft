@@ -9819,8 +9819,10 @@
             return 'Еда есть. Если найдёшь молоко — принеси, я буду спокойнее за деревню.';
         }
         if (id === 'boris') {
-            if (!storyHas(ITEM_IRON_INGOT)) return 'Задание кузнеца: добудь железную руду и переплавь. Без железа деревня слабая.';
-            return 'Железо у тебя есть. Теперь думай о железной кирке и защите.';
+            if (!(story.flags && story.flags.borisArmorUnlocked)) return borisArmorQuestProgress();
+            if (!storyHas(ITEM_IRON_INGOT)) return 'Броня открыта, но нужно железо: добудь железную руду каменной киркой и переплавь в печи.';
+            if (!storyHas(ITEM_EMERALD)) return 'Для покупки брони нужны изумруды. Получи их обменом: мясо, шерсть или другие ресурсы у жителей.';
+            return 'Ты готов покупать броню. Открой торговлю у меня и выбери часть комплекта.';
         }
         if (id === 'anna') {
             const known = Object.keys(VILLAGE_BLACKBOARD.biomes).length;
@@ -10113,9 +10115,16 @@
             return 'Выживай, слушай, плыви, возвращайся.';
         }
         if (/брон|шлем|нагруд|понож|ботин|щит|защит/.test(t)) {
-            if (id !== 'boris') return 'За бронёй иди к Борису. Только кузнец отвечает за железо и защиту.';
-            if (!(story.flags && story.flags.borisArmorUnlocked)) return 'Хочешь броню? Моё задание: принеси 8 угля и 1 железо. Выполни заказ в торговле — открою магазин брони.';
-            return 'Броня открыта: шлем, нагрудник, поножи, ботинки и щит. Носи в инвентаре — урон по тебе станет меньше.';
+            if (id !== 'boris') return 'За бронёй иди к Борису. Только кузнец отвечает за железо и защиту. Цепочка: уголь + железо → открыть броню → изумруды + железо → купить части.';
+            if (!(story.flags && story.flags.borisArmorUnlocked)) return borisArmorQuestProgress();
+            return 'Броня открыта: шлем, нагрудник, поножи, ботинки и щит. Носи в инвентаре — урон по тебе станет меньше. Изумруды получай торговлей, железо плавь из руды.';
+        }
+        if (/как добыть|где взять|уголь|желез|изумруд|ресурс/.test(t)) {
+            if (/уголь/.test(t)) return resourceHowTo(ITEM_CHARCOAL);
+            if (/желез/.test(t)) return resourceHowTo(ITEM_IRON_INGOT);
+            if (/изумруд/.test(t)) return resourceHowTo(ITEM_EMERALD);
+            if (id === 'boris') return borisArmorQuestProgress();
+            return 'Назови ресурс точнее: уголь, железо или изумруд. Я объясню цепочку добычи.';
         }
         if (/торг|куп|прод|обмен|цен|кирк|желез|изумруд|шерст/.test(t)) {
             if (id === 'boris' && hasIron) return 'Вижу железо у тебя. Хорошо. Если выполнишь заказ 8 угля + 1 железо, открою броню.';
@@ -10233,6 +10242,39 @@
         });
     }
 
+    function tradeCostText(cost) {
+        const parts = [];
+        for (let i = 0; i < cost.length; i++) {
+            parts.push(cost[i][1] + '× ' + (BLOCK_NAMES[cost[i][0]] || cost[i][0]));
+        }
+        return parts.join(' + ');
+    }
+    function resourceHowTo(type) {
+        if (type === ITEM_CHARCOAL) return 'Уголь: ищи угольную руду в камне или переплавь дерево в печи.';
+        if (type === ITEM_IRON_INGOT) return 'Железо: добудь железную руду каменной киркой и переплавь в печи на угле.';
+        if (type === ITEM_EMERALD) return 'Изумруд: обменяй у жителей мясо, шерсть или другие ресурсы.';
+        if (type === ITEM_WOOL) return 'Шерсть: добывается с овец или крафтится из нитей.';
+        if (type === ITEM_MEAT) return 'Мясо: охота на животных; лучше потом приготовить в печи.';
+        if (type === BLOCK_STONE) return 'Камень: добудь киркой под землёй; из 8 камней делается печь.';
+        return (BLOCK_NAMES[type] || 'Ресурс') + ': проверь крафт, добычу или торговлю.';
+    }
+    function missingTradeHint(rec) {
+        const miss = [];
+        for (let i = 0; i < rec.cost.length; i++) {
+            const type = rec.cost[i][0], need = rec.cost[i][1], have = countInvType(type);
+            if (have < need) miss.push((BLOCK_NAMES[type] || type) + ' ' + have + '/' + need + '. ' + resourceHowTo(type));
+        }
+        return miss.join(' ');
+    }
+    function borisArmorQuestProgress() {
+        const coal = countInvType(ITEM_CHARCOAL);
+        const iron = countInvType(ITEM_IRON_INGOT);
+        if (story.flags && story.flags.borisArmorUnlocked) return 'Броня открыта. Железо покупай/плавь, изумруды получай обменом.';
+        return 'Задание: 8 угля (' + coal + '/8) + 1 железо (' + iron + '/1). ' +
+            (coal < 8 ? 'Уголь ищи в камне или жги дерево в печи. ' : '') +
+            (iron < 1 ? 'Железо добудь из руды каменной киркой и переплавь. ' : '') +
+            'После этого Борис откроет броню.';
+    }
     function renderTradePanel() {
         const mob = tradeMob;
         const isSmith = mob && mob.vilId === 'boris';
@@ -10241,8 +10283,8 @@
         if (title) title.textContent = isSmith ? 'Кузница Бориса' : ('Торговля · ' + (mob && mob.vilName ? mob.vilName : 'Житель'));
         if (hint) {
             hint.textContent = isSmith
-                ? ((story.flags && story.flags.borisArmorUnlocked) ? 'Броня открыта. Броня в инвентаре снижает входящий урон.' : 'Сначала выполни задание кузнеца, затем покупай броню.')
-                : 'Обычный деревенский обмен ресурсами.';
+                ? (borisArmorQuestProgress() + ' Броня в инвентаре снижает входящий урон.')
+                : 'Обычный деревенский обмен ресурсами. Не хватает ресурса — житель подскажет, где добыть.';
         }
         document.querySelectorAll('#trade-panel [data-role="smith"]').forEach(function (b) { b.style.display = isSmith ? 'block' : 'none'; });
         document.querySelectorAll('#trade-panel [data-role="general"]').forEach(function (b) { b.style.display = 'block'; });
@@ -10287,7 +10329,14 @@
             return;
         }
         if (!tradeCostOk(rec.cost)) {
+            const hint = missingTradeHint(rec);
             showInvToast('Мало ресурсов');
+            if (tradeMob && tradeMob.type === 'villager') {
+                villagerSay(tradeMob, hint || 'Нужно: ' + tradeCostText(rec.cost), 4.5);
+                villageRecordEvent('work', (tradeMob.vilName || 'Житель') + ' объяснил добычу ресурсов', tradeMob.pos.x, tradeMob.pos.z);
+            }
+            const h = document.getElementById('trade-hint');
+            if (h) h.textContent = hint || ('Нужно: ' + tradeCostText(rec.cost));
             return;
         }
         payTradeCost(rec.cost);
@@ -10300,6 +10349,8 @@
             addItemToInventory(ITEM_EMERALD, 1);
             renderTradePanel();
             showInvToast('Броня открыта · бонус: изумруд');
+            const h = document.getElementById('trade-hint');
+            if (h) h.textContent = 'Броня открыта. Теперь покупай части брони за железо и изумруды. Изумруды — через обмен с жителями.';
         } else {
             if (!addItemToInventory(rec.give, rec.g)) dropExtras(rec.give, rec.g);
             if (mob && mob.type === 'villager') {
@@ -10840,6 +10891,8 @@
                 tradeMob = boris;
                 renderTradePanel();
                 ok('Магазин брони Бориса', document.querySelector('[data-trade="armor_helmet"]').style.display !== 'none', 'shop visible');
+                ok('Связка добычи брони', borisArmorQuestProgress().indexOf('угля') >= 0 || story.flags.borisArmorUnlocked, 'quest chain');
+                ok('Подсказка ресурсов', resourceHowTo(ITEM_IRON_INGOT).indexOf('переплав') >= 0, 'iron guide');
                 story.flags.borisArmorUnlocked = oldFlag;
                 tradeMob = null;
             }
