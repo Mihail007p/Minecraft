@@ -8390,14 +8390,29 @@
     function paintSpawnVillage(chunk) {
         const minX = chunk.cx * CHUNK_SIZE, maxX = minX + CHUNK_SIZE;
         const minZ = chunk.cz * CHUNK_SIZE, maxZ = minZ + CHUNK_SIZE;
-        if (maxX < -42 || minX > 86 || maxZ < -42 || minZ > 48) return;
+        const coreMinX = -36, coreMaxX = 80, coreMinZ = -36, coreMaxZ = 42;
+        const slopeMargin = 34;
+        const outerMinX = coreMinX - slopeMargin, outerMaxX = coreMaxX + slopeMargin;
+        const outerMinZ = coreMinZ - slopeMargin, outerMaxZ = coreMaxZ + slopeMargin;
+        if (maxX < outerMinX || minX > outerMaxX || maxZ < outerMinZ || minZ > outerMaxZ) return;
         const ox = VILLAGE_OX, oz = VILLAGE_OZ, y = VILLAGE_Y;
-        for (let wx = -36; wx <= 80; wx++) {
-            for (let wz = -36; wz <= 42; wz++) {
-                if (wx < minX || wx >= maxX || wz < minZ || wz >= maxZ) continue;
-                for (let yy = y - 4; yy < y; yy++) chunkPut(chunk, wx, yy, wz, BLOCK_DIRT);
-                chunkPut(chunk, wx, y, wz, BLOCK_GRASS);
-                villageAir(chunk, wx, y + 1, y + 8, wz);
+        const fromX = Math.max(outerMinX, minX), toX = Math.min(outerMaxX, maxX - 1);
+        const fromZ = Math.max(outerMinZ, minZ), toZ = Math.min(outerMaxZ, maxZ - 1);
+        for (let wx = fromX; wx <= toX; wx++) {
+            for (let wz = fromZ; wz <= toZ; wz++) {
+                const outside = Math.max(coreMinX - wx, wx - coreMaxX, coreMinZ - wz, wz - coreMaxZ, 0);
+                const drop = Math.min(12, Math.floor((outside + 1) / 2.6));
+                const topY = y - drop;
+                const topBlock = topY <= WATER_LEVEL + 1 ? BLOCK_SAND : BLOCK_GRASS;
+                const fillBlock = topY <= WATER_LEVEL + 1 ? BLOCK_SAND : BLOCK_DIRT;
+                for (let yy = WATER_LEVEL - 6; yy < topY; yy++) chunkPut(chunk, wx, yy, wz, fillBlock);
+                chunkPut(chunk, wx, topY, wz, topBlock);
+                if (topY < WATER_LEVEL) {
+                    for (let yy = topY + 1; yy <= WATER_LEVEL; yy++) chunkPut(chunk, wx, yy, wz, BLOCK_WATER);
+                    villageAir(chunk, wx, WATER_LEVEL + 1, y + 8, wz);
+                } else {
+                    villageAir(chunk, wx, topY + 1, y + 8, wz);
+                }
             }
         }
         paintPath(chunk, 2, 2, ox, oz, y);
