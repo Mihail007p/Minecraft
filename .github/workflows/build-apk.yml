@@ -94,11 +94,14 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      - name: Give the offline build a download-friendly name
+        run: cp "dist/NITRO RUSH.html" dist/nitro-rush.html
+
       - name: Upload the offline HTML build
         uses: actions/upload-artifact@v5
         with:
           name: nitro-rush-html
-          path: dist/*.html
+          path: dist/nitro-rush.html
           if-no-files-found: error
 
       - name: Attach APKs to the release (tags only)
@@ -122,5 +125,5 @@ jobs:
           files: |
             android/app/build/outputs/apk/release/*.apk
             android/app/build/outputs/apk/debug/*.apk
-            dist/NITRO RUSH.html
+            dist/nitro-rush.html
           generate_release_notes: true
