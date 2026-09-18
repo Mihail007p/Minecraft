@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches: ['**']
-    tags: ['v*']
+    tags: ['v*', 'nitro-rush-*']
     paths:
       - 'race/**'
       - 'android/**'
@@ -105,7 +105,22 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
+          name: 'NITRO RUSH — гонки (сборка ${{ github.ref_name }})'
+          body: |
+            Готовый APK для Android 14 и офлайн-версия игры одним файлом.
+
+            **Установка APK**
+            1. Скачайте `app-release.apk` (или `app-debug.apk`).
+            2. Откройте файл на телефоне → разрешите установку из неизвестных источников.
+            3. Запустите «NITRO RUSH» — интернет не нужен, игра работает офлайн.
+
+            `nitrorush.html` — та же игра одним файлом: открывается в Chrome
+            прямо с телефона, без установки.
+
+            Управление: наклон или кнопки ‹ › для поворота, газ автоматический,
+            кнопка дрифта — занос и заряд нитро, кнопка нитро — ускорение.
           files: |
             android/app/build/outputs/apk/release/*.apk
             android/app/build/outputs/apk/debug/*.apk
+            dist/NITRO RUSH.html
           generate_release_notes: true
