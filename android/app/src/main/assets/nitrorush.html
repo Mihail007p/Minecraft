@@ -4187,6 +4187,7 @@ function(t,e){"object"==typeof exports&&"undefined"!=typeof module?e(exports):"f
     var scene = new THREE.Scene();
     scene.fog = new THREE.Fog(0x0a0a12, 12, 46);
     scene.add(new THREE.HemisphereLight(0x8090c0, 0x101018, 0.9));
+    App.renderErrors = 0;
     var l1 = new THREE.DirectionalLight(0xff5fae, 1.5); l1.position.set(6, 7, 5); scene.add(l1);
     var l2 = new THREE.DirectionalLight(0x5fd8ff, 1.2); l2.position.set(-7, 5, -4); scene.add(l2);
     var l3 = new THREE.PointLight(0xffffff, 0.9, 40); l3.position.set(0, 4, 6); scene.add(l3);
@@ -4743,6 +4744,7 @@ function(t,e){"object"==typeof exports&&"undefined"!=typeof module?e(exports):"f
         bar.style.width = '100%';
         txt.textContent = 'Поехали!';
         App.scene = view.scene;
+        App.renderErrors = 0;
         App.race = view.race;
         App.raceStartWall = performance.now();
         only('s-race');
@@ -5106,11 +5108,28 @@ function(t,e){"object"==typeof exports&&"undefined"!=typeof module?e(exports):"f
         var scene = App.state === 'race' || App.state === 'paused' || App.state === 'results' ? App.scene : App.menuScene;
         if (scene && App.renderer) App.renderer.render(scene, App.camera);
       } catch (err) {
+        App.renderErrors = (App.renderErrors || 0) + 1;
         if (window.console) console.error(err);
+        if (App.renderErrors === 3) App.graphicsFallback(err);
       }
       requestAnimationFrame(frame);
     }
     requestAnimationFrame(frame);
+  };
+
+  /* If the GPU refuses to draw (very old driver, broken shader), keep the game
+     alive: drop the gradient sky for a flat clear colour and tell the player. */
+  App.graphicsFallback = function (err) {
+    try {
+      if (App.scene && App.scene.children) {
+        for (var i = App.scene.children.length - 1; i >= 0; i--) {
+          var o = App.scene.children[i];
+          if (o.material && o.material.isShaderMaterial) App.scene.remove(o);
+        }
+      }
+      if (App.renderer) App.renderer.setClearColor(0x0b0f18, 1);
+      HUD.toast('Упрощённая графика: ' + (err && err.message ? err.message.slice(0, 40) : 'ошибка GPU'), 'pink', 6000);
+    } catch (e) { }
   };
 
   App.adaptQuality = function () {
