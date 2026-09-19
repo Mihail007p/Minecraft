@@ -235,21 +235,27 @@ async function main() {
   ok(App.Full.active(), 'HUD button enters fullscreen again');
   ok(win._wakes.requests > 0, 'screen wake lock requested during the race');
 
-  /* руль: плавный рост и сброс при отпускании */
+  /* руль-качели: палец отвечает сразу, дальше ход доходит до полного */
   ok(App.settings.steerMode === 'zones', 'steering starts in zones mode (' + App.settings.steerMode + ')');
   ptr($('steer-right'), 'pointerdown');
-  ok(App.touch.steerR === true, 'right zone pressed');
-  for (let i = 0; i < 4; i++) App.readInput(1 / 60);
-  const rampLow = App.touch.steer;
-  ok(rampLow > 0.15 && rampLow < 0.5, 'steering ramps up smoothly (' + rampLow.toFixed(2) + ')');
+  ok(App.touch.steerR === true, 'right side of the wheel pressed');
+  const firstFrame = App.readInput(1 / 60);
+  ok(firstFrame.steer > 0.3, 'wheel answers the touch immediately (' + firstFrame.steer.toFixed(2) + ')');
+  ok(firstFrame.steer < 0.75, 'wheel does not snap straight to full lock (' + firstFrame.steer.toFixed(2) + ')');
   for (let i = 0; i < 20; i++) App.readInput(1 / 60);
-  ok(App.touch.steer > 0.95, 'steering reaches full lock when held (' + App.touch.steer.toFixed(2) + ')');
-  ok($('steer-right').classList.contains('act'), 'steering zone lights up while pressed');
-  ok(App.readInput(1 / 60).steer > 0.9, 'steering reaches the car input');
-  ptr($('steer-right'), 'pointerup');
-  ok(App.touch.steerR === false, 'zone released');
+  ok(App.touch.steer > 0.95, 'wheel reaches full lock when held (' + App.touch.steer.toFixed(2) + ')');
+  ok($('steer-right').classList.contains('act'), 'pressed side lights up');
+  ok(!$('steer-left').classList.contains('act'), 'other side stays dim');
+  /* палец можно вести не отпуская: сторона меняется по положению */
+  ptr($('steer'), 'pointermove', { pointerId: 1, clientX: 40, clientY: 300 });
+  ok(App.touch.steerL === true && App.touch.steerR === false, 'sliding the thumb across switches side');
+  for (let i = 0; i < 20; i++) App.readInput(1 / 60);
+  ok(App.readInput(1 / 60).steer < -0.5, 'slid wheel steers left (' + App.touch.steer.toFixed(2) + ')');
+  ptr($('steer'), 'pointerup', { pointerId: 1 });
+  ok(App.touch.steerL === false && App.touch.steerR === false, 'wheel released');
   for (let i = 0; i < 12; i++) App.readInput(1 / 60);
   ok(App.touch.steer === 0, 'steering recentres after release');
+  ok(!$('steer-left').classList.contains('act') && !$('steer-right').classList.contains('act'), 'both sides dim after release');
 
   /* наклон телефона */
   App.settings.steerMode = 'tilt';
@@ -283,6 +289,76 @@ async function main() {
   App.settings.steerMode = 'zones';
   App.applySteerMode();
   ok(!win.document.body.classList.contains('drag-steer'), 'drag layer off in zones mode');
+
+  /* дрift-переключатель: одним пальцем и дрифт, и нитро */
+  App.settings.driftMode = 'hold';
+  ptr($('pad-drift'), 'pointerdown');
+  ok(App.input.driftHeld === true, 'drift holds while the pad is pressed (hold mode)');
+  ptr($('pad-drift'), 'pointerup');
+  ok(App.input.driftHeld === false, 'drift releases with the finger (hold mode)');
+  App.settings.driftMode = 'toggle';
+  ptr($('pad-drift'), 'pointerdown');
+  ptr($('pad-drift'), 'pointerup');
+  ok(App.input.driftHeld === true, 'drift stays on after a tap (toggle mode)');
+  App.readInput(1 / 60);
+  ok($('pad-drift').classList.contains('on'), 'drift pad shows it is locked on');
+  ptr($('pad-nitro'), 'pointerdown');                 // вторым нажатием — нитро
+  ok(App.readInput(1 / 60).nitro === 1, 'nitro works while drifting (toggle mode)');
+  ptr($('pad-nitro'), 'pointerup');
+  ok(App.readInput(1 / 60).handbrake === 1, 'handbrake still applied while drifting');
+  ptr($('pad-drift'), 'pointerdown');
+  ptr($('pad-drift'), 'pointerup');
+  ok(App.input.driftHeld === false, 'second tap switches drift off');
+  App.readInput(1 / 60);
+  ok(!$('pad-drift').classList.contains('on'), 'drift pad light goes out');
+  App.settings.driftMode = 'hold';
+  ok(App.readInput(1 / 60).handbrake === 0, 'no handbrake after switching drift off');
+
+  /* руль считает центр по своей полосе — в режиме левши полоса справа */
+  const realRect = win.Element.prototype.getBoundingClientRect;
+  $('steer').getBoundingClientRect = () => ({ left: 346, top: 0, width: 374, height: 360, right: 720, bottom: 360 });
+  ptr($('steer'), 'pointerdown', { pointerId: 5, clientX: 700, clientY: 320 });
+  for (let i = 0; i < 20; i++) App.readInput(1 / 60);
+  ok(App.readInput(1 / 60).steer > 0.5, 'touch on the right half steers right (' + App.touch.steer.toFixed(2) + ')');
+  ok(App.touch.slide.mag > 0.9, 'far edge gives full steering power (' + App.touch.slide.mag.toFixed(2) + ')');
+  ptr($('steer'), 'pointermove', { pointerId: 5, clientX: 380, clientY: 320 });
+  ok(App.touch.steerL === true, 'sliding past the strip centre switches side');
+  ptr($('steer'), 'pointermove', { pointerId: 5, clientX: 520, clientY: 320 });
+  ok(App.touch.slide.mag < 0.6, 'near the strip centre steering is gentler (' + App.touch.slide.mag.toFixed(2) + ')');
+  ptr($('steer'), 'pointermove', { pointerId: 5, clientX: 380, clientY: 320 });
+  ok(App.touch.slide.mag > 0.85, 'further out the wheel gives full power (' + App.touch.slide.mag.toFixed(2) + ')');
+  ptr($('steer'), 'pointerup', { pointerId: 5 });
+  App.touch.steer = 0;
+  void realRect;
+
+  /* регрессия: App.input больше не пересоздаётся, поэтому педали живы
+     и после выхода в меню (раньше во втором заезде кнопки «умирали») */
+  ptr($('pad-brake'), 'pointerdown');
+  ok(App.readInput(1 / 60).brake === 1, 'brake pad works in the first race');
+  ptr($('pad-brake'), 'pointerup');
+  $('btn-quit').click();
+  $('btn-quick').click();
+  $('btn-quick-start').click();
+  let guard5 = 0;
+  while (App.state === 'loading' && guard5++ < 300) await sleep(30);
+  ok(App.state === 'race', 'second race started after the menu');
+  ptr($('pad-brake'), 'pointerdown');
+  ok(App.readInput(1 / 60).brake === 1, 'brake pad still works in the second race');
+  ptr($('pad-brake'), 'pointerup');
+  ptr($('pad-drift'), 'pointerdown');
+  ok(App.readInput(1 / 60).handbrake === 1, 'drift pad still works in the second race');
+  ptr($('pad-drift'), 'pointerup');
+  ptr($('steer-right'), 'pointerdown');
+  for (let i = 0; i < 10; i++) App.readInput(1 / 60);
+  ok(App.readInput(1 / 60).steer > 0.5, 'steering still works in the second race');
+  ptr($('steer-right'), 'pointerup');
+  /* заново в заезд: дальнейшие проверки нажатий проверяются именно в гонке */
+  $('btn-quit').click();
+  $('btn-quick').click();
+  $('btn-quick-start').click();
+  let guard6 = 0;
+  while (App.state === 'loading' && guard6++ < 300) await sleep(30);
+  ok(App.state === 'race', 'race ready for the pause checks');
 
   /* вибрация и крупные кнопки */
   const vibesBefore = win._vibes.length;
@@ -326,10 +402,17 @@ async function main() {
   ok(App.settings.steerMode === 'drag', 'steering mode persisted');
   $('set-auto').children[1].click();
   ok(App.settings.autoGas === false, 'auto throttle toggled');
-  $('set-pads').children[1].click();
+  $('set-pads').children[2].click();
   ok(App.settings.padSize === 'big', 'pad size setting persisted');
   ok(win.document.body.classList.contains('bigpads'), 'big pads applied to the screen');
   $('set-pads').children[0].click();
+  ok(App.settings.padSize === 'small' && win.document.body.classList.contains('smallpads'), 'small pads applied');
+  $('set-pads').children[1].click();
+  ok(!win.document.body.classList.contains('smallpads') && !win.document.body.classList.contains('bigpads'), 'normal pads applied');
+  $('set-side').children[1].click();
+  ok(App.settings.padSide === 'left' && win.document.body.classList.contains('lefty'), 'left-handed layout applied');
+  $('set-side').children[0].click();
+  ok(App.settings.padSide === 'right' && !win.document.body.classList.contains('lefty'), 'right-handed layout back');
   $('set-tilt').children[2].click();
   ok(App.settings.tiltSens === 18, 'tilt sensitivity setting persisted');
   $('set-vibr').children[1].click();

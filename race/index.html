@@ -139,14 +139,52 @@ h1,h2,h3{margin:0;font-weight:900;letter-spacing:.02em}
 .pad.brake{width:calc(clamp(58px,11vmin,100px) * var(--padk));height:calc(clamp(58px,11vmin,100px) * var(--padk));background:rgba(255,77,77,.18);border-color:rgba(255,77,77,.55)}
 .pad.drift{width:calc(clamp(62px,12vmin,108px) * var(--padk));height:calc(clamp(62px,12vmin,108px) * var(--padk));background:rgba(255,212,0,.18);border-color:rgba(255,212,0,.55)}
 .pad.nitro{width:calc(clamp(66px,13vmin,116px) * var(--padk));height:calc(clamp(66px,13vmin,116px) * var(--padk));background:rgba(47,208,255,.2);border-color:rgba(47,208,255,.6)}
-body.bigpads{--padk:1.32}
+body.smallpads{--padk:.88}
+body.bigpads{--padk:1.2}
+
+/* ---------- телефон в ландшафте (высота <= 460 css-px: Tecno Pova Neo 3 = 720x360) ----------
+   На очень широком низком экране старые clamp() упирались в минимум: кнопки
+   получались мелкими, а ряд педалей растягивался почти на пол-экрана.
+   Здесь кнопки считаются от высоты (vmin), разложены дугой по большому пальцу,
+   миникарта уезжает наверх, чтобы не мешать руке. */
+@media (orientation:landscape) and (max-height:460px){
+  .pad{font-size:clamp(11px,2.7vmin,15px);border-width:3px}
+  .pad.gas{width:calc(clamp(90px,25vmin,140px) * var(--padk));height:calc(clamp(90px,25vmin,140px) * var(--padk))}
+  .pad.nitro{width:calc(clamp(80px,22.5vmin,126px) * var(--padk));height:calc(clamp(80px,22.5vmin,126px) * var(--padk))}
+  .pad.drift{width:calc(clamp(70px,20vmin,114px) * var(--padk));height:calc(clamp(70px,20vmin,114px) * var(--padk))}
+  .pad.brake{width:calc(clamp(62px,17.5vmin,100px) * var(--padk));height:calc(clamp(62px,17.5vmin,100px) * var(--padk))}
+  #pads{right:calc(7px + var(--pad));bottom:calc(7px + var(--padt));gap:clamp(7px,1.9vmin,12px)}
+  .pad.brake{margin-bottom:clamp(14px,4.4vmin,26px)}
+  .pad.drift{margin-bottom:clamp(6px,2vmin,12px)}
+  #hud-speedo{width:clamp(96px,24vmin,176px);bottom:calc(2px + var(--padt))}
+  #hud-minimap{top:calc(54px + var(--padt));right:calc(7px + var(--pad));bottom:auto;
+    width:clamp(70px,19vmin,104px);height:clamp(70px,19vmin,104px)}
+  #hud-drift{bottom:calc(96px + var(--padt))}
+  #steer{width:52%;height:100%}
+  #steer .zone{font-size:clamp(30px,8vmin,54px);padding-bottom:clamp(10px,3vmin,24px)}
+  #btn-pause,#btn-full{width:clamp(40px,7.6vmin,54px);height:clamp(40px,7.6vmin,54px);font-size:clamp(16px,3.4vmin,24px)}
+  #hud-top{top:calc(6px + var(--padt))}
+  #hud-right{top:calc(6px + var(--padt))}
+}
+
+/* ---------- левша: педали слева, руль справа ---------- */
+body.lefty #steer{left:auto;right:0}
+body.lefty #pads{right:auto;left:calc(10px + var(--pad))}
+body.lefty #hud-top{left:auto;right:calc(10px + var(--pad))}
+body.lefty #hud-right{right:auto;left:calc(10px + var(--pad))}
+body.lefty #hud-minimap{right:auto;left:calc(10px + var(--pad))}
+body.lefty #hud-drift{left:auto;right:calc(10px + var(--pad))}
 .pad.act{filter:brightness(1.5);transform:scale(.95)}
-#steer{left:0;bottom:0;width:54%;height:90%;display:flex;pointer-events:auto}
+/* кнопка, включённая «на залипание» (дрифт-переключатель) */
+.pad.on{border-color:#fff;box-shadow:inset 0 0 0 3px rgba(255,255,255,.45);filter:brightness(1.35)}
+#steer{left:0;bottom:0;width:54%;height:92%;display:flex;pointer-events:auto}
 #steer .zone{flex:1;display:flex;align-items:flex-end;justify-content:center;padding-bottom:clamp(16px,4vmin,40px);
-  font-size:clamp(30px,7vmin,62px);color:rgba(255,255,255,.24);font-weight:900;border-radius:26px;
+  font-size:clamp(30px,7vmin,62px);color:rgba(255,255,255,.22);font-weight:900;border-radius:26px;
   transition:background .09s,color .09s}
-#steer .zone.act{color:rgba(255,255,255,.62);
-  background:radial-gradient(70% 45% at 50% 100%,rgba(47,208,255,.26),rgba(47,208,255,0) 72%)}
+/* подсветка стороны, которой сейчас рулим: палец можно не отпускать,
+   а просто вести им влево-вправо */
+#steer .zone.act{color:rgba(255,255,255,.7);
+  background:radial-gradient(72% 52% at 50% 100%,rgba(47,208,255,.3),rgba(47,208,255,0) 74%)}
 #steer.off{display:none}
 /* свайп-руль: прозрачный слой на весь экран, включается только в этом режиме;
    лежит первым, поэтому педали и кнопки HUD остаются поверх него */
@@ -306,6 +344,8 @@ tr.me td{color:var(--green);font-weight:900}
     <div class="row wrap" style="margin-top:6px" id="set-invert"></div>
     <div class="small dim" style="margin-top:12px">Кнопки на экране</div>
     <div class="row wrap" id="set-pads"></div>
+    <div class="row wrap" style="margin-top:6px" id="set-side"></div>
+    <div class="row wrap" style="margin-top:6px" id="set-drift"></div>
     <div class="small dim" style="margin-top:12px">Чувствительность наклона</div>
     <div class="row wrap" id="set-tilt"></div>
     <div class="row wrap" style="margin-top:6px" id="set-tiltcal"></div>

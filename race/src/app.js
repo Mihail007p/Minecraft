@@ -44,7 +44,7 @@
     lastRaceConfig: null,
     input: { throttle: 0, brake: 0, steer: 0, handbrake: 0, nitro: 0 },
     keys: {},
-    touch: { steerL: false, steerR: false, drag: null, baseSteer: 0, steer: 0 },
+    touch: { steerL: false, steerR: false, drag: null, baseSteer: 0, steer: 0, slide: null, rawPrev: 0 },
     tilt: { gamma: 0, calib: null, active: false },
     settings: null,
     save: null,
@@ -233,6 +233,8 @@
        этого зоны руля были скрыты; любой неизвестный режим — это 'zones' */
     if (['zones', 'tilt', 'drag'].indexOf(App.settings.steerMode) < 0) App.settings.steerMode = 'zones';
     if (!App.settings.padSize) App.settings.padSize = 'normal';
+    if (App.settings.padSide !== 'left') App.settings.padSide = 'right';
+    if (App.settings.driftMode !== 'toggle') App.settings.driftMode = 'hold';
     if (App.settings.tiltSens == null) App.settings.tiltSens = 26;
     if (App.settings.vibrate == null) App.settings.vibrate = true;
     if (App.settings.autoFull == null) App.settings.autoFull = true;
@@ -246,7 +248,7 @@
   App.openMenu = function () {
     App.state = 'menu';
     only('s-menu');
-    App.input = { throttle: 0, brake: 0, steer: 0, handbrake: 0, nitro: 0 };
+    App.clearInput();
     App.refreshMenu();
   };
 
@@ -634,9 +636,29 @@
     var padBox = $('set-pads');
     if (padBox) {
       padBox.innerHTML = '';
-      [['normal', 'обычные'], ['big', 'крупные']].forEach(function (pair) {
+      [['small', 'мелкие'], ['normal', 'обычные'], ['big', 'крупные']].forEach(function (pair) {
         padBox.appendChild(chip(pair[1], (s.padSize || 'normal') === pair[0], function () {
           s.padSize = pair[0]; App.persist(); App.applySteerMode(); App.buildSettings();
+        }));
+      });
+    }
+    var driftBox = $('set-drift');
+    if (driftBox) {
+      driftBox.innerHTML = '';
+      [['hold', 'дрифт: удерживать'], ['toggle', 'дрифт: переключатель']].forEach(function (pair) {
+        driftBox.appendChild(chip(pair[1], (s.driftMode || 'hold') === pair[0], function () {
+          s.driftMode = pair[0];
+          App.input.driftHeld = false;
+          App.persist(); App.buildSettings();
+        }));
+      });
+    }
+    var sideBox = $('set-side');
+    if (sideBox) {
+      sideBox.innerHTML = '';
+      [['right', 'кнопки справа'], ['left', 'кнопки слева (для левши)']].forEach(function (pair) {
+        sideBox.appendChild(chip(pair[1], (s.padSide || 'right') === pair[0], function () {
+          s.padSide = pair[0]; App.persist(); App.applySteerMode(); App.buildSettings();
         }));
       });
     }
@@ -926,7 +948,9 @@
     if (mode === 'tilt' && !App.tilt.ready) App.requestTilt();
     if (pads) pads.style.opacity = '1';
     if (document.body) {
+      document.body.classList.toggle('smallpads', s.padSize === 'small');
       document.body.classList.toggle('bigpads', s.padSize === 'big');
+      document.body.classList.toggle('lefty', s.padSide === 'left');
       document.body.classList.toggle('drag-steer', mode === 'drag');
     }
     App.syncFullBtn();
@@ -1031,9 +1055,11 @@
     App.touch.steerL = false;
     App.touch.steerR = false;
     App.touch.drag = null;
+    App.touch.slide = null;
     App.touch.steer = 0;
-    var act = document.querySelectorAll('.pad.act, #steer .zone.act');
-    for (var i = 0; i < act.length; i++) act[i].classList.remove('act');
+    App.touch.rawPrev = 0;
+    var act = document.querySelectorAll('.pad.act, .pad.on, #steer .zone.act');
+    for (var i = 0; i < act.length; i++) { act[i].classList.remove('act'); act[i].classList.remove('on'); }
   };
 
   App.bindHold = function (el, onDown, onUp) {
@@ -1062,33 +1088,115 @@
   };
 
   App.wireInput = function () {
-    var inp = App.input;
+    /* Важно: берём объект ввода в момент нажатия. Раньше здесь запоминалась
+       ссылка, а App.input пересоздавался при выходе в меню — из-за этого во
+       втором заезде педали и дрифт не работали. */
+    function inp() { return App.input; }
     /* pedals */
-    App.bindHold($('pad-gas'), function () { inp.gasHeld = true; }, function () { inp.gasHeld = false; });
-    App.bindHold($('pad-brake'), function () { inp.brakeHeld = true; }, function () { inp.brakeHeld = false; });
-    App.bindHold($('pad-drift'), function () { inp.driftHeld = true; }, function () { inp.driftHeld = false; });
+    App.bindHold($('pad-gas'), function () { inp().gasHeld = true; }, function () { inp().gasHeld = false; });
+    App.bindHold($('pad-brake'), function () { inp().brakeHeld = true; }, function () { inp().brakeHeld = false; });
+    /* Дрифт. В режиме «переключатель» одно нажатие включает ручник, второе
+       выключает: одним большим пальцем можно и дрифтовать, и жать нитро. */
+    var driftPad = $('pad-drift');
+    App.bindHold(driftPad, function () {
+      if (App.settings.driftMode === 'toggle') inp().driftHeld = !inp().driftHeld;
+      else inp().driftHeld = true;
+    }, function () {
+      if (App.settings.driftMode !== 'toggle') inp().driftHeld = false;
+    });
     App.bindHold($('pad-nitro'), function () {
-      inp.nitroHeld = true;
+      inp().nitroHeld = true;
       App.buzz(18);
       if (App.race) NR.Audio.nitroWhoosh();
-    }, function () { inp.nitroHeld = false; });
-    if ($('pad-drift') && $('pad-drift').dataset) $('pad-drift').dataset.buzz = '12';
+    }, function () { inp().nitroHeld = false; });
+    if (driftPad && driftPad.dataset) driftPad.dataset.buzz = '12';
 
-    /* steering zones */
-    App.bindHold($('steer-left'), function () {
-      App.touch.steerL = true;
-      var z = $('steer-left'); if (z) z.classList.add('act');
-    }, function () {
-      App.touch.steerL = false;
-      var z = $('steer-left'); if (z) z.classList.remove('act');
-    });
-    App.bindHold($('steer-right'), function () {
-      App.touch.steerR = true;
-      var z = $('steer-right'); if (z) z.classList.add('act');
-    }, function () {
-      App.touch.steerR = false;
-      var z = $('steer-right'); if (z) z.classList.remove('act');
-    });
+    /* Руль-качели: обе зоны — это одна непрерывная полоса. Палец можно
+       приложить в любом месте слева и вести влево-вправо, не отпуская:
+       сторона и сила поворота берутся из положения пальца. */
+    var steerArea = $('steer');
+    if (steerArea) {
+      /* Границы полосы берём у неё самой: в режиме левши она справа, и центр
+         тогда считается от правого края, а не от левого. */
+      function steerRect() {
+        if (!steerArea.getBoundingClientRect) return null;
+        var r = steerArea.getBoundingClientRect();
+        return (r && r.width > 1) ? r : null;
+      }
+      function steerMidX() {
+        var r = steerRect();
+        if (r) return r.left + r.width / 2;
+        return (window.innerWidth || 0) * 0.27;
+      }
+      function sideAt(e) {
+        var side0 = App.touch.slide ? App.touch.slide.side : 0;
+        if (e.clientX != null && e.clientX > 0) {
+          var mid = steerMidX();
+          var band = (steerRect() ? steerRect().width : (window.innerWidth || 0) * 0.54) * 0.06;
+          /* мёртвая зона у центра: не переключаем сторону от дрожи пальца */
+          if (side0 && Math.abs(e.clientX - mid) < band) return side0;
+          return e.clientX < mid ? -1 : 1;
+        }
+        var t = e.target;
+        if (t && t.id === 'steer-left') return -1;
+        if (t && t.id === 'steer-right') return 1;
+        return -1;
+      }
+      /* сила поворота: у самого края — полная, ближе к середине — мягче */
+      function magAt(e) {
+        if (e.clientX == null || !e.clientX) return 1;
+        var r = steerRect();
+        if (r) return U.clamp(Math.abs(e.clientX - (r.left + r.width / 2)) / (r.width * 0.45), 0.45, 1);
+        var w = window.innerWidth || 0;
+        if (w < 1) return 1;
+        return U.clamp(Math.abs(e.clientX - w * 0.27) / (w * 0.24), 0.45, 1);
+      }
+      function apply(e, down) {
+        var side = sideAt(e);
+        var mag = magAt(e);
+        var t = App.touch;
+        if (down) {
+          if (steerArea.setPointerCapture && e.pointerId != null) {
+            try { steerArea.setPointerCapture(e.pointerId); } catch (err) { }
+          }
+          t.slide = { id: e.pointerId == null ? null : e.pointerId, mag: mag, side: side };
+        } else if (!t.slide) {
+          return;
+        } else {
+          t.slide.mag = mag;
+          t.slide.side = side;
+        }
+        t.steerL = side < 0;
+        t.steerR = side > 0;
+      }
+      steerArea.addEventListener('pointerdown', function (e) {
+        if (App.settings.steerMode !== 'zones') return;
+        if (e.cancelable !== false && e.preventDefault) e.preventDefault();
+        apply(e, true);
+        App.buzz(8);
+      });
+      steerArea.addEventListener('pointermove', function (e) {
+        var t = App.touch;
+        if (!t.slide || App.settings.steerMode !== 'zones') return;
+        if (t.slide.id != null && e.pointerId != null && t.slide.id !== e.pointerId) return;
+        apply(e, false);
+      });
+      function endSteer(e) {
+        var t = App.touch;
+        if (!t.slide) return;
+        if (t.slide.id != null && e.pointerId != null && t.slide.id !== e.pointerId) return;
+        t.slide = null;
+        t.steerL = false;
+        t.steerR = false;
+      }
+      steerArea.addEventListener('pointerup', endSteer);
+      steerArea.addEventListener('pointercancel', endSteer);
+      steerArea.addEventListener('lostpointercapture', endSteer);
+      steerArea.addEventListener('pointerleave', function (e) {
+        /* палец уехал за пределы полосы — держим последнюю сторону */
+        if (App.touch.slide && e.pointerId != null && App.touch.slide.id === e.pointerId) { /* оставляем */ }
+      });
+    }
 
     /* свайп-руль: отдельный слой поверх экрана (раньше события вешались на
        #s-race, а у него pointer-events:none — режим не работал вообще) */
@@ -1213,7 +1321,7 @@
 
   App.readInput = function (dt) {
     var s = App.settings;
-    var inp = App.input;
+    var inp = App.input;          /* читается на каждом кадре, объект не кэшируем */
     var k = App.keys;
     var auto = s.autoGas !== false;
     var throttle = auto ? 1 : (inp.gasHeld ? 1 : 0);
@@ -1237,26 +1345,43 @@
         if (Math.abs(raw) < 0.06) raw = 0;
       }
     } else {
-      if (App.touch.steerL) raw -= 1;
-      if (App.touch.steerR) raw += 1;
+      var slide = App.touch.slide;
+      if (slide) raw = (App.touch.steerL ? -1 : App.touch.steerR ? 1 : 0) * slide.mag;
+      else {
+        if (App.touch.steerL) raw -= 1;
+        if (App.touch.steerR) raw += 1;
+      }
     }
     /* клавиатура работает всегда: превью на компьютере и эмуляторы */
     if (k['ArrowLeft'] || k['KeyA']) raw -= 1;
     if (k['ArrowRight'] || k['KeyD']) raw += 1;
     raw = U.clamp(raw, -1, 1);
-    /* Плавный руль: полный ход за ~0.18 с, возврат в центр за ~0.11 с.
-       Мгновенный «вкл/выкл» дёргал машину, линейный разгон казался вялым. */
+    /* Отклик руля: на нажатие кнопки сразу берём 45% хода (палец чувствует
+       ответ), дальше плавно доходим до полного за ~0.13 с. В центр возвращаемся
+       за ~0.09 с. Возврат плавный, чтобы машину не дёргало. */
+    var prevRaw = App.touch.rawPrev || 0;
+    if (mode === 'zones' && raw !== 0 && prevRaw === 0) App.touch.steer = raw * 0.45;
     var growing = Math.abs(raw) > Math.abs(App.touch.steer);
-    var sameDir = raw * App.touch.steer >= 0;
-    var rate = (sameDir && growing) ? 5.5 : 9;
+    var rate = growing ? 7 : 12;
     App.touch.steer += U.clamp(raw - App.touch.steer, -rate * dt, rate * dt);
-    if (Math.abs(App.touch.steer) < 0.01 && raw === 0) App.touch.steer = 0;
+    if (Math.abs(App.touch.steer) < 0.012 && raw === 0) App.touch.steer = 0;
+    App.touch.rawPrev = raw;
     var steer = App.touch.steer;
+    /* подсветка стороны, которой рулим */
+    if (mode === 'zones') {
+      var zl = $('steer-left'), zr = $('steer-right');
+      if (zl) zl.classList.toggle('act', steer < -0.02);
+      if (zr) zr.classList.toggle('act', steer > 0.02);
+    }
     if (mode === 'tilt') {
       var ind = $('tilt-ind');
       if (ind && ind.firstElementChild) ind.firstElementChild.style.width = (50 + steer * 50).toFixed(0) + '%';
     }
 
+    if (App.settings.driftMode === 'toggle') {
+      var dp = $('pad-drift');
+      if (dp) dp.classList.toggle('on', !!inp.driftHeld);
+    }
     var nitro = (inp.nitroHeld || k['ShiftLeft'] || k['ShiftRight'] || k['KeyE']) ? 1 : 0;
     if (App.race && App.race.state === 'countdown') { throttle = 0; brake = 1; }
     return { throttle: throttle, brake: brake, steer: steer, handbrake: handbrake, nitro: nitro };
