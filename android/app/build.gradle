@@ -1,0 +1,88 @@
+apply plugin: 'com.android.application'
+
+/* ---------------------------------------------------------------------------
+   Подпись release-сборки.
+
+   android/hobby-signing-key.p12 — постоянный ключ ЭТОГО проекта (лежит в
+   репозитории, пароль minecraft). Он не хранит никаких секретов и ничего не
+   защищает: он нужен ровно для одного — чтобы новые версии APK ставились
+   поверх предыдущих. Android разрешает обновление приложения только если
+   подпись совпадает; с «новым ключом на каждую сборку» телефон скажет
+   «Приложение не установлено», а игроку придётся удалять старую версию
+   вместе с сохранённым прогрессом.
+
+   Если проект когда-нибудь пойдёт в магазин приложений — там нужен приватный
+   ключ, который хранят в секретах CI, а не в репозитории.
+   --------------------------------------------------------------------------- */
+def keystoreFile = rootProject.file('hobby-signing-key.p12')
+def hasKeystore = keystoreFile.exists()
+
+android {
+    namespace 'com.mcclassic.game'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.mcclassic.game"
+        minSdk 26
+        targetSdk 34
+        versionCode 2
+        versionName "1.0.1"
+    }
+
+    signingConfigs {
+        release {
+            if (hasKeystore) {
+                storeFile keystoreFile
+                storeType 'PKCS12'
+                storePassword System.getenv('KEYSTORE_PASSWORD') ?: 'minecraft'
+                keyAlias System.getenv('KEY_ALIAS') ?: 'minecraft'
+                keyPassword System.getenv('KEY_PASSWORD') ?: 'minecraft'
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            /* debug builds are signed with the standard debug key */
+        }
+        release {
+            minifyEnabled false
+            shrinkResources false
+            if (hasKeystore) {
+                signingConfig signingConfigs.release
+            }
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    packaging {
+        resources {
+            excludes += ['META-INF/*']
+        }
+    }
+
+    androidResources {
+        /* html не сжимаем: WebView читает его из assets как есть */
+        noCompress 'html'
+    }
+}
+
+/* Игра лежит в minecraft/Minecraft.html (единый offline-файл).
+   Перед сборкой копируем её в assets, чтобы в репозитории файл хранился один раз. */
+tasks.register('copyGameAsset', Copy) {
+    description 'Копирует единый offline-файл игры в assets'
+    def src = rootProject.projectDir.parentFile.toPath().resolve('minecraft').resolve('Minecraft.html').toFile()
+    onlyIf { src.exists() }
+    from src
+    into layout.projectDirectory.dir('src/main/assets')
+    rename { 'minecraft.html' }
+}
+
+tasks.matching { it.name.startsWith('preBuild') }.configureEach {
+    dependsOn 'copyGameAsset'
+}
