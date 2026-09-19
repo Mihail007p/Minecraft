@@ -51,12 +51,16 @@ gradle assembleDebug                      # нужен JDK 17 и Android SDK 34
 подмены страниц), поэтому по ней видно код, а не игру. Чтобы ссылка открывала
 игру, включите публикацию сайта (один клик, делает владелец репозитория):
 
-1. **Settings → Pages → Build and deployment → Source: GitHub Actions**.
-2. **Actions → Publish game (GitHub Pages) → Run workflow**.
+1. **Settings → Pages → Build and deployment → Source: Deploy from a branch**.
+2. Ветка `arena/01a0b467-minecraft` (или `main`), папка `/ (root)` → **Save**.
 3. Через минуту игра доступна по адресу
    `https://mihail007p.github.io/Minecraft/` — открывается сразу, без логина,
    без скачивания и без установки. Любую машину/трассу можно показать другу,
    просто отправив эту ссылку.
+
+Публикация из ветки обновляется автоматически: после каждого push в выбранную
+ветку GitHub пересобирает сайт (примерно минута). Никаких workflow для этого
+не нужно.
 
 Если в Settings → Pages написано, что для приватного репозитория нужен платный
 тариф, вариантов два: сделать репозиторий публичным (Settings → General →
