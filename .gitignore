@@ -1,0 +1,16 @@
+# сборка Android
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/keystore.jks
+*.apk
+*.aab
+
+# файл игры копируется в assets при сборке (канонический — minecraft/Minecraft.html)
+android/app/src/main/assets/minecraft.html
+
+# прочее
+.idea/
+*.iml
+.DS_Store

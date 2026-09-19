@@ -1,0 +1,73 @@
+apply plugin: 'com.android.application'
+
+def keystoreFile = rootProject.file('keystore.jks')
+def hasKeystore = keystoreFile.exists()
+
+android {
+    namespace 'com.mcclassic.game'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.mcclassic.game"
+        minSdk 26
+        targetSdk 34
+        versionCode 1
+        versionName "1.0.0"
+    }
+
+    signingConfigs {
+        release {
+            if (hasKeystore) {
+                storeFile keystoreFile
+                storePassword System.getenv('KEYSTORE_PASSWORD') ?: 'minecraft'
+                keyAlias System.getenv('KEY_ALIAS') ?: 'minecraft'
+                keyPassword System.getenv('KEY_PASSWORD') ?: 'minecraft'
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            /* debug builds are signed with the standard debug key */
+        }
+        release {
+            minifyEnabled false
+            shrinkResources false
+            if (hasKeystore) {
+                signingConfig signingConfigs.release
+            }
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    packaging {
+        resources {
+            excludes += ['META-INF/*']
+        }
+    }
+
+    androidResources {
+        /* html не сжимаем: WebView читает его из assets как есть */
+        noCompress 'html'
+    }
+}
+
+/* Игра лежит в minecraft/Minecraft.html (единый offline-файл).
+   Перед сборкой копируем её в assets, чтобы в репозитории файл хранился один раз. */
+tasks.register('copyGameAsset', Copy) {
+    description 'Копирует единый offline-файл игры в assets'
+    def src = rootProject.projectDir.parentFile.toPath().resolve('minecraft').resolve('Minecraft.html').toFile()
+    onlyIf { src.exists() }
+    from src
+    into layout.projectDirectory.dir('src/main/assets')
+    rename { 'minecraft.html' }
+}
+
+tasks.matching { it.name.startsWith('preBuild') }.configureEach {
+    dependsOn 'copyGameAsset'
+}

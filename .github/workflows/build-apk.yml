@@ -1,0 +1,85 @@
+name: Build Minecraft APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['arena/01a0b467-minecraft']
+    tags: ['minecraft-v*']
+    paths:
+      - 'android/**'
+      - 'minecraft/**'
+      - '.github/workflows/build-apk.yml'
+  pull_request:
+    paths:
+      - 'android/**'
+      - 'minecraft/**'
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    name: Build APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check that the game file is in place
+        run: |
+          test -s minecraft/Minecraft.html || { echo "нет minecraft/Minecraft.html"; exit 1; }
+          ls -la minecraft/
+          grep -qi "<html" minecraft/Minecraft.html || { echo "файл не похож на html"; exit 1; }
+          echo "размер игры: $(du -h minecraft/Minecraft.html | cut -f1)"
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v6.3.0
+        with:
+          gradle-version: '8.7'
+
+      - name: Create a signing key (чтобы release APK ставился на телефон)
+        working-directory: android
+        run: |
+          keytool -genkeypair -v -keystore keystore.jks \
+            -alias minecraft -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass minecraft -keypass minecraft \
+            -dname "CN=Minecraft Classic, OU=Games, O=MinecraftClassic, L=Moscow, C=RU"
+
+      - name: Assemble debug and release APKs
+        working-directory: android
+        run: gradle assembleDebug assembleRelease --no-daemon --stacktrace
+
+      - name: Show what was built
+        run: find android/app/build/outputs -name "*.apk" -exec ls -la {} \;
+
+      - name: Upload APKs
+        uses: actions/upload-artifact@v5
+        with:
+          name: minecraft-apk
+          path: android/app/build/outputs/apk/**/*.apk
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Attach APKs to the release (tags only)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: 'Minecraft Classic — APK (${{ github.ref_name }})'
+          body: |
+            Готовый APK с игрой Minecraft Classic для Android. Игра работает
+            полностью офлайн, разрешение на интернет приложению не нужно.
+
+            **Как установить**
+            1. Скачайте `app-release.apk` (если телефон откажется — `app-debug.apk`).
+            2. Откройте файл на телефоне и разрешите установку из неизвестных источников.
+            3. Запустите «Minecraft Classic» — можно играть без интернета.
+
+            Прогресс (инвентарь, снаряжение, сюжет) сохраняется в приложении
+            автоматически, в том числе при сворачивании.
+          files: |
+            android/app/build/outputs/apk/release/*.apk
+            android/app/build/outputs/apk/debug/*.apk
+          generate_release_notes: true

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Кубик травы: узнаваемая иконка Minecraft, нарисована вектором -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- верхний (травяной) пласт -->
+    <path android:fillColor="#6FBF44" android:pathData="M26,32 h56 v14 h-56 z" />
+    <path android:fillColor="#5AA337" android:pathData="M26,32 h56 v4 h-56 z" />
+    <path android:fillColor="#82CE55" android:pathData="M30,36 h8 v4 h-8 z M52,36 h10 v4 h-10 z M74,38 h6 v4 h-6 z" />
+
+    <!-- земля -->
+    <path android:fillColor="#8B5A2B" android:pathData="M26,46 h56 v30 h-56 z" />
+    <path android:fillColor="#A06A34" android:pathData="M34,52 h8 v6 h-8 z M58,50 h6 v6 h-6 z M70,60 h8 v6 h-8 z" />
+    <path android:fillColor="#6E4620" android:pathData="M46,60 h8 v6 h-8 z M32,68 h8 v6 h-8 z M62,68 h10 v6 h-10 z M78,48 h4 v4 h-4 z" />
+
+    <!-- светлый блик сверху слева -->
+    <path android:fillColor="#00000000" android:pathData="M0,0 h0 v0 h0 z" />
+    <path android:fillColor="#FFFFFF" android:fillAlpha="0.10" android:pathData="M26,32 h56 v2 h-56 z" />
+</vector>
