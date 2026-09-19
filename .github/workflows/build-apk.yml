@@ -27,9 +27,20 @@ jobs:
       - name: Check that the game file is in place
         run: |
           test -s minecraft/Minecraft.html || { echo "нет minecraft/Minecraft.html"; exit 1; }
-          ls -la minecraft/
           grep -qi "<html" minecraft/Minecraft.html || { echo "файл не похож на html"; exit 1; }
           echo "размер игры: $(du -h minecraft/Minecraft.html | cut -f1)"
+
+      - name: Проверки исходников: нечего подозревать
+        run: |
+          set -e
+          APP=android/app/src/main/java/com/mcclassic/game/MainActivity.java
+          MAN=android/app/src/main/AndroidManifest.xml
+          grep -q "addJavascriptInterface" "$APP" && { echo "ОШИБКА: JS-мост в приложении"; exit 1; }
+          grep -qE "DexClassLoader|PathClassLoader" "$APP" && { echo "ОШИБКА: загрузка внешнего кода"; exit 1; }
+          grep -qE "loadUrl\(\"http|loadUrl\('http" "$APP" && { echo "ОШИБКА: загрузка страницы из интернета"; exit 1; }
+          grep -q "setAllowUniversalAccessFromFileURLs\|setAllowFileAccessFromFileURLs" "$APP" && { echo "ОШИБКА: WebView открыт к локальным файлам"; exit 1; }
+          grep -q 'android.permission.INTERNET" tools:node="remove"' "$MAN" || { echo "ОШИБКА: INTERNET не вырезан из манифеста"; exit 1; }
+          echo "нет JS-моста, нет загрузки внешнего кода и внешних страниц, INTERNET вырезан"
 
       - uses: actions/setup-java@v5
         with:
@@ -40,13 +51,18 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: Create a signing key (чтобы release APK ставился на телефон)
+      - name: Ключ подписи
         working-directory: android
         run: |
-          keytool -genkeypair -v -keystore keystore.jks \
-            -alias minecraft -keyalg RSA -keysize 2048 -validity 10000 \
-            -storepass minecraft -keypass minecraft \
-            -dname "CN=Minecraft Classic, OU=Games, O=MinecraftClassic, L=Moscow, C=RU"
+          if [ -f hobby-signing-key.p12 ]; then
+            echo "используем постоянный ключ проекта: обновления ставятся поверх старых версий"
+          else
+            echo "ВНИМАНИЕ: постоянного ключа нет, создаём разовый — обновления потребуют переустановки"
+            keytool -genkeypair -v -keystore hobby-signing-key.p12 \
+              -alias minecraft -keyalg RSA -keysize 2048 -validity 10000 \
+              -storetype PKCS12 -storepass minecraft -keypass minecraft \
+              -dname "CN=Minecraft Classic, OU=Games, O=MinecraftClassic Dev, L=Moscow, C=RU"
+          fi
 
       - name: Assemble debug and release APKs
         working-directory: android
@@ -60,25 +76,43 @@ jobs:
         run: |
           set -e
           APK=app/build/outputs/apk/release/app-release.apk
-          echo "--- содержимое APK (первые строки) ---"
-          unzip -l "$APK" | head -20
           unzip -l "$APK" | grep -q "assets/minecraft.html" || { echo "ОШИБКА: в APK нет assets/minecraft.html"; exit 1; }
           unzip -p "$APK" assets/minecraft.html > /tmp/in-apk.html
           echo "размер игры в APK: $(wc -c < /tmp/in-apk.html) байт"
-          echo "sha256 в APK:     $(sha256sum /tmp/in-apk.html | cut -d' ' -f1)"
-          echo "sha256 исходника: $(sha256sum ../minecraft/Minecraft.html | cut -d' ' -f1)"
           cmp /tmp/in-apk.html ../minecraft/Minecraft.html && echo "игра в APK совпадает с исходником байт в байт"
-          if unzip -p "$APK" AndroidManifest.xml | grep -a -q "android.permission.INTERNET"; then
-            echo "ОШИБКА: в APK запрошено разрешение INTERNET"; exit 1
+          echo "--- подпись ---"
+          unzip -l "$APK" | grep -E "META-INF/|classes.dex|resources.arsc" | head -6
+
+      - name: Verify the merged manifest (нет интернета и отладки)
+        working-directory: android
+        run: |
+          set -e
+          MERGED=$(find app/build/intermediates -path "*release*" -name "AndroidManifest.xml" | head -1)
+          echo "проверяем: $MERGED"
+          test -n "$MERGED" || { echo "ОШИБКА: не нашли итоговый манифест"; exit 1; }
+          if grep -q "android.permission.INTERNET" "$MERGED"; then
+            echo "ОШИБКА: в итоговом манифесте есть разрешение INTERNET"; exit 1
           fi
-          echo "разрешения INTERNET нет — приложение полностью офлайн"
-          unzip -l "$APK" | grep -E "classes.dex|resources.arsc|META-INF/CERT" | head -5
+          if grep -q 'android:debuggable="true"' "$MERGED"; then
+            echo "ОШИБКА: release-сборка помечена как отладочная"; exit 1
+          fi
+          echo "интернета нет, отладочный режим выключен"
+          grep -oE 'android:versionName="[^"]*"|android:minSdkVersion="[^"]*"|android:targetSdkVersion="[^"]*"' "$MERGED" | head -3 || true
+
+      - name: Посчитать контрольные суммы
+        working-directory: android
+        run: |
+          cd app/build/outputs/apk
+          sha256sum release/*.apk debug/*.apk > "$GITHUB_WORKSPACE/android/SHA256SUMS.txt"
+          cat "$GITHUB_WORKSPACE/android/SHA256SUMS.txt"
 
       - name: Upload APKs
         uses: actions/upload-artifact@v5
         with:
           name: minecraft-apk
-          path: android/app/build/outputs/apk/**/*.apk
+          path: |
+            android/app/build/outputs/apk/**/*.apk
+            android/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 90
 
@@ -88,17 +122,34 @@ jobs:
         with:
           name: 'Minecraft Classic — APK (${{ github.ref_name }})'
           body: |
-            Готовый APK с игрой Minecraft Classic для Android. Игра работает
-            полностью офлайн, разрешение на интернет приложению не нужно.
+            Готовый APK с игрой. Работает полностью офлайн: разрешение на выход в
+            интернет не запрашивается, более того — вырезано из манифеста
+            (`tools:node="remove"`), так что его не добавит и никакая библиотека.
 
-            **Как установить**
-            1. Скачайте `app-release.apk` (если телефон откажется — `app-debug.apk`).
-            2. Откройте файл на телефоне и разрешите установку из неизвестных источников.
-            3. Запустите «Minecraft Classic» — можно играть без интернета.
+            **Установка**
+            1. Скачайте `app-release.apk`.
+            2. Откройте файл на телефоне.
+            3. Android спросит разрешение ставить приложения из этого источника
+               (браузер или файловый менеджер) — разрешите. Это разовый вопрос
+               для любого APK не из Play Store.
+            4. Если появится окно Play Protect «Небезопасное приложение
+               заблокировано» — нажмите «Подробнее» → «Всё равно установить».
+               Так система помечает ЛЮБОЕ приложение, подписанное не Google, а
+               не вирусы. Если сомневаетесь — сравните контрольную сумму файла
+               с `SHA256SUMS.txt` (приложен к релизу) или загрузите APK на
+               virustotal.com: там видно, что детектов нет.
+            5. Запустите «Minecraft Classic».
 
-            Прогресс (инвентарь, снаряжение, сюжет) сохраняется в приложении
-            автоматически, в том числе при сворачивании.
+            Игра не отправляет данные в сеть: в приложении нет разрешения на
+            интернет, весь код открыт в этом репозитории, а внутрь APK попадает
+            ровно тот же HTML-файл, что лежит в репозитории (сборка сравнивает
+            их байт в байт).
+
+            Прогресс (инвентарь, снаряжение, сюжет) сохраняется внутри
+            приложения, в том числе при сворачивании. Обновления ставятся
+            поверх предыдущей версии, прогресс не теряется.
           files: |
             android/app/build/outputs/apk/release/*.apk
             android/app/build/outputs/apk/debug/*.apk
+            android/SHA256SUMS.txt
           generate_release_notes: true

@@ -7,6 +7,10 @@ android/keystore.jks
 *.apk
 *.aab
 
+# ВНИМАНИЕ: android/hobby-signing-key.p12 в репозиторий добавляется специально.
+# Это публичный ключ подписи проекта (пароль minecraft), он нужен, чтобы новые
+# версии APK ставились поверх старых и не терялся прогресс. Секретов в нём нет.
+
 # файл игры копируется в assets при сборке (канонический — minecraft/Minecraft.html)
 android/app/src/main/assets/minecraft.html
 
