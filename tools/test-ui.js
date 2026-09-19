@@ -44,6 +44,32 @@ async function main() {
   });
   win.HTMLCanvasElement.prototype.getContext = function () { return ctx2d; };
 
+  /* --- phone API stubs (Android Chrome) ------------------------------ */
+  win._full = null;
+  win.Element.prototype.requestFullscreen = function () {
+    win._full = this;
+    win.document.fullscreenElement = this;
+    win.document.dispatchEvent(new win.Event('fullscreenchange'));
+    return Promise.resolve();
+  };
+  win.document.exitFullscreen = function () {
+    win._full = null;
+    win.document.fullscreenElement = null;
+    win.document.dispatchEvent(new win.Event('fullscreenchange'));
+    return Promise.resolve();
+  };
+  win.THREE_ORIENTATION = { locked: [], unlock: function () { } };
+  win.screen.orientation = { lock: function (o) { win.THREE_ORIENTATION.locked.push(o); return Promise.resolve(); }, type: 'portrait-primary' };
+  win._vibes = [];
+  win.navigator.vibrate = function (ms) { win._vibes.push(ms); return true; };
+  win._wakes = { requests: 0, releases: 0 };
+  win.navigator.wakeLock = {
+    request: function () {
+      win._wakes.requests++;
+      return Promise.resolve({ released: false, addEventListener: function () { }, release: function () { win._wakes.releases++; return Promise.resolve(); } });
+    }
+  };
+
   const stub = `
   (function(){
     var THREE = window.THREE;
@@ -190,6 +216,95 @@ async function main() {
   $('btn-quit').click();
   ok(App.state === 'menu', 'quit returns to the menu');
 
+  console.log('\n== Phone controls ==');
+  const ptr = (el, type, opts) => el.dispatchEvent(new win.PointerEvent(type,
+    Object.assign({ bubbles: true, cancelable: true, pointerId: 1, clientX: 0, clientY: 0 }, opts)));
+
+  /* удержание педали на палец */
+  $('btn-quick').click();
+  $('btn-quick-start').click();                       // «Старт» просит полный экран
+  ok(win._full === win.document.documentElement, 'fullscreen requested on race start');
+  ok(win.THREE_ORIENTATION.locked.indexOf('landscape') >= 0, 'landscape orientation locked');
+  let guard4 = 0;
+  while (App.state === 'loading' && guard4++ < 300) await sleep(30);
+  ok(App.state === 'race', 'quick race starts from the phone path');
+  ok(App.Full.active(), 'fullscreen active');
+  $('btn-full').click();
+  ok(!App.Full.active(), 'HUD button leaves fullscreen');
+  $('btn-full').click();
+  ok(App.Full.active(), 'HUD button enters fullscreen again');
+  ok(win._wakes.requests > 0, 'screen wake lock requested during the race');
+
+  /* руль: плавный рост и сброс при отпускании */
+  ok(App.settings.steerMode === 'zones', 'steering starts in zones mode (' + App.settings.steerMode + ')');
+  ptr($('steer-right'), 'pointerdown');
+  ok(App.touch.steerR === true, 'right zone pressed');
+  for (let i = 0; i < 4; i++) App.readInput(1 / 60);
+  const rampLow = App.touch.steer;
+  ok(rampLow > 0.15 && rampLow < 0.5, 'steering ramps up smoothly (' + rampLow.toFixed(2) + ')');
+  for (let i = 0; i < 20; i++) App.readInput(1 / 60);
+  ok(App.touch.steer > 0.95, 'steering reaches full lock when held (' + App.touch.steer.toFixed(2) + ')');
+  ok($('steer-right').classList.contains('act'), 'steering zone lights up while pressed');
+  ok(App.readInput(1 / 60).steer > 0.9, 'steering reaches the car input');
+  ptr($('steer-right'), 'pointerup');
+  ok(App.touch.steerR === false, 'zone released');
+  for (let i = 0; i < 12; i++) App.readInput(1 / 60);
+  ok(App.touch.steer === 0, 'steering recentres after release');
+
+  /* наклон телефона */
+  App.settings.steerMode = 'tilt';
+  App.applySteerMode();
+  const tiltStub = { gamma: 40 };
+  App.tilt.calib = null;
+  App.onTilt(tiltStub);
+  ok(App.tilt.calib === 40, 'tilt calibration stored (' + App.tilt.calib + '°)');
+  tiltStub.gamma = 49;                                  // наклон на 9°
+  App.onTilt(tiltStub);
+  for (let i = 0; i < 10; i++) App.readInput(1 / 60);
+  ok(App.readInput(1 / 60).steer > 0.15, 'tilt steers the car (' + App.touch.steer.toFixed(2) + ')');
+  ok($('tilt-ind').firstElementChild.style.width !== '', 'tilt indicator moves');
+  tiltStub.gamma = 40;
+  App.onTilt(tiltStub);
+  for (let i = 0; i < 30; i++) App.readInput(1 / 60);
+  ok(Math.abs(App.touch.steer) < 0.05, 'tilt recentres when the phone is level (' + App.touch.steer.toFixed(2) + ')');
+
+  /* свайп-руль (раньше этот режим не работал: слой был под pointer-events:none) */
+  App.settings.steerMode = 'drag';
+  App.applySteerMode();
+  ok(win.document.body.classList.contains('drag-steer'), 'drag layer enabled in this mode');
+  ok(win.getComputedStyle($('drag-layer')).pointerEvents === 'auto', 'drag layer receives touches');
+  ptr($('drag-layer'), 'pointerdown', { pointerId: 3, clientX: 300, clientY: 120 });
+  ok(!!App.touch.drag, 'drag started');
+  ptr($('drag-layer'), 'pointermove', { pointerId: 3, clientX: 300 - win.innerWidth * 0.15, clientY: 120 });
+  for (let i = 0; i < 20; i++) App.readInput(1 / 60);
+  ok(App.readInput(1 / 60).steer < -0.4, 'dragging left steers left (' + App.touch.steer.toFixed(2) + ')');
+  ptr($('drag-layer'), 'pointerup', { pointerId: 3, clientX: 100, clientY: 120 });
+  ok(!App.touch.drag, 'drag ends on release');
+  App.settings.steerMode = 'zones';
+  App.applySteerMode();
+  ok(!win.document.body.classList.contains('drag-steer'), 'drag layer off in zones mode');
+
+  /* вибрация и крупные кнопки */
+  const vibesBefore = win._vibes.length;
+  ptr($('pad-nitro'), 'pointerdown');
+  ok(win._vibes.length > vibesBefore, 'nitro pad vibrates');
+  ptr($('pad-nitro'), 'pointerup');
+  App.settings.padSize = 'big';
+  App.applySteerMode();
+  ok(win.document.body.classList.contains('bigpads'), 'big pads mode applies');
+  App.settings.padSize = 'normal';
+  App.applySteerMode();
+
+  /* пауза отпускает всё, что было зажато */
+  App.touch.steerL = true;
+  App.input.gasHeld = true;
+  $('btn-pause').click();
+  ok(!App.touch.steerL && !App.input.gasHeld, 'pause clears held presses');
+  ok(!$('steer-left').classList.contains('act'), 'zone highlight cleared on pause');
+  $('btn-quit').click();
+  ok(win._wakes.releases > 0, 'wake lock released when leaving the race');
+  ok(App.state === 'menu', 'back to menu after the phone checks');
+
   console.log('\n== Quick race + settings ==');
   $('btn-quick').click();
   ok(App.state === 'quick', 'quick race screen opens');
@@ -211,6 +326,23 @@ async function main() {
   ok(App.settings.steerMode === 'drag', 'steering mode persisted');
   $('set-auto').children[1].click();
   ok(App.settings.autoGas === false, 'auto throttle toggled');
+  $('set-pads').children[1].click();
+  ok(App.settings.padSize === 'big', 'pad size setting persisted');
+  ok(win.document.body.classList.contains('bigpads'), 'big pads applied to the screen');
+  $('set-pads').children[0].click();
+  $('set-tilt').children[2].click();
+  ok(App.settings.tiltSens === 18, 'tilt sensitivity setting persisted');
+  $('set-vibr').children[1].click();
+  ok(App.settings.vibrate === false, 'vibration can be switched off');
+  const vibesOff = win._vibes.length;
+  App.buzz(30);
+  ok(win._vibes.length === vibesOff, 'no vibration while switched off');
+  $('set-vibr').children[0].click();
+  $('set-full').children[1].click();
+  ok(App.settings.autoFull === false, 'auto fullscreen can be switched off');
+  $('set-full').children[0].click();
+  $('set-tilt').children[1].click();
+  ok(App.settings.tiltSens === 26, 'tilt sensitivity back to default');
   $('set-steer').children[0].click();
   $('set-auto').children[0].click();
   $('set-quality').children[0].click();

@@ -594,7 +594,7 @@
     selectedCar: 'vihr',
     cars: { vihr: { owned: true, upgrades: {}, color: 0xd11f2f, accent: 0x14181f, rim: 0xd7dde6 } },
     career: {},
-    settings: { assist: 0.9, quality: 'auto', sfx: true, music: true, steerMode: 'auto', invertTilt: false },
+    settings: { assist: 0.9, quality: 'auto', sfx: true, music: true, steerMode: 'zones', invertTilt: false },
     stats: { races: 0, wins: 0, distance: 0, driftTotal: 0, bestTimes: {} }
   };
 

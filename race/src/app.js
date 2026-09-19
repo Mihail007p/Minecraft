@@ -44,7 +44,7 @@
     lastRaceConfig: null,
     input: { throttle: 0, brake: 0, steer: 0, handbrake: 0, nitro: 0 },
     keys: {},
-    touch: { steerL: false, steerR: false, drag: null, baseSteer: 0 },
+    touch: { steerL: false, steerR: false, drag: null, baseSteer: 0, steer: 0 },
     tilt: { gamma: 0, calib: null, active: false },
     settings: null,
     save: null,
@@ -229,7 +229,13 @@
     if (!App.storageOk) App.save._noStorage = true;
     App.settings = App.save.settings;
     if (App.settings.autoGas == null) App.settings.autoGas = true;
-    if (!App.settings.steerMode) App.settings.steerMode = 'zones';
+    /* в старых сохранениях лежало steerMode:'auto' — такого режима нет, из-за
+       этого зоны руля были скрыты; любой неизвестный режим — это 'zones' */
+    if (['zones', 'tilt', 'drag'].indexOf(App.settings.steerMode) < 0) App.settings.steerMode = 'zones';
+    if (!App.settings.padSize) App.settings.padSize = 'normal';
+    if (App.settings.tiltSens == null) App.settings.tiltSens = 26;
+    if (App.settings.vibrate == null) App.settings.vibrate = true;
+    if (App.settings.autoFull == null) App.settings.autoFull = true;
   };
 
   App.persist = function () { NR.Save.save(); };
@@ -327,7 +333,7 @@
           var btn = mk('button', 'btn primary small', rec && rec.stars ? 'Ещё раз' : 'Старт');
           btn.style.minHeight = '38px';
           if (!unlockedEv) btn.setAttribute('disabled', 'disabled');
-          btn.addEventListener('click', function () { App.startCareerEvent(ev); });
+          btn.addEventListener('click', function () { App.playFrom(function () { App.startCareerEvent(ev); }); });
           row.appendChild(btn);
           box.appendChild(row);
         })(series.events[ei], ei);
@@ -625,6 +631,59 @@
         s.invertTilt = pair[0]; App.persist(); App.buildSettings();
       }));
     });
+    var padBox = $('set-pads');
+    if (padBox) {
+      padBox.innerHTML = '';
+      [['normal', 'обычные'], ['big', 'крупные']].forEach(function (pair) {
+        padBox.appendChild(chip(pair[1], (s.padSize || 'normal') === pair[0], function () {
+          s.padSize = pair[0]; App.persist(); App.applySteerMode(); App.buildSettings();
+        }));
+      });
+    }
+    var tiltBox = $('set-tilt');
+    if (tiltBox) {
+      tiltBox.innerHTML = '';
+      [[34, 'низкая'], [26, 'средняя'], [18, 'высокая']].forEach(function (pair) {
+        tiltBox.appendChild(chip(pair[1], (s.tiltSens || 26) === pair[0], function () {
+          s.tiltSens = pair[0]; App.persist(); App.buildSettings();
+        }));
+      });
+    }
+    var tiltCalBox = $('set-tiltcal');
+    if (tiltCalBox) {
+      tiltCalBox.innerHTML = '';
+      var label = App.tilt.ready
+        ? 'откалибровать наклон (сейчас ' + Math.round(App.tilt.calib || 0) + '°)'
+        : 'разрешить наклон телефона';
+      tiltCalBox.appendChild(chip(label, false, function () {
+        if (App.tilt.ready) App.tilt.calib = App.tilt.gamma;
+        else App.requestTilt();
+        App.buildSettings();
+      }));
+    }
+    var vibBox = $('set-vibr');
+    if (vibBox) {
+      vibBox.innerHTML = '';
+      [[true, 'вибрация вкл'], [false, 'вибрация выкл']].forEach(function (pair) {
+        vibBox.appendChild(chip(pair[1], (s.vibrate !== false) === pair[0], function () {
+          s.vibrate = pair[0]; App.persist();
+          if (pair[0]) App.buzz(20);
+          App.buildSettings();
+        }));
+      });
+    }
+    var fullBox = $('set-full');
+    if (fullBox) {
+      fullBox.innerHTML = '';
+      [[true, 'полный экран на старте'], [false, 'не включать']].forEach(function (pair) {
+        fullBox.appendChild(chip(pair[1], (s.autoFull !== false) === pair[0], function () {
+          s.autoFull = pair[0]; App.persist(); App.buildSettings();
+        }));
+      });
+      fullBox.appendChild(chip(App.Full.active() ? 'выйти из полного экрана' : 'полный экран сейчас', false, function () {
+        App.Full.toggle(); App.buildSettings();
+      }));
+    }
     $('set-fps').textContent = 'FPS: ' + App.fps.value.toFixed(0) + ' · качество: ' + App.quality + (App.qualityAuto ? ' (авто)' : '');
     var box = $('stats-box');
     var st = App.save.stats;
@@ -713,6 +772,9 @@
         App.state = 'race';
         App.paused = false;
         App.applySteerMode();
+        App.tilt.calib = App.tilt.ready ? App.tilt.gamma : null;
+        App.wakeOn();
+        App.clearInput();
         HUD.reset();
         HUD.toast('Погнали!', 'green', 1200);
         NR.Audio.startEngine({ freq: 46, range: 130 });
@@ -736,6 +798,8 @@
   };
 
   App.quitToMenu = function () {
+    App.wakeOff();
+    App.clearInput();
     show('s-pause', false);
     show('s-results', false);
     if (App.race) { App.race = null; App.view = null; App.scene = null; }
@@ -745,6 +809,7 @@
 
   App.pauseRace = function () {
     if (App.state !== 'race') return;
+    App.clearInput();
     App.paused = true;
     App.state = 'paused';
     var r = App.race;
@@ -849,25 +914,137 @@
      input
      ================================================================== */
   App.applySteerMode = function () {
-    var mode = App.settings.steerMode || 'zones';
+    var s = App.settings;
+    var mode = s.steerMode || 'zones';
     var steer = $('steer');
     var tilt = $('tilt-ind');
     var pads = $('pads');
     if (steer) steer.style.display = mode === 'zones' ? 'flex' : 'none';
     if (tilt) tilt.style.display = mode === 'tilt' ? 'block' : 'none';
     var gas = $('pad-gas');
-    if (gas) gas.style.display = App.settings.autoGas ? 'none' : 'flex';
+    if (gas) gas.style.display = s.autoGas ? 'none' : 'flex';
     if (mode === 'tilt' && !App.tilt.ready) App.requestTilt();
     if (pads) pads.style.opacity = '1';
+    if (document.body) {
+      document.body.classList.toggle('bigpads', s.padSize === 'big');
+      document.body.classList.toggle('drag-steer', mode === 'drag');
+    }
+    App.syncFullBtn();
+  };
+
+  /* ==================================================================
+     phone: fullscreen, orientation, vibration, wake lock
+     ================================================================== */
+  App.fullHinted = false;
+  App.Full = {
+    available: function () {
+      var el = document.documentElement;
+      return !!(el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen);
+    },
+    active: function () {
+      return !!(document.fullscreenElement || document.webkitFullscreenElement ||
+        document.mozFullScreenElement || document.msFullscreenElement);
+    },
+    /* просим телефон повернуть картинку в ландшафт (работает после полного экрана) */
+    lock: function () {
+      try {
+        var o = window.screen && window.screen.orientation;
+        if (o && o.lock) {
+          var pr = o.lock('landscape');
+          if (pr && pr.catch) pr.catch(function () { });
+        }
+      } catch (e) { }
+    },
+    enter: function (silent) {
+      App.Full.lock();
+      if (App.Full.active()) return true;
+      var el = document.documentElement;
+      var fn = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
+      if (!fn) {
+        if (!silent && !App.fullHinted) {
+          App.fullHinted = true;
+          HUD.toast('Полный экран: добавьте игру на главный экран', 'pink', 3600);
+        }
+        return false;
+      }
+      try {
+        var res = fn.call(el, { navigationUI: 'hide' });
+        if (res && res.then) res.then(function () { App.Full.lock(); App.syncFullBtn(); }, function () { App.syncFullBtn(); });
+      } catch (e) { }
+      App.syncFullBtn();
+      return true;
+    },
+    exit: function () {
+      var fn = document.exitFullscreen || document.webkitExitFullscreen ||
+        document.mozCancelFullScreen || document.msExitFullscreen;
+      try { if (fn && App.Full.active()) fn.call(document); } catch (e) { }
+      App.syncFullBtn();
+    },
+    toggle: function () {
+      if (App.Full.active()) App.Full.exit(); else App.Full.enter();
+    }
+  };
+
+  App.syncFullBtn = function () {
+    var b = $('btn-full');
+    if (!b) return;
+    var on = App.Full.active();
+    b.textContent = on ? '⤡' : '⛶';
+    b.classList.toggle('on', on);
+    b.style.opacity = App.Full.available() ? '1' : '.55';
+  };
+
+  /* короткая вибрация на действие (на телефоне ощущается, как кнопка) */
+  App.buzz = function (ms) {
+    if (!App.settings || App.settings.vibrate === false) return;
+    try { if (navigator.vibrate) navigator.vibrate(ms); } catch (e) { }
+  };
+
+  /* не гасим экран во время заезда (Chrome на Android) */
+  App.wakeOn = function () {
+    try {
+      if (!navigator.wakeLock || App.wakeSentinel) return;
+      navigator.wakeLock.request('screen').then(function (sent) {
+        App.wakeSentinel = sent;
+        if (sent.addEventListener) sent.addEventListener('release', function () { App.wakeSentinel = null; });
+      }, function () { });
+    } catch (e) { }
+  };
+  App.wakeOff = function () {
+    try { if (App.wakeSentinel && App.wakeSentinel.release) App.wakeSentinel.release(); } catch (e) { }
+    App.wakeSentinel = null;
+  };
+
+  /* нажали «Старт»/«Заезд»: сначала полный экран (клик — это и есть жест,
+     которого требуют браузеры), потом запуск */
+  App.playFrom = function (fn) {
+    if (!App.settings || App.settings.autoFull !== false) App.Full.enter();
+    else App.Full.lock();
+    App.clearInput();
+    if (fn) fn();
+  };
+
+  App.clearInput = function () {
+    var inp = App.input;
+    inp.gasHeld = inp.brakeHeld = inp.driftHeld = inp.nitroHeld = false;
+    inp.throttle = inp.brake = inp.handbrake = inp.nitro = 0;
+    App.touch.steerL = false;
+    App.touch.steerR = false;
+    App.touch.drag = null;
+    App.touch.steer = 0;
+    var act = document.querySelectorAll('.pad.act, #steer .zone.act');
+    for (var i = 0; i < act.length; i++) act[i].classList.remove('act');
   };
 
   App.bindHold = function (el, onDown, onUp) {
     if (!el) return;
     var active = false;
     function down(e) {
-      e.preventDefault();
+      if (e.cancelable !== false && e.preventDefault) e.preventDefault();
+      if (active) return;
       active = true;
       el.classList.add('act');
+      if (el.dataset && el.dataset.buzz) App.buzz(Number(el.dataset.buzz) || 12);
       onDown();
       if (el.setPointerCapture && e.pointerId != null) { try { el.setPointerCapture(e.pointerId); } catch (err) { } }
     }
@@ -892,37 +1069,77 @@
     App.bindHold($('pad-drift'), function () { inp.driftHeld = true; }, function () { inp.driftHeld = false; });
     App.bindHold($('pad-nitro'), function () {
       inp.nitroHeld = true;
+      App.buzz(18);
       if (App.race) NR.Audio.nitroWhoosh();
     }, function () { inp.nitroHeld = false; });
+    if ($('pad-drift') && $('pad-drift').dataset) $('pad-drift').dataset.buzz = '12';
 
     /* steering zones */
-    App.bindHold($('steer-left'), function () { App.touch.steerL = true; }, function () { App.touch.steerL = false; });
-    App.bindHold($('steer-right'), function () { App.touch.steerR = true; }, function () { App.touch.steerR = false; });
+    App.bindHold($('steer-left'), function () {
+      App.touch.steerL = true;
+      var z = $('steer-left'); if (z) z.classList.add('act');
+    }, function () {
+      App.touch.steerL = false;
+      var z = $('steer-left'); if (z) z.classList.remove('act');
+    });
+    App.bindHold($('steer-right'), function () {
+      App.touch.steerR = true;
+      var z = $('steer-right'); if (z) z.classList.add('act');
+    }, function () {
+      App.touch.steerR = false;
+      var z = $('steer-right'); if (z) z.classList.remove('act');
+    });
 
-    /* drag steering anywhere on the race screen */
-    var raceScreen = $('s-race');
-    if (raceScreen) {
-      raceScreen.addEventListener('pointerdown', function (e) {
-        if (App.settings.steerMode !== 'drag' || App.state !== 'race') return;
-        App.touch.drag = { id: e.pointerId, x0: e.clientX, steer: 0 };
+    /* свайп-руль: отдельный слой поверх экрана (раньше события вешались на
+       #s-race, а у него pointer-events:none — режим не работал вообще) */
+    var layer = $('drag-layer');
+    if (layer) {
+      layer.addEventListener('pointerdown', function (e) {
+        if (App.settings.steerMode !== 'drag') return;
+        if (layer.setPointerCapture && e.pointerId != null) {
+          try { layer.setPointerCapture(e.pointerId); } catch (err) { }
+        }
+        App.touch.drag = { id: e.pointerId == null ? null : e.pointerId, x0: e.clientX, steer: 0 };
       });
-      raceScreen.addEventListener('pointermove', function (e) {
-        if (!App.touch.drag || App.touch.drag.id !== e.pointerId) return;
-        var dx = e.clientX - App.touch.drag.x0;
-        var span = Math.max(60, window.innerWidth * 0.12);
-        App.touch.drag.steer = U.clamp(dx / span, -1, 1);
+      layer.addEventListener('pointermove', function (e) {
+        var d = App.touch.drag;
+        if (!d) return;
+        if (d.id != null && e.pointerId != null && d.id !== e.pointerId) return;
+        var span = Math.max(56, window.innerWidth * 0.10);
+        d.steer = U.clamp((e.clientX - d.x0) / span, -1, 1);
       });
       function endDrag(e) {
-        if (App.touch.drag && App.touch.drag.id === e.pointerId) App.touch.drag = null;
+        var d = App.touch.drag;
+        if (!d) return;
+        if (d.id != null && e.pointerId != null && d.id !== e.pointerId) return;
+        App.touch.drag = null;
       }
-      raceScreen.addEventListener('pointerup', endDrag);
-      raceScreen.addEventListener('pointercancel', endDrag);
+      layer.addEventListener('pointerup', endDrag);
+      layer.addEventListener('pointercancel', endDrag);
+      layer.addEventListener('lostpointercapture', endDrag);
+    }
+
+    /* полный экран вручную */
+    var fullBtn = $('btn-full');
+    if (fullBtn) fullBtn.addEventListener('click', function () { App.Full.toggle(); });
+    var portraitBtn = $('btn-portrait-full');
+    if (portraitBtn) {
+      portraitBtn.addEventListener('click', function () {
+        App.Full.enter();
+        App.Full.lock();
+        var hint = $('portrait-hint');
+        if (hint) {
+          hint.textContent = App.Full.active()
+            ? 'Готово — поверните телефон'
+            : 'Браузер не дал полный экран: поверните телефон вручную';
+        }
+      });
     }
 
     /* buttons */
     $('btn-pause').addEventListener('click', function () { App.pauseRace(); });
     $('btn-resume').addEventListener('click', function () { App.resumeRace(); });
-    $('btn-restart').addEventListener('click', function () { App.restartRace(); });
+    $('btn-restart').addEventListener('click', function () { App.playFrom(App.restartRace); });
     $('btn-pause-settings').addEventListener('click', function () { App.openSettings('paused'); });
     $('btn-quit').addEventListener('click', function () { App.quitToMenu(); });
     $('btn-settings-back').addEventListener('click', function () {
@@ -934,7 +1151,10 @@
       var cfg = App.raceConfig || {};
       if (cfg.career) App.openCareer(); else App.quitToMenu();
     });
-    $('btn-res-retry').addEventListener('click', function () { show('s-results', false); App.restartRace(); });
+    $('btn-res-retry').addEventListener('click', function () {
+      show('s-results', false);
+      App.playFrom(App.restartRace);
+    });
     $('btn-res-menu').addEventListener('click', function () { show('s-results', false); App.quitToMenu(); });
     $('btn-career').addEventListener('click', function () { App.openCareer(); });
     $('btn-quick').addEventListener('click', function () { App.openQuick(); });
@@ -944,7 +1164,7 @@
     $('btn-career-back').addEventListener('click', function () { App.openMenu(); });
     $('btn-quick-back').addEventListener('click', function () { App.openMenu(); });
     $('btn-garage-back').addEventListener('click', function () { App.openMenu(); });
-    $('btn-quick-start').addEventListener('click', function () { App.startQuick(); });
+    $('btn-quick-start').addEventListener('click', function () { App.playFrom(App.startQuick); });
     $('btn-garage-buy').addEventListener('click', function () { App.buyCar(); });
     $('btn-garage-select').addEventListener('click', function () { App.selectCar(); });
     $('btn-garage-max').addEventListener('click', function () { App.maxTune(); });
@@ -980,6 +1200,8 @@
     window.addEventListener('pointerdown', unlock);
     window.addEventListener('keydown', unlock);
 
+    document.addEventListener('fullscreenchange', function () { App.syncFullBtn(); App.Full.lock(); });
+    document.addEventListener('webkitfullscreenchange', function () { App.syncFullBtn(); App.Full.lock(); });
     document.addEventListener('visibilitychange', function () {
       if (document.hidden && App.state === 'race') App.pauseRace();
     });
@@ -996,39 +1218,46 @@
     var auto = s.autoGas !== false;
     var throttle = auto ? 1 : (inp.gasHeld ? 1 : 0);
     var brake = inp.brakeHeld ? 1 : 0;
-    if (!auto && !inp.gasHeld && brakedown()) throttle = 0;
-    function brakedown() { return !!brake; }
     if (k['ArrowUp'] || k['KeyW']) throttle = 1;
     if (k['ArrowDown'] || k['KeyS']) { brake = 1; throttle = 0; }
     if (k['ShiftLeft'] || k['ShiftRight'] || k['KeyE']) inp.nitroHeld = true;
     var handbrake = inp.driftHeld || k['Space'] ? 1 : 0;
 
-    var steer = 0;
+    /* ---- руль ---------------------------------------------------- */
     var mode = s.steerMode || 'zones';
-    if (mode === 'zones') {
-      if (App.touch.steerL) steer -= 1;
-      if (App.touch.steerR) steer += 1;
-      if (k['ArrowLeft'] || k['KeyA']) steer -= 1;
-      if (k['ArrowRight'] || k['KeyD']) steer += 1;
-    } else if (mode === 'drag') {
-      steer = App.touch.drag ? App.touch.drag.steer : 0;
-      if (k['ArrowLeft'] || k['KeyA']) steer -= 1;
-      if (k['ArrowRight'] || k['KeyD']) steer += 1;
+    var raw = 0;
+    if (mode === 'drag') {
+      raw = App.touch.drag ? App.touch.drag.steer : 0;
     } else if (mode === 'tilt') {
       if (App.tilt.ready) {
         if (App.tilt.calib == null) App.tilt.calib = App.tilt.gamma;
         var g = App.tilt.gamma - App.tilt.calib;
         if (s.invertTilt) g = -g;
-        steer = U.clamp(g / 26, -1, 1);
-        steer = Math.abs(steer) < 0.08 ? 0 : steer;
+        raw = U.clamp(g / (s.tiltSens || 26), -1, 1);
+        if (Math.abs(raw) < 0.06) raw = 0;
       }
-      if (k['ArrowLeft'] || k['KeyA']) steer = -1;
-      if (k['ArrowRight'] || k['KeyD']) steer = 1;
-      var ind = $('tilt-ind');
-      if (ind) ind.firstElementChild.style.width = (50 + steer * 50).toFixed(0) + '%';
+    } else {
+      if (App.touch.steerL) raw -= 1;
+      if (App.touch.steerR) raw += 1;
     }
-    var nitro = inp.nitroHeld || k['Space'] && false ? 1 : 0;
-    if (k['ShiftLeft'] || k['ShiftRight'] || k['KeyE'] || inp.nitroHeld) nitro = 1;
+    /* клавиатура работает всегда: превью на компьютере и эмуляторы */
+    if (k['ArrowLeft'] || k['KeyA']) raw -= 1;
+    if (k['ArrowRight'] || k['KeyD']) raw += 1;
+    raw = U.clamp(raw, -1, 1);
+    /* Плавный руль: полный ход за ~0.18 с, возврат в центр за ~0.11 с.
+       Мгновенный «вкл/выкл» дёргал машину, линейный разгон казался вялым. */
+    var growing = Math.abs(raw) > Math.abs(App.touch.steer);
+    var sameDir = raw * App.touch.steer >= 0;
+    var rate = (sameDir && growing) ? 5.5 : 9;
+    App.touch.steer += U.clamp(raw - App.touch.steer, -rate * dt, rate * dt);
+    if (Math.abs(App.touch.steer) < 0.01 && raw === 0) App.touch.steer = 0;
+    var steer = App.touch.steer;
+    if (mode === 'tilt') {
+      var ind = $('tilt-ind');
+      if (ind && ind.firstElementChild) ind.firstElementChild.style.width = (50 + steer * 50).toFixed(0) + '%';
+    }
+
+    var nitro = (inp.nitroHeld || k['ShiftLeft'] || k['ShiftRight'] || k['KeyE']) ? 1 : 0;
     if (App.race && App.race.state === 'countdown') { throttle = 0; brake = 1; }
     return { throttle: throttle, brake: brake, steer: steer, handbrake: handbrake, nitro: nitro };
   };

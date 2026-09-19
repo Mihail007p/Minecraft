@@ -14,7 +14,7 @@
   --bg0:#07070b; --bg1:#12121a; --card:rgba(18,18,26,.86); --line:rgba(255,255,255,.14);
   --txt:#eef1f6; --dim:#98a0b0;
   --hud:clamp(11px,2.2vmin,16px);
-  --pad:env(safe-area-inset-left,0px); --padt:env(safe-area-inset-top,0px);
+  --pad:env(safe-area-inset-left,0px); --padt:env(safe-area-inset-top,0px); --padk:1;
   --ff:'Roboto','Helvetica Neue',Arial,system-ui,sans-serif;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -135,15 +135,25 @@ h1,h2,h3{margin:0;font-weight:900;letter-spacing:.02em}
 .pad{border-radius:50%;border:2px solid rgba(255,255,255,.28);display:flex;align-items:center;justify-content:center;
   font-weight:900;text-align:center;line-height:1.05;text-transform:uppercase;font-size:clamp(9px,1.75vmin,13px);
   background:rgba(20,22,30,.55);backdrop-filter:blur(3px);color:#fff}
-.pad.gas{width:clamp(84px,17vmin,150px);height:clamp(84px,17vmin,150px);background:rgba(54,255,140,.2);border-color:rgba(54,255,140,.6)}
-.pad.brake{width:clamp(58px,11vmin,100px);height:clamp(58px,11vmin,100px);background:rgba(255,77,77,.18);border-color:rgba(255,77,77,.55)}
-.pad.drift{width:clamp(62px,12vmin,108px);height:clamp(62px,12vmin,108px);background:rgba(255,212,0,.18);border-color:rgba(255,212,0,.55)}
-.pad.nitro{width:clamp(66px,13vmin,116px);height:clamp(66px,13vmin,116px);background:rgba(47,208,255,.2);border-color:rgba(47,208,255,.6)}
+.pad.gas{width:calc(clamp(84px,17vmin,150px) * var(--padk));height:calc(clamp(84px,17vmin,150px) * var(--padk));background:rgba(54,255,140,.2);border-color:rgba(54,255,140,.6)}
+.pad.brake{width:calc(clamp(58px,11vmin,100px) * var(--padk));height:calc(clamp(58px,11vmin,100px) * var(--padk));background:rgba(255,77,77,.18);border-color:rgba(255,77,77,.55)}
+.pad.drift{width:calc(clamp(62px,12vmin,108px) * var(--padk));height:calc(clamp(62px,12vmin,108px) * var(--padk));background:rgba(255,212,0,.18);border-color:rgba(255,212,0,.55)}
+.pad.nitro{width:calc(clamp(66px,13vmin,116px) * var(--padk));height:calc(clamp(66px,13vmin,116px) * var(--padk));background:rgba(47,208,255,.2);border-color:rgba(47,208,255,.6)}
+body.bigpads{--padk:1.32}
 .pad.act{filter:brightness(1.5);transform:scale(.95)}
-#steer{left:0;bottom:0;width:52%;height:78%;display:flex;pointer-events:auto}
+#steer{left:0;bottom:0;width:54%;height:90%;display:flex;pointer-events:auto}
 #steer .zone{flex:1;display:flex;align-items:flex-end;justify-content:center;padding-bottom:clamp(16px,4vmin,40px);
-  font-size:clamp(26px,6vmin,54px);color:rgba(255,255,255,.22);font-weight:900}
+  font-size:clamp(30px,7vmin,62px);color:rgba(255,255,255,.24);font-weight:900;border-radius:26px;
+  transition:background .09s,color .09s}
+#steer .zone.act{color:rgba(255,255,255,.62);
+  background:radial-gradient(70% 45% at 50% 100%,rgba(47,208,255,.26),rgba(47,208,255,0) 72%)}
 #steer.off{display:none}
+/* свайп-руль: прозрачный слой на весь экран, включается только в этом режиме;
+   лежит первым, поэтому педали и кнопки HUD остаются поверх него */
+#drag-layer{position:absolute;inset:0;pointer-events:none}
+body.drag-steer #drag-layer{pointer-events:auto}
+#btn-full{width:clamp(34px,6vmin,50px);height:clamp(34px,6vmin,50px);border-radius:12px;font-size:clamp(15px,2.8vmin,24px);
+  display:flex;align-items:center;justify-content:center;background:rgba(8,9,14,.6);border:1px solid var(--line);color:#fff}
 #tilt-ind{left:50%;bottom:calc(8px + var(--padt));transform:translateX(-50%);width:min(46vmin,420px);height:6px;
   background:rgba(255,255,255,.14);border-radius:9px;display:none;overflow:hidden}
 #tilt-ind i{display:block;height:100%;width:50%;background:linear-gradient(90deg,var(--neon2),var(--green))}
@@ -294,6 +304,13 @@ tr.me td{color:var(--green);font-weight:900}
     <div class="row wrap" id="set-sfx"></div>
     <div class="row wrap" style="margin-top:6px" id="set-music"></div>
     <div class="row wrap" style="margin-top:6px" id="set-invert"></div>
+    <div class="small dim" style="margin-top:12px">Кнопки на экране</div>
+    <div class="row wrap" id="set-pads"></div>
+    <div class="small dim" style="margin-top:12px">Чувствительность наклона</div>
+    <div class="row wrap" id="set-tilt"></div>
+    <div class="row wrap" style="margin-top:6px" id="set-tiltcal"></div>
+    <div class="row wrap" style="margin-top:12px" id="set-vibr"></div>
+    <div class="row wrap" style="margin-top:6px" id="set-full"></div>
     <div class="row" style="margin-top:16px">
       <button class="btn ghost" id="set-reset">Сбросить прогресс</button>
       <div class="grow"></div>
@@ -305,6 +322,7 @@ tr.me td{color:var(--green);font-weight:900}
 
 <!-- ============ RACE HUD ============ -->
 <div class="screen" id="s-race">
+  <div class="ui" id="drag-layer"></div>
   <div class="ui" id="hud-top">
     <div class="pill" style="text-align:center">
       <div id="hud-position">6/6</div>
@@ -318,6 +336,7 @@ tr.me td{color:var(--green);font-weight:900}
   </div>
   <div class="ui" id="hud-right">
     <div class="pill tiny" id="hud-mode">гонка</div>
+    <div id="btn-full">⛶</div>
     <div id="btn-pause">❚❚</div>
   </div>
   <div class="ui" id="hud-center">
@@ -405,6 +424,8 @@ tr.me td{color:var(--green);font-weight:900}
   <div style="font-size:52px">📱↻</div>
   <div style="font-weight:900;font-size:22px">Поверните телефон</div>
   <div class="dim small">Игра рассчитана на горизонтальный экран<br>(как в настоящих гонках)</div>
+  <button class="btn cyan" id="btn-portrait-full">Развернуть на весь экран</button>
+  <div class="tiny dim" id="portrait-hint"></div>
 </div>
 
 <script src="src/three.min.js"></script>
