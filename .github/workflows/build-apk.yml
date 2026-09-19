@@ -55,6 +55,25 @@ jobs:
       - name: Show what was built
         run: find android/app/build/outputs -name "*.apk" -exec ls -la {} \;
 
+      - name: Verify the APK really contains the game
+        working-directory: android
+        run: |
+          set -e
+          APK=app/build/outputs/apk/release/app-release.apk
+          echo "--- содержимое APK (первые строки) ---"
+          unzip -l "$APK" | head -20
+          unzip -l "$APK" | grep -q "assets/minecraft.html" || { echo "ОШИБКА: в APK нет assets/minecraft.html"; exit 1; }
+          unzip -p "$APK" assets/minecraft.html > /tmp/in-apk.html
+          echo "размер игры в APK: $(wc -c < /tmp/in-apk.html) байт"
+          echo "sha256 в APK:     $(sha256sum /tmp/in-apk.html | cut -d' ' -f1)"
+          echo "sha256 исходника: $(sha256sum ../minecraft/Minecraft.html | cut -d' ' -f1)"
+          cmp /tmp/in-apk.html ../minecraft/Minecraft.html && echo "игра в APK совпадает с исходником байт в байт"
+          if unzip -p "$APK" AndroidManifest.xml | grep -a -q "android.permission.INTERNET"; then
+            echo "ОШИБКА: в APK запрошено разрешение INTERNET"; exit 1
+          fi
+          echo "разрешения INTERNET нет — приложение полностью офлайн"
+          unzip -l "$APK" | grep -E "classes.dex|resources.arsc|META-INF/CERT" | head -5
+
       - name: Upload APKs
         uses: actions/upload-artifact@v5
         with:
