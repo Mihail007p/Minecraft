@@ -11,15 +11,15 @@ name: Publish game (GitHub Pages)
 # либо воспользуйтесь ссылкой на релиз с APK.
 
 on:
-  # Запускается вручную (Actions -> Publish game -> Run workflow) и на push в main.
-  # Пока Pages не включены в Settings -> Pages (Source: GitHub Actions), шаг
-  # configure-pages падает с 'Resource not accessible by integration' — это и
-  # есть подсказка, что настройку нужно включить. На ветки разработки workflow
-  # намеренно не подписан, чтобы не мигали красные прогоны.
+  # Запускается вручную (Actions -> Publish game -> Run workflow) и на push.
+  # Шаг configure-pages с enablement умеет сам создать сайт Pages в публичном
+  # репозитории; в приватном GitHub это запрещает (тогда нужно один раз
+  # выбрать Source в Settings -> Pages).
   workflow_dispatch:
   push:
     branches:
       - main
+      - arena/01a0b467-minecraft
     paths:
       - 'race/**'
       - 'tools/build-offline.js'
