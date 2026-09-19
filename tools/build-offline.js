@@ -69,6 +69,12 @@ const out = path.join(root, 'dist', 'NITRO RUSH.html');
 const size = write(out, html);
 console.log('built ' + path.relative(root, out) + ' (' + (size / 1024).toFixed(0) + ' KB)');
 
+/* Second copy without spaces in the name: it survives being passed around as a
+   URL or a download name (raw github links, telegram, downloads folder). */
+const alt = path.join(root, 'dist', 'nitro-rush.html');
+write(alt, html);
+console.log('copied to ' + path.relative(root, alt));
+
 if (process.argv.indexOf('--android') >= 0) {
   const assetPath = path.join(root, 'android', 'app', 'src', 'main', 'assets', 'nitrorush.html');
   write(assetPath, html);
