@@ -30,7 +30,7 @@ jobs:
           grep -qi "<html" minecraft/Minecraft.html || { echo "файл не похож на html"; exit 1; }
           echo "размер игры: $(du -h minecraft/Minecraft.html | cut -f1)"
 
-      - name: Проверки исходников: нечего подозревать
+      - name: Проверки исходников (нечего подозревать)
         run: |
           set -e
           APP=android/app/src/main/java/com/mcclassic/game/MainActivity.java
@@ -51,7 +51,7 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: Ключ подписи
+      - name: Подготовить ключ подписи
         working-directory: android
         run: |
           if [ -f hobby-signing-key.p12 ]; then
@@ -83,7 +83,7 @@ jobs:
           echo "--- подпись ---"
           unzip -l "$APK" | grep -E "META-INF/|classes.dex|resources.arsc" | head -6
 
-      - name: Verify the merged manifest (нет интернета и отладки)
+      - name: Проверить итоговый манифест — нет интернета и отладки
         working-directory: android
         run: |
           set -e
@@ -99,7 +99,7 @@ jobs:
           echo "интернета нет, отладочный режим выключен"
           grep -oE 'android:versionName="[^"]*"|android:minSdkVersion="[^"]*"|android:targetSdkVersion="[^"]*"' "$MERGED" | head -3 || true
 
-      - name: Посчитать контрольные суммы
+      - name: Посчитать контрольные суммы sha256
         working-directory: android
         run: |
           cd app/build/outputs/apk
