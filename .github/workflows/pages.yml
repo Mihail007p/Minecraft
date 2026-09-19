@@ -1,0 +1,64 @@
+name: Publish game (GitHub Pages)
+
+# Публикует игру как обычный сайт: по ссылке вида
+#   https://<логин>.github.io/Minecraft/
+# игра запускается сразу, без логина и без скачивания.
+#
+# Требуется один раз включить Pages:
+#   Settings -> Pages -> Build and deployment -> Source: GitHub Actions
+# Если тариф не позволяет Pages для приватного репозитория, сделайте
+# репозиторий публичным (Settings -> General -> Danger Zone -> Change visibility)
+# либо воспользуйтесь ссылкой на релиз с APK.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - arena/01a0b467-minecraft
+    paths:
+      - 'race/**'
+      - 'tools/build-offline.js'
+      - '.github/workflows/pages.yml'
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Build and deploy the web build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      - name: Assemble the site (single-file game as index.html)
+        run: |
+          node tools/build-offline.js
+          mkdir -p _site
+          cp "dist/nitro-rush.html" _site/index.html
+          touch _site/.nojekyll
+          ls -la _site
+
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
